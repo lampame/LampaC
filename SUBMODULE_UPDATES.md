@@ -6,13 +6,13 @@ This project includes automated GitHub Actions workflows to keep submodules sync
 
 ### 1. Auto Update Submodules (`auto-update-submodules.yml`)
 
-**Purpose**: Automatically updates submodules and creates pull requests with changes.
+**Purpose**: Automatically updates submodules directly to main branch.
 
 **Features**:
 - Runs daily at 02:00 UTC
 - Can be triggered manually via workflow_dispatch
-- Creates detailed pull requests with commit information
-- Shows which submodules were updated
+- Updates submodules to latest commits
+- Commits and pushes directly to main branch
 - Safe: only commits if there are actual changes
 
 **When it runs**:
@@ -21,13 +21,12 @@ This project includes automated GitHub Actions workflows to keep submodules sync
 
 ### 2. Update Submodules (`update-submodules.yml`)
 
-**Purpose**: Alternative workflow using GitHub CLI for more advanced PR creation.
+**Purpose**: Alternative workflow with similar functionality.
 
 **Features**:
-- Similar functionality to the first workflow
-- Uses GitHub CLI for PR creation
-- Creates unique branch names with timestamps
-- More detailed commit messages
+- Identical functionality to the first workflow
+- Direct push to main branch
+- No pull request creation
 
 ## How It Works
 
@@ -35,7 +34,7 @@ This project includes automated GitHub Actions workflows to keep submodules sync
 2. **Update**: Submodules are updated to latest remote commits
 3. **Check Changes**: Git diff checks if any submodule changes exist
 4. **Commit**: If changes found, creates a commit with detailed message
-5. **Pull Request**: Creates a pull request for review
+5. **Push**: Automatically pushes changes directly to main branch
 
 ## Manual Submodule Updates
 
@@ -69,23 +68,23 @@ Common cron expressions:
 
 ### Permissions
 Both workflows require:
-- `contents: write` - To commit changes
-- `pull-requests: write` - To create pull requests
+- `contents: write` - To commit and push changes
 
 ## Benefits
 
 1. **Automation**: No manual intervention needed for regular updates
-2. **Review Process**: All updates go through pull request review
+2. **Direct Updates**: Submodules update immediately without review process
 3. **Documentation**: Automatic commit messages show what was updated
 4. **Safety**: Only commits when there are actual changes
 5. **Transparency**: Full audit trail of all submodule updates
+6. **No Review Required**: Updates happen automatically
 
 ## Security Notes
 
 - Workflows use `GITHUB_TOKEN` with minimal required permissions
 - All commits are signed by `github-actions[bot]`
-- Pull requests require proper review before merging
-- Automatic branch deletion after PR is merged
+- Updates are pushed directly to main branch
+- Only committed changes are pushed to repository
 
 ## Troubleshooting
 
