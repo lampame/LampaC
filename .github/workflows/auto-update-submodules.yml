@@ -1,0 +1,72 @@
+name: Auto Update Submodules
+
+on:
+  schedule:
+    # Run every day at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update submodules
+      run: |
+        git submodule update --remote --merge
+        
+        # Check if there are any changes
+        CHANGES=$(git diff --name-only)
+        if [ -z "$CHANGES" ]; then
+          echo "No submodule updates found"
+          exit 0
+        else
+          echo "Changes detected: $CHANGES"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add all changes
+          git add .
+          
+          # Create commit with detailed message
+          git commit -m "chore: auto-update submodules
+
+Updated submodules to latest commits:
+$(git submodule status --recursive | awk '{print "- " $2 " -> " $1}')"
+        fi
+
+    - name: Create Pull Request
+      if: success() && github.ref == 'refs/heads/main'
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: update-submodules
+        title: "🔄 Auto-update submodules"
+        body: |
+          ## Submodule Updates
+          
+          This PR automatically updates the submodules to their latest commits:
+          
+          $(git log -1 --oneline)
+          
+          ### Updated Submodules:
+          ```bash
+          $(git submodule status --recursive)
+          ```
+          
+          ---
+          *This PR was created by the Auto Update Submodules workflow*
+        commit-message: "chore: auto-update submodules"
+        delete-branch: true
