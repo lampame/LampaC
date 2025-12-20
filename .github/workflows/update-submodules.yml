@@ -22,7 +22,7 @@ jobs:
 
     - name: Update submodules
       run: |
-        git submodule update --remote --merge
+        git submodule update --remote --checkout --force
         
         # Check if there are changes to commit
         if git diff --quiet HEAD; then
