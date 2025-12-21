@@ -1,54 +1,47 @@
-# Submodule Auto-Update System
+# Embedded Repo Auto-Update System
 
-This project includes automated GitHub Actions workflows to keep submodules synchronized with their source repositories.
+This project includes automated GitHub Actions workflows to keep embedded repositories synchronized with their source repositories without using git submodules.
 
 ## Available Workflows
 
-### 1. Auto Update Submodules (`auto-update-submodules.yml`)
+### Update Embedded Repos (`update-submodules.yml`)
 
-**Purpose**: Automatically updates submodules directly to main branch.
+**Purpose**: Pulls upstream repositories and syncs their files into local directories.
 
 **Features**:
 - Runs daily at 02:00 UTC
 - Can be triggered manually via workflow_dispatch
-- Updates submodules to latest commits
+- Clones upstream repos and rsyncs files into `Lampac` and `lampa-source`
 - Commits and pushes directly to main branch
 - Safe: only commits if there are actual changes
 
-**When it runs**:
-- Automatically: Every day at 02:00 UTC
-- Manually: From GitHub Actions tab → "Auto Update Submodules" → "Run workflow"
-
-### 2. Update Submodules (`update-submodules.yml`)
-
-**Purpose**: Alternative workflow with similar functionality.
-
-**Features**:
-- Identical functionality to the first workflow
-- Direct push to main branch
-- No pull request creation
-
 ## How It Works
 
-1. **Checkout**: Repository is checked out with submodule initialization
-2. **Update**: Submodules are updated to latest remote commits
-3. **Check Changes**: Git diff checks if any submodule changes exist
-4. **Commit**: If changes found, creates a commit with detailed message
-5. **Push**: Automatically pushes changes directly to main branch
+1. **Checkout**: Repository is checked out without submodules
+2. **Sync**: Upstream repos are cloned into temp directories
+3. **Copy**: Files are synced into `Lampac/` and `lampa-source/` (excluding `.git`)
+4. **Check Changes**: Git diff checks if any updates exist
+5. **Commit**: If changes found, creates a commit
+6. **Push**: Automatically pushes changes directly to main branch
 
-## Manual Submodule Updates
+## Manual Repo Updates
 
-You can also update submodules manually:
+You can also sync repositories manually:
 
 ```bash
-# Update all submodules to latest
-git submodule update --remote --merge
+# Sync Lampac
+tmp="$(mktemp -d)" \
+  && git clone --depth 1 https://github.com/immisterio/Lampac "$tmp" \
+  && rm -rf "$tmp/.git" \
+  && rsync -a --delete "$tmp"/ Lampac/ \
+  && rm -rf "$tmp"
 
-# Update specific submodule
-git submodule update --remote lampa-source
-
-# View submodule status
-git submodule status
+# Sync lampa-source
+tmp="$(mktemp -d)" \
+  && git clone --depth 1 https://github.com/yumata/lampa-source "$tmp" \
+  && rm -rf "$tmp/.git" \
+  && rsync -a --delete "$tmp"/ lampa-source/ \
+  && rm -rf "$tmp"
 ```
 
 ## Configuration
@@ -67,16 +60,16 @@ Common cron expressions:
 - `0 2 1 * *` - Monthly on 1st day at 02:00 UTC
 
 ### Permissions
-Both workflows require:
+The workflow requires:
 - `contents: write` - To commit and push changes
 
 ## Benefits
 
 1. **Automation**: No manual intervention needed for regular updates
-2. **Direct Updates**: Submodules update immediately without review process
+2. **Deepwiki Friendly**: Files live in the main repository for indexing
 3. **Documentation**: Automatic commit messages show what was updated
 4. **Safety**: Only commits when there are actual changes
-5. **Transparency**: Full audit trail of all submodule updates
+5. **Transparency**: Full audit trail of all updates
 6. **No Review Required**: Updates happen automatically
 
 ## Security Notes
@@ -91,6 +84,6 @@ Both workflows require:
 If workflows fail:
 
 1. Check the Actions tab for error logs
-2. Verify submodules are accessible and have updates
+2. Verify upstream repos are accessible and have updates
 3. Ensure branch protection rules allow `github-actions[bot]` to push
 4. Check repository permissions for Actions

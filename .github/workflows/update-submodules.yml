@@ -1,4 +1,4 @@
-name: Update Submodules
+name: Update Embedded Repos
 
 on:
   schedule:
@@ -10,29 +10,58 @@ permissions:
   contents: write
 
 jobs:
-  update-submodules:
+  update-embedded-repos:
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        submodules: true
-        token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Update submodules
-      run: |
-        git submodule update --remote --checkout --force
-        
-        # Check if there are changes to commit
-        if git diff --quiet HEAD; then
-          echo "No submodule updates found"
-          exit 0
-        else
-          echo "Submodule updates found, committing changes"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync embedded repositories
+        run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          sync_repo() {
+            local dir="$1"
+            local url="$2"
+            local ref="${3:-}"
+            local tmp
+
+            if git ls-tree HEAD "$dir" | grep -q '^160000 '; then
+              git rm -f "$dir"
+            fi
+
+            tmp="$(mktemp -d)"
+            if [ -n "$ref" ]; then
+              git clone --depth 1 --branch "$ref" "$url" "$tmp"
+            else
+              git clone --depth 1 "$url" "$tmp"
+            fi
+            rm -rf "$tmp/.git"
+
+            mkdir -p "$dir"
+            rsync -a --delete "$tmp"/ "$dir"/
+            rm -rf "$tmp"
+          }
+
+          sync_repo "Lampac" "https://github.com/immisterio/Lampac"
+          sync_repo "lampa-source" "https://github.com/yumata/lampa-source"
+
+          if [ -f .gitmodules ]; then
+            git rm -f .gitmodules || true
+          fi
+
+          if git diff --quiet HEAD; then
+            echo "No embedded repo updates found"
+            exit 0
+          fi
+
           git add .
-          git commit -m "chore: update submodules to latest commits"
+          git commit -m "chore: sync embedded repositories"
           git push origin main
-        fi

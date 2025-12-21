@@ -1,46 +1,37 @@
-# Quick Submodule Commands
+# Quick Embedded Repo Commands
 
 ## Automatic Updates
 Your GitHub Actions workflows will automatically:
-- Update submodules daily at 02:00 UTC
-- Create pull requests with changes
+- Sync embedded repos daily at 02:00 UTC
+- Commit changes directly to main
 - You can trigger manually from GitHub Actions tab
 
 ## Manual Commands
 
-### Update all submodules to latest:
-```bash
-git submodule update --remote --merge
-```
-
-### Update specific submodule:
-```bash
-git submodule update --remote lampa-source
-git submodule update --remote Lampac
-```
-
-### Check submodule status:
-```bash
-git submodule status
-```
-
-### View what changed in submodules:
+### View what changed in embedded repos:
 ```bash
 git diff HEAD
 git diff --name-only
 ```
 
-### Initialize and clone submodules (for new checkout):
+### Sync Lampac:
 ```bash
-git submodule init
-git submodule update
+tmp="$(mktemp -d)" \
+  && git clone --depth 1 https://github.com/immisterio/Lampac "$tmp" \
+  && rm -rf "$tmp/.git" \
+  && rsync -a --delete "$tmp"/ Lampac/ \
+  && rm -rf "$tmp"
 ```
 
-### Update and initialize in one command:
+### Sync lampa-source:
 ```bash
-git submodule update --init --recursive
+tmp="$(mktemp -d)" \
+  && git clone --depth 1 https://github.com/yumata/lampa-source "$tmp" \
+  && rm -rf "$tmp/.git" \
+  && rsync -a --delete "$tmp"/ lampa-source/ \
+  && rm -rf "$tmp"
 ```
 
-## Current Submodules:
+## Current Embedded Repos:
 - `lampa-source` (https://github.com/yumata/lampa-source)
 - `Lampac` (https://github.com/immisterio/Lampac)
