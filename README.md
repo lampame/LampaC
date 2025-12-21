@@ -2,6 +2,8 @@
 
 An auto-updating mirror repository for Deepwiki that keeps `lampa-source` and `Lampac` in one place. The goal is flexible indexing of both projects and the ability to work with them as a single codebase.
 
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lampame/LampaC)
+
 ## Repository Structure (Project Analysis)
 
 ### lampa-source
