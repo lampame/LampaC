@@ -1,0 +1,59 @@
+.card-watched{
+    position: absolute;
+    top: auto;
+    left: 1em;
+    right: 1em;
+    bottom: 3em;
+    z-index: 1;
+    background-color: rgba(0,0,0,0.9);
+    display: none;
+    pointer-events: none;
+    border-radius: 1em;
+
+    &__inner{
+        padding: 0 1em 1em 1em;
+    }
+
+    &__body{
+        font-size: 0.8em;
+    }
+
+    &__item{
+        margin-top: 1em;
+
+        > span{
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        &:nth-child(1){
+            color: #fff;
+        }
+
+        &:nth-child(2){
+            color: #9f9f9f;
+        }
+
+        &:nth-child(3){
+            color: #6c6c6c;
+        }
+
+        &:nth-child(4){
+            color: #5e5e5e;
+        }
+
+        &:nth-child(5){
+            color: #4c4c4c;
+        }
+
+        .time-line{
+            margin-top: 0.5em;
+        }
+    }
+}
+
+.card.focus .card-watched{
+    display: block;
+}

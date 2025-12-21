@@ -1,0 +1,68 @@
+.card-more{
+    $self: &;
+
+    flex-shrink: 0;
+    width: 12.75em;
+    display: flex;
+
+    &__box{
+        transition: transform 0.3s, border-color 0.2s;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 1em;
+        flex-grow: 1;
+        flex-shrink: 0;
+        position: relative;
+    }
+
+    &__title{
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 1.8em;
+        font-weight: 300;
+        margin-top: -0.7em;
+    }
+
+    &.focus{
+        #{ $self }__box::after{
+            content: "";
+            position: absolute;
+            top: -0.5em;
+            left: -0.5em;
+            right: -0.5em;
+            bottom: -0.5em;
+            border: 0.3em solid #fff;
+            border-radius: 1.4em;
+            z-index: -1;
+        }
+    }
+
+    &--small-radius{
+        #{ $self }__box{
+            border-radius: 0.3em;
+        }
+
+        &.focus{
+            #{ $self }__box{
+                &::after{
+                    border-radius: 0.7em;
+                }
+            }
+        }
+    }
+
+    &--fixed-size{
+        display: block;
+    }
+}
+
+
+@media screen and (min-width: $media_md) {
+    body.size--bigger{
+        .card-more{
+            font-size: 1.14em;
+        }
+    }
+}

@@ -1,0 +1,83 @@
+.tracks-loading{
+    margin-top: 1em;
+    display: flex;
+    align-items: flex-start;
+
+    &:before{
+        content: '';
+        display: inline-block;
+        width: 1.3em;
+        height: 1.3em;
+        background: url('./img/loader.svg') no-repeat 50% 50%;
+        background-size: contain;
+        margin-right: 0.4em;
+    }
+
+    > span{
+        font-size: 1.1em;
+        line-height: 1.1;
+    }
+}
+
+.tracks-metainfo{
+    $self: &;
+
+    margin-top: 1em;
+
+    &__line + #{ $self }__line{
+        margin-top: 2em;
+    }
+
+    &__label{
+        opacity: 0.5;
+        font-weight: 600;
+    }
+
+    &__info{
+        padding-top: 1em;
+        line-height: 1.2;
+
+        > div{
+            background-color: rgba(0,0,0,0.22);
+            display: flex;
+            border-radius: 0.3em;
+            flex-wrap: wrap;
+
+            &.focus{
+                background-color: rgba(255,255,255,0.06);
+            }
+
+            > div{
+                padding: 1em;
+                flex-shrink: 0;
+            }
+
+            > div:not(:last-child){
+                padding-right: 1.5em;
+            }
+        }
+
+        > div + div{
+            margin-top: 1em;
+        }
+    }
+
+    &__column{
+        &--video,
+        &--name{
+            margin-right: auto;
+        }
+        &--num{
+            min-width: 3em;
+            padding-right: 0;
+        }
+        &--rate{
+            min-width: 7em;
+            text-align: right;
+        }
+        &--channels{
+            min-width: 5em;
+            text-align: right;
+        }
+    }
+}

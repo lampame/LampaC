@@ -1,0 +1,93 @@
+.company{
+    > div{
+        font-size: 1.4em;
+        line-height: 1.2;
+
+        + div{
+            margin-top: 0.6em;
+        }
+
+        &.company__name{
+            font-size: 2.1em;
+        }
+    }
+}
+
+.company-start{
+    display: flex;
+    line-height: 1.4;
+
+    &__left{
+        flex-shrink: 0;
+        width: 10em;
+
+        @media screen and (max-width: $media_sm) {
+            width: 8em;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            width: 6.5em;
+        }
+    }
+
+    &__right{
+        flex-grow: 1;
+        padding-left: 3em;
+    }
+
+    &__icon{
+        position: relative;
+        padding-bottom: 93%;
+        background-color: #fff;
+        border-radius: 1em;
+    }
+
+    &__img{
+        position: absolute;
+        top: 10%;
+        left: 10%;
+        width: 80%;
+        height: 80%;
+        object-fit: contain;
+        opacity: 0;
+        transition: opacity 0.3s;
+
+        &.loaded{
+            opacity: 1;
+        }
+    }
+
+    &__name{
+        font-size: 4em;
+        font-weight: 700;
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 3em;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            font-size: 2em;
+        }
+    }
+
+    &__place{
+        font-size: 2.3em;
+        font-weight: 300;
+        max-width: 80%;
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 1.8em;
+            max-width: 100%;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            font-size: 1.5em;
+        }
+    }
+
+    &.icon--broken{
+        .company-start__icon{
+            background-color: #3e3e3e;
+        }
+    }
+}

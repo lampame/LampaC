@@ -1,0 +1,69 @@
+.scroll{
+    display: flex;
+
+    &__content{
+        padding: $offset 0;
+        width: 100%;
+
+    
+        @media screen and (max-width: $media_xs) {
+            padding: 1em 0;
+        }
+    }
+
+    &__body{
+        transition: transform 0.3s;
+        will-change: transform;
+
+        &.notransition,
+        &.transition-reset{
+            transition: unset
+        }
+    }
+}
+
+.scroll{
+    &--over{
+        overflow: hidden;
+    }
+
+    &--mask{
+        mask-image: linear-gradient(to bottom, rgba(255,255,255,0) 0%,rgba(255,255,255,1) 8%,rgba(255,255,255,1) 92%,rgba(255,255,255,0) 100%);
+
+        .scroll__content{
+            padding: 2.5em 0;
+
+            @media screen and (max-width: $media_xs) {
+                padding: $offset 0;
+            }
+        }
+    }
+
+    &--horizontal{
+        .scroll__content{
+            padding: 0 $offset;
+        }
+
+        &.scroll--mask{
+            mask-image: linear-gradient(to right, rgba(255,255,255,0) 0%,rgba(255,255,255,1) 8%,rgba(255,255,255,1) 92%,rgba(255,255,255,0) 100%); 
+
+            .scroll__content{
+                padding: 0 2.5em;
+
+                @media screen and (max-width: $media_xs) {
+                    padding: 0 $offset;
+                }
+            }
+        }
+    }
+
+    &--nopadding{
+        .scroll__content{
+            padding: 0;
+        }
+    }
+
+    &--horizontal-scroll{
+        cursor: ew-resize
+    }
+}

@@ -1,0 +1,210 @@
+.simple-keyboard{
+    background: transparent;
+    padding: 0;
+    font-family: inherit;
+    color: #9e9e9e;
+
+    .hg-row {
+        display: flex;
+    }
+
+    .hg-row .hg-button-container {
+        display: flex;
+    }
+    .hg-layout-numeric .hg-button {
+        align-items: center;
+        display: flex;
+        justify-content: center
+    }
+
+    .hg-button{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-grow: 1;
+        box-shadow: none;
+        border: 0;
+        font-size: 2em;
+        height: auto;
+        width: auto;
+        line-height: 1.2;
+        background: rgba(221,221,221,0.06);
+        color: #fff;
+
+        &.hg-activeButton,
+        &.focus,
+        &:hover{
+            background: rgba(221,221,221,0.3);
+            color: #fff;
+        }
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 1.5em;
+            padding: 5px 0;
+        }
+    }
+
+    .hg-button[data-skbtn="{BKSP}"]:after,
+    .hg-button[data-skbtn="{ENTER}"]:after,
+    .hg-button[data-skbtn="{SHIFT}"]:after,
+    .hg-button[data-skbtn="{LANG}"]:after,
+    .hg-button[data-skbtn="{SPACE}"]:after{
+        content: '';
+        display: block;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: 50% 50%;
+        height: 1em;
+        width: 1em;
+    }
+
+    .hg-button[data-skbtn="{BKSP}"]:after{
+        background-image: url(../img/icons/keyboard/bksp.svg);
+    }
+    .hg-button[data-skbtn="{SIM}"]:after{
+        background-image: url(../img/icons/keyboard/sym.svg);
+        width: 1.2em;
+    }
+    .hg-button[data-skbtn="{ENTER}"]:after{
+        background-image: url(../img/icons/keyboard/enter.svg);
+    }
+    .hg-button[data-skbtn="{SHIFT}"]:after{
+        background-image: url(../img/icons/keyboard/up.svg);
+        background-size: 80%;
+    }
+    .hg-button[data-skbtn="{SPACE}"]:after{
+        background-image: url(../img/icons/keyboard/space.svg);
+        width: 1.4em;
+        margin-top: 0.4em;
+        height: 0.6em;
+    }
+    .hg-button[data-skbtn="{LANG}"]:after{
+        background-image: url(../img/icons/keyboard/lang.svg);
+        width: 0.9em;
+    }
+
+    .hg-button[data-skbtn="{BKSP}"] span,
+    .hg-button[data-skbtn="{ENTER}"] span,
+    .hg-button[data-skbtn="{SHIFT}"] span,
+    .hg-button[data-skbtn="{LANG}"] span,
+    .hg-button[data-skbtn="{SPACE}"] span{
+        width: 0;
+        height: 0;
+        display: block;
+    }
+
+    &[shifted="true"] .hg-button[data-skbtn="{SHIFT}"]{
+        transform: scaleY(-1);
+    }
+
+    .hg-button[data-skbtn="{MIC}"]{
+        color: #fff;
+
+        svg{
+            width: 0.9em;
+            height: 1em;
+        }
+    }
+
+    .hg-button svg{
+        flex-shrink: 0;
+    }
+
+    &-input{
+        background-color: transparent;
+        font-size: 1.6em;
+        height: 2.1em;
+        width: 100%;
+        border: 0;
+        padding: 0;
+        color: #fff;
+        font-family: "SegoeUI", sans-serif;
+
+        &::placeholder{
+            color: rgba(255,255,255,0.5);
+        }
+
+        @media screen and (max-width: $media_xm) {
+            font-size: 1.5em;
+        }
+    }
+
+    &-buttons{
+        display: flex;
+        align-items: center;
+        padding-top: 1.5em;
+        font-size: 1.1em;
+
+        > div + div{
+            margin-left: 1em;
+        }
+
+        &__enter{
+            font-size: 1.2em;
+            padding: 0.7em;
+            background: rgb(255 255 255 / 12%);
+            border-radius: 0.3em;
+            color: #fff;
+        }
+
+        &__cancel{
+            padding: 0.7em;
+            font-size: 1.2em;
+        }
+    }
+
+    &-mic{
+        width: 2.8em;
+        height: 2.8em;
+        margin-right: 1em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 100%;
+        flex-shrink: 0;
+
+        > svg{
+            width: 1.7em;
+            height: 1.7em;
+        }
+
+        &.focus{
+            background: #ffffff;
+            color: #0e0e0e;
+        }
+
+        &.record{
+            background: #ffffff;
+            color: red;
+        }
+    }
+
+    &--with-mic{
+        display: flex;
+        align-items: center;
+        color: #fff;
+    }
+
+    &--with-textarea{
+        align-items: flex-start;
+
+        .simple-keyboard-input{
+            appearance: none;
+            resize: none;
+            overflow-y: hidden;
+            line-height: 1.4;
+            border: 1px solid rgba(221, 221, 221, 0.21);
+            border-radius: 0.3em;
+            padding: 0.2em 0.4em;
+        }
+    }
+}
+
+body.true--mobile .simple-keyboard--with-mic{
+    position: relative;
+
+    .simple-keyboard-buttons{
+        position: absolute;
+        top: 100%;
+    }
+}

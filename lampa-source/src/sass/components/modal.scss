@@ -1,0 +1,222 @@
+.modal{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.3);
+    padding: $offset;
+    z-index: 50;
+
+    @media screen and (max-width: $media_xm) {
+        backdrop-filter: blur(1em);
+    }
+
+    &__content{
+        background-color: #262829;
+        padding: $offset;
+        border-radius: 1em;
+        margin: 0 auto;
+        max-width: 37%;
+        position: relative;
+
+        @media screen and (max-width: $media_md) {
+            max-width: 50%;
+        }
+
+        @media screen and (max-width: $media_sm) {
+            max-width: 80%;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            max-width: 100%;
+            border-top-left-radius: 2em;
+            border-top-right-radius: 2em;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    }
+
+    .head-backward{
+        margin: 0;
+    }
+
+    &__head{
+        margin-bottom: 2em;
+    }
+
+    &__body{
+        .scroll__content{
+            max-height: 37.2em;
+        }
+    }
+
+    &__title{
+        font-size: 2.2em;
+        font-weight: 300;
+    }
+
+    &__icon{
+        width: 7em;
+        height: 7em;
+        margin: 0 auto;
+
+        > svg{
+            width: 7em;
+            height: 7em;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            display: none;
+        }
+    }
+
+    &__footer{
+        display: flex;
+        padding-top: 2em;
+
+        @media screen and (max-width: $media_xm) {
+            display: block;
+        }
+    }
+
+    &__button{
+        padding: 0.9em 1.3em;
+        border-radius: 0.7em;
+        background: rgba(255,255,255,0.1);
+        font-size: 1.2em;
+
+        &.focus{
+            background: #fff;
+            color: #000;
+        }
+
+        + .modal__button{
+            margin-left: 1em;
+
+            @media screen and (max-width: $media_xm) {
+                margin-left: 0;
+                margin-top: 1em;
+            }
+        }
+    }
+
+    &__close-button{
+        position: absolute;
+        top: -0.8em;
+        right: -0.8em;
+        background: #fff;
+        border-radius: 100%;
+        padding: 0.4em;
+        color: #000;
+        cursor: pointer;
+
+        > svg{
+            width: 1.1em;
+            height: 1.1em;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            display: none;
+        }
+    }
+
+    &--align-center{
+        text-align: center;
+
+        .modal__footer{
+            justify-content: center;
+        }
+    }
+
+    &--cub-premium{
+        .modal__icon{
+            margin-bottom: -2em;
+        }
+        
+        @media screen and (min-width: $media_md) {
+            .modal__content{
+                max-width: 44%;
+            }
+        }
+    }
+
+    &--medium{
+        .modal__content{
+            max-width: 60%;
+
+            @media screen and (max-width: $media_md) {
+                max-width: 80%;
+            }
+
+            @media screen and (max-width: $media_sm) {
+                max-width: 100%;
+            }
+        }
+    }
+
+    &--large{
+        .modal__content{
+            max-width: 80%;
+
+            @media screen and (max-width: $media_md) {
+                max-width: 100%;
+            }
+        }
+    }
+
+    &--full{
+        padding: 0;
+
+        .modal__content{
+            max-width: 100%;
+            border-radius: 0;
+            padding: 0;
+        }
+
+        .modal__head{
+            padding: 1em 1.5em;
+        }
+
+        .modal__footer{
+            padding: 1em 1.5em;
+        }
+    }
+
+    &--empty-title .modal__head{
+        display: none;
+    }
+
+    &--overlay{
+        z-index: 60;
+    }
+
+    .scroll--mask .scroll__content{
+        padding: 1.5em 0;
+    }
+}
+
+.modal-loading{
+    height: 6em;
+    background: url(../img/loader.svg) no-repeat 50% 50%;
+    background-size: contain;
+}
+
+.modal-pending{
+    text-align: center;
+
+    &__loading{
+        background: url(../img/loader.svg) no-repeat 50% 50%;
+        background-size: contain;
+        height: 6em;
+    }
+
+    &__text{
+        font-size: 1.2em;
+        margin-top: 1em;
+    }
+}

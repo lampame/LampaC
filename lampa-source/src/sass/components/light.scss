@@ -1,0 +1,102 @@
+body.light--version{
+    @media screen and (min-width: $media_md) {
+        .wrap__left{
+            position: static;
+            background: transparent;
+            margin-left: 0;
+            width: 13.5em;
+        }
+    
+        .background{
+            display: none;
+        }
+
+        .card--category{
+            width: 20%;
+        }
+
+        .files__left{
+            font-size: 0.7em;
+        }
+        .files__body{
+            max-width: inherit;
+        }
+
+        .timetable__item{
+            width: 16.66%;
+        }
+
+        .card--small .card__title{
+            margin-top: 0.5em;
+        }
+    }
+
+    @media screen and (max-width: $media_md) {
+        &.menu--open{
+            .wrap{
+                &__content{
+                    transform: translate3d(15em, 0, 0);
+                }
+            }
+        }
+    }
+    
+    .card__img,
+    .card__quality,
+    .card__vote,
+    .items-line__more,
+    .card-more__box,
+    .card__type,
+    .card__promo,
+    .torrent-item,
+    .explorer-card__head-img > img,
+    .full-start__img,
+    .full-start-new__poster.loaded img,
+    .full-episode__img img,
+    .full-episode__body,
+    .register,
+    .full-episode--next .full-episode__img:after,
+    .season-episode,
+    .season-episode__img > img,
+    .card__textbox,
+    .ad-bot__content,
+    .ad-bot__marker,
+    .full-review,
+    .full-review-add,
+    .bookmarks-folder__layer{
+        border-radius: 0;
+    }
+
+    .card .card__view::after,
+    .torrent-item::after,
+    .explorer-card__head-img::after,
+    .full-episode.focus::after,
+    .card-more .card-more__box::after,
+    .card-episode.focus .full-episode::after,
+    .feed-item__poster-img,
+    .feed-item__poster-box,
+    .feed-item__image-box,
+    .feed-item__image-img,
+    .register::after,
+    .season-episode::after,
+    .ad-bot.focus .ad-bot__content::after,
+    .full-review-add::after{
+        border-radius: 0.4em;
+    }
+
+    .full-start__button,
+    .info__icon,
+    .full-start__tag,
+    .full-start__tag.tag--quality,
+    .full-descr__tag,
+    .full-start .info__rate,
+    .explorer__files .torrent-filter .simple-button,
+    .card-watched,
+    .feed-item__buttons .simple-button{
+        border-radius: 0.2em;
+    }
+
+    .torrent-item__details{
+        font-size: 0.95em;
+    }
+}

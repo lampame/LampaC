@@ -1,0 +1,34 @@
+FROM debian:12.5-slim
+
+EXPOSE 9118
+WORKDIR /home
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip sed chromium xvfb libnspr4 fontconfig \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fSL -k -o dotnet.tar.gz https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/9.0.9/aspnetcore-runtime-9.0.9-linux-x64.tar.gz \
+    && mkdir -p /usr/share/dotnet \
+    && tar -oxzf dotnet.tar.gz -C /usr/share/dotnet \
+    && rm dotnet.tar.gz
+
+RUN curl -L -k -o publish.zip https://github.com/immisterio/Lampac/releases/latest/download/publish.zip \
+    && unzip -o publish.zip && rm -f publish.zip && rm -rf merchant \
+    && rm -rf runtimes/os* && rm -rf runtimes/win* && rm -rf runtimes/linux-arm runtimes/linux-arm64 runtimes/linux-musl-arm64 runtimes/linux-musl-x64 \
+    && touch isdocker
+	
+RUN curl -k -s https://raw.githubusercontent.com/immisterio/Lampac/main/Build/Docker/update.sh | bash
+
+RUN mkdir -p torrserver && curl -L -k -o torrserver/TorrServer-linux https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-linux-amd64 \
+    && chmod +x torrserver/TorrServer-linux
+
+RUN mkdir -p .playwright/node/linux-x64 && curl -L -k -o .playwright/node/linux-x64/node https://github.com/immisterio/playwright/releases/download/chrome/node-linux-x64 \
+    && chmod +x .playwright/node/linux-x64/node && touch .playwright/node/linux-x64/node.ok
+
+RUN curl -L -k -o ffmpeg.zip https://github.com/immisterio/ffmpeg/releases/download/ffmpeg2/ffmpeg-master-latest-linux64-gpl.zip \
+    && unzip -o ffmpeg.zip && rm -f ffmpeg.zip \
+    && mv ffprobe data/ffprobe && chmod +x data/ffprobe \
+    && mv ffmpeg data/ffmpeg && chmod +x data/ffmpeg
+
+RUN echo '{"chromium":{"executablePath":"/usr/bin/chromium"}}' > init.conf
+
+ENTRYPOINT ["/usr/share/dotnet/dotnet", "Lampac.dll"]

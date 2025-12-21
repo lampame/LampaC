@@ -1,0 +1,27 @@
+import Person from '../../interaction/person/person'
+import PersonModule from '../../interaction/person/module/module'
+import Utils from '../../utils/utils'
+import Line from '../../interaction/items/line/line'
+import LineModule from '../../interaction/items/line/module/module'
+import Router from '../../core/router'
+
+
+function Persons(data){
+    Utils.extendItemsParams(data.results, {
+        module: PersonModule.toggle(PersonModule.MASK.base, 'Line', 'Callback'),
+        createInstance: (item)=>new Person(item),
+        emit: {
+            onEnter: (html, item)=>{
+                Router.call('actor', item)
+            }
+        }
+    })
+
+    let comp = Utils.createInstance(Line, data, {
+        module: LineModule.only('Items', 'Create')
+    })
+
+    return comp
+}
+
+export default Persons

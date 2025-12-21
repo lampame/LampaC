@@ -1,0 +1,64 @@
+.console{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #1d1f20;
+    z-index: 100;
+    padding: $offset 0;
+
+    &__line{
+        padding: 0.3em $offset;
+        font-size: 1.1em;
+        line-height: 1.2;
+        word-break: break-all;
+
+        &:nth-child(2n){
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        &.focus{
+            background-color: rgba(255,255,255,0.2);
+        }
+    }
+
+    &__tabs{
+        .scroll__body{
+            display: flex;
+        }
+    }
+
+    &__tab{
+        font-size: 1.1em;
+        background-color: #3e3e3e;
+        padding: 0.6em;
+        border-radius: 0.3em;
+        white-space: nowrap;
+        flex-shrink: 0;
+
+        + .console__tab{
+            margin-left: 1em;
+        }
+
+        > span{
+            font-size: 0.7em;
+            background-color: #ddd3;
+            padding: 0.3em;
+            border-radius: 0.3em;
+            text-align: center;
+            min-width: 1.8em;
+            display: inline-block;
+        }
+
+        &.focus{
+            background: #fff;
+            color: #000;
+        }
+    }
+
+    &__time{
+        color: #7c7c7c;
+        font-weight: 300;
+    }
+}

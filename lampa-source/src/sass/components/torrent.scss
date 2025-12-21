@@ -1,0 +1,670 @@
+.torrent-list{
+    padding: 0 $offset;
+}
+
+.torrent-files{
+    .torrent-file + .torrent-serial,
+    .torrent-serial + .torrent-file,
+    .torrent-serial + .torrent-serial,
+    .torrent-file + .torrent-file{
+        margin-top: 1em;
+    } 
+}
+
+.torrent-item{
+    background-color: rgba(0,0,0,0.3);
+    border-radius: 0.3em;
+    padding: 1em;
+    line-height: 1.2;
+    position: relative;
+
+    &__title{
+        font-size: 1.3em;
+        word-break: break-all;
+    }
+
+    &__details{
+        display: flex;
+        color: rgb(255, 255, 255, 0.5);
+        margin-top: 0.6em;
+        font-weight: 600;
+        align-items: center;
+        white-space: nowrap;
+
+        @media screen and (max-width: $media_md) {
+            > *{
+                margin: 0.3em 0.3em 0 0 !important;
+            }
+        }
+
+        @media screen and (max-width: $media_sm) {
+            flex-wrap: wrap;
+        }
+    }
+
+    &__date{
+        margin-right: 1em;
+    }
+
+    &__tracker{
+        margin-right: 1em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-grow: 1;
+
+        @media screen and (max-width: $media_sm) {
+            width: 80%;
+        }
+    }
+
+    &__size{
+        background-color: #fff;
+        border-radius: 0.3em;
+        color: #000;
+        padding: 0.3em 0.5em;
+
+        @media screen and (max-width: $media_sm) {
+            margin-left: auto !important;
+        }
+    }
+
+    &__bitrate,
+    &__grabs,
+    &__seeds{
+        margin-right: 1em;
+
+        > span{
+            color: #fff;
+        }
+    }
+
+    &__size{
+        font-weight: 600;
+        
+        @media screen and (max-width: $media_md) {
+            width: auto;
+        }
+    }
+
+    &__viewed{
+        position: absolute;
+        top: -0.75em;
+        left: -0.75em;
+        border-radius: 100%;
+        width: 1.5em;
+        height: 1.5em;
+        padding: 0.3em;
+        color: #000;
+        background-color: #fff;
+    }
+
+    &__stat{
+        display: flex;
+        flex-wrap: wrap;
+        background-color: rgba(0,0,0,0.25);
+        border-radius: 0.3em;
+        line-height: 1.4;
+        margin-top: 0.7em;
+        font-size: 0.9em;
+
+        > div{
+            padding: 0.2em 0.8em;
+        }
+    }
+
+    &__ffprobe{
+        padding-top: 0.3em;
+
+        > div{
+            float: left;
+            background: rgb(255,255,255,0.19);
+            padding: 0.4em;
+            margin-right: 0.5em;
+            margin-top: 0.5em;
+            border-radius: 0.3em;
+            white-space: nowrap;
+
+            &::before{
+                content: '';
+                width: 1em;
+                height: 1em;
+                margin-right: 0.5em;
+                display: inline-block;
+                background-repeat: no-repeat;
+                background-position: 50% 50%;
+                background-size: contain;
+                margin-top: -0.2em;
+            }
+
+            &.m{
+                &-video::before{
+                    background-image: url(../img/icons/film.svg);
+                }
+                &-channels::before{
+                    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' version='1.1' viewBox='0 0 512 512' xml:space='preserve' class=''%3E%3Cpath d='M410.832 86.797c-13.048 0-23.663 10.639-23.663 23.717V401.64c1.194 31.473 46.23 31.36 47.416 0V110.514c0-13.077-10.655-23.717-23.753-23.717zM256 86.797c-13.098 0-23.753 10.639-23.753 23.717V401.64c1.197 31.429 46.321 31.404 47.507 0V110.514c0-13.077-10.656-23.717-23.754-23.717zM333.415 173.517c-13.047 0-23.661 10.639-23.661 23.717v117.687c1.194 31.475 46.229 31.358 47.415 0V197.234c0-13.078-10.656-23.717-23.754-23.717zM488.247 216.878c-13.047 0-23.662 10.639-23.662 23.717v30.966c1.194 31.474 46.229 31.359 47.415 0v-30.966c0-13.078-10.655-23.717-23.753-23.717zM23.754 216.878C10.656 216.878 0 227.517 0 240.594v30.966c1.198 31.382 46.233 31.451 47.415 0v-30.966c0-13.077-10.614-23.716-23.661-23.716zM101.169 130.157c-13.098 0-23.754 10.639-23.754 23.717V358.28c1.198 31.384 46.234 31.45 47.417 0V153.874c0-13.078-10.615-23.717-23.663-23.717zM178.585.077c-13.098 0-23.753 10.639-23.753 23.717V488.36c1.197 31.383 46.232 31.45 47.415 0V23.794c0-13.078-10.615-23.717-23.662-23.717z' fill='%23fff'%3E%3C/path%3E%3C/svg%3E");
+                }
+                &-audio::before{
+                    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' version='1.1' viewBox='0 0 24 24' xml:space='preserve'%3E%3Cpath d='M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z' fill='%23fff'%3E%3C/path%3E%3Cpath d='M6 11a1 1 0 1 0-2 0v1a8.001 8.001 0 0 0 7 7.938V21a1 1 0 1 0 2 0v-1.062A8.001 8.001 0 0 0 20 12v-1a1 1 0 1 0-2 0v1a6 6 0 0 1-12 0z' fill='%23fff'%3E%3C/path%3E%3C/svg%3E");
+                }
+                &-subtitle::before{
+                    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' version='1.1' viewBox='0 0 32 32' xml:space='preserve'%3E%3Cpath d='M27 27H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h22a3 3 0 0 1 3 3v16a3 3 0 0 1-3 3zM5 7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h22a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm7 9a1 1 0 0 0-1-1H8a1 1 0 0 0 0 2h3a1 1 0 0 0 1-1zm13 0a1 1 0 0 0-1-1h-8a1 1 0 0 0 0 2h8a1 1 0 0 0 1-1zm0 5a1 1 0 0 0-1-1h-3a1 1 0 0 0 0 2h3a1 1 0 0 0 1-1zm-8 0a1 1 0 0 0-1-1H8a1 1 0 0 0 0 2h8a1 1 0 0 0 1-1z' fill='%23fff'%3E%3C/path%3E%3C/svg%3E");
+                }
+            }
+        }
+
+        &::after{
+            content: '';
+            display: block;
+            clear: both;
+        }
+    }
+
+    & + .torrent-item{
+        margin-top: 1em;
+    }
+
+    &.focus{
+        &::after{
+            content: "";
+            position: absolute;
+            top: -0.5em;
+            left: -0.5em;
+            right: -0.5em;
+            bottom: -0.5em;
+            border: 0.3em solid #fff;
+            border-radius: 0.7em;
+            z-index: -1;
+        }
+    }
+
+    &--popular{
+        background-color: rgba(255,255,255,0.2);
+    }
+}
+
+.torrent-file{
+    display: flex;
+    background: rgba(0,0,0,0.2);
+    border-radius: 0.3em;
+    padding: 1em;
+    align-items: center;
+    position: relative;
+    padding-bottom: 2em;
+
+    &__title{
+        flex-grow: 1;
+        font-size: 1.3em;
+        line-height: 1.2;
+        overflow: hidden;
+        padding-right: 1em;
+        text-overflow: ellipsis;
+
+        .exe{
+            border-radius: 0.3em;
+            background: rgba(255,255,255,0.06);
+            padding: 0.2em 0.4em;
+            display: inline-block;
+            margin-left: 0.6em;
+        }
+    }
+
+    &__size{
+        flex-shrink: 0;
+        border-radius: 0.3em;
+        background: #262829;
+        font-size: 1.3em;
+        padding: 0.3em 0.5em;
+    }
+
+    .time-line{
+        position: absolute;
+        left: 1em;
+        right: 1em;
+        bottom: 1em;
+        display: block !important;
+    }
+
+    &.focus{
+        background-color: rgba(255,255,255,0.2);
+    }
+}
+
+.torrent-error{
+    > div + div{
+        margin-top: 1.3em;
+    }
+
+    > div{
+        line-height: 1.2;
+
+        > div{
+            font-size: 1.4em;
+        }
+        > ul{
+            margin: 0;
+            margin-top: 0.2em;
+            font-size: 1.2em;
+            font-weight: 300;
+
+            > li{
+                position: relative;
+                padding-left: 1em;
+
+                &::before{
+                    content: '';
+                    display: block;
+                    width: 0.3em;
+                    height: 0.3em;
+                    border-radius: 100%;
+                    background-color: #ddd;
+                    position: absolute;
+                    top: 0.5em;
+                    left: 0;
+                }
+
+                + li{
+                    margin-top: 0.2em;
+                }
+            }
+        }
+    }
+
+    code{
+        background-color: #4c4c4c;
+        border-radius: 0.2em;
+        padding: 0 0.5em;
+        word-break: break-all;
+        font-family: inherit;
+        font-size: inherit;
+    }
+}
+
+.error + .torrent-error{
+    margin-top: 2em;
+}
+
+.torrent-filter{
+    display: flex;
+    margin-bottom: 2em;
+
+    .simple-button{
+        &.filter--back{
+            @media screen and (min-width: $media_md) {
+                display: none;
+            }
+        }
+    }
+    
+
+    @media screen and (max-width: $media_sm) {
+        white-space: nowrap;
+
+        .simple-button.filter--search div{
+            display: none;
+        }
+    }
+}
+
+.torrent-serial{
+    position: relative;
+    border-radius: 0.3em;
+    background: #1d1f20;
+    display: flex;
+    align-items: center;
+
+    &__progress{
+        width: 0.3em;
+        position: absolute;
+        height: 0;
+        background: #fff;
+        top: 50%;
+        right: 0;
+        border-radius: 0.3em;
+        transition: height 0.1s linear;
+        transform: translateY(-50%);
+    }
+
+    &__img{
+        width: 12em;
+        border-radius: 0.3em;
+        height: 7em;
+        flex-shrink: 0;
+        align-self: flex-start;
+        opacity: 0;
+        transition: opacity $speed;
+
+        &.loaded{
+            opacity: 1;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            width: 7em;
+            height: 5em;
+        }
+    }
+
+    &__content{
+        padding: 0.8em 1em;
+        flex-grow: 1;
+        overflow: hidden;
+
+        @media screen and (max-width: $media_xm) {
+            display: flex;
+        }
+    }
+
+    &__body{
+        float: left;
+        max-width: 80%;
+
+        @media screen and (max-width: $media_sm) {
+            max-width: 72%;
+        }
+    }
+
+    &__title{
+        font-size: 1.7em;
+        overflow: hidden;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin-top: -0.1em;
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 1.6em;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            font-size: 1.4em;
+        }
+    }
+
+    &__line{
+        font-size: 1.1em;
+        margin-top: 0.5em;
+        font-weight: 300;
+        line-height: 1.2;
+
+        b{
+            font-weight: 500;
+        }
+
+        span + span{
+            &:before{
+                content: '•';
+                display: inline-block;
+                margin: 0 0.5em;
+                vertical-align: baseline;
+            }
+        }
+
+        span:last-child{
+            @media screen and (max-width: $media_xs) {
+                display: none;
+            }
+        }
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 1em;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            padding-right: 1em;
+            display: flex;
+            flex-direction: column;
+
+            span + span{
+                margin-top: 0.5em;
+
+                &:before{
+                    display: none;
+                }
+            }
+        }
+    }
+
+    &__clear{
+        clear: both;
+    }
+
+    &__size{
+        border-radius: 0.3em;
+        background: #262829;
+        font-size: 1.3em;
+        padding: 0.3em 0.5em;
+    }
+
+    &__exe{
+        font-size: 1.4em;
+        margin-top: 0.2em;
+    }
+
+    &__detail{
+        text-align: right;
+        margin-left: auto;
+        white-space: nowrap;
+        float: right;
+
+        @media screen and (max-width: $media_xs) {
+            font-size: 0.9em;
+        }
+    }
+
+    &__episode{
+        position: absolute;
+        background-color: rgba(0,0,0,0.7);
+        left: 0;
+        top: 0;
+        border-radius: 0.2em;
+        padding: 0.3em 0.5em;
+        font-size: 1.4em;
+        font-weight: 600;
+
+        @media screen and (max-width: $media_xs) {
+            font-size: 1.2em;
+        }
+    }
+
+    &.focus{
+        background-color: #353535;
+    }
+
+
+    @media screen and (max-width: $media_xs) {
+        padding-bottom: 3.4em;
+    }
+
+    @media screen and (max-width: $media_xs) {
+        padding-bottom: 0;
+    }
+
+    .time-line{
+        display: block !important;
+
+        @media screen and (max-width: $media_xm) {
+            position: absolute;
+            top: 5em;
+            left: 1em;
+            width: 10em;
+        }
+
+        @media screen and (max-width: $media_xs) {
+            top: 3em;
+            width: 5em;
+        }
+    }
+}
+
+.torrent-install{
+    display: flex;
+
+    @media screen and (max-width: $media_sm) {
+        display: block;
+    }
+
+    &__left,
+    &__details{
+        width: 50%;
+
+        @media screen and (max-width: $media_sm) {
+            width: 100%;
+        }
+    }
+
+    &__left{
+        padding-right: 3em;
+
+        @media screen and (max-width: $media_sm) {
+            display: none;
+        }
+    }
+    
+    &__title{
+        font-size: 2em;
+        line-height: 1.4;
+        margin-bottom: 0.7em;
+    }
+
+    &__descr{
+        font-size: 1.3em;
+        line-height: 1.4em;
+        margin-bottom: 3em;
+    }
+
+    &__label{
+        font-size: 1.2em;
+        margin-bottom: 1em;
+    }
+
+    &__links{
+        &:after{
+            display: block;
+            content: '';
+            clear: both;
+        }
+    }
+
+    &__link{
+        float: left;
+        margin-right: 1em;
+        margin-bottom: 1em;
+        padding: 1em;
+        border-radius: 0.3em;
+        background-color: #363636;
+
+        > div{
+            &:first-child{
+                font-size: 1.1em;
+                margin-bottom: 0.4em;
+            }
+            &:last-child{
+                font-size: 1.2em;
+            }
+        }
+    }
+}
+
+.torrent-checklist{
+    &__title{
+        font-size: 2em;
+        line-height: 1.4;
+        margin-bottom: 0.7em;
+    }
+
+    &__descr{
+        font-size: 1.2em;
+        line-height: 1.4em;
+        margin-bottom: 2em;
+    }
+
+    &__progress-steps{
+        margin-bottom: 1em;
+    }
+
+    &__progress-bar{
+        background-color: rgb(255, 255, 255, 0.15);
+        border-radius: 5em;
+        margin-bottom: 2em;
+
+        > div{
+            height: 0.5em;
+            background-color: #fff;
+            border-radius: 5em;
+        }
+    }
+
+    &__content{
+        display: flex;
+    }
+
+    &__footer{
+        margin-top: 2em;
+        display: flex;
+        align-items: center;
+    }
+
+    &__steps,
+    &__info{
+        width: 50%;
+    }
+
+    &__steps{
+        @media screen and (max-width: $media_xm) {
+            display: none;
+        }
+    }
+
+    &__list{
+        margin: 0;
+
+        > li{
+            margin-bottom: 1em;
+            color: #8D8D8D;
+
+            &.wait{
+                color: #fff;
+            }
+            &.check{
+                text-decoration: line-through;
+            }
+        }
+    }
+
+    &__info{
+        > div{
+            font-size: 1.2em;
+            line-height: 1.6;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            width: 100%
+        }
+    }
+}
+
+.torrnet-folder-name{
+    font-size: 1.4em;
+    padding: 1.4em 0;
+    opacity: 0.5;
+
+    &::before{
+        content: '';
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        background: url(../img/icons/menu/catalog.svg) no-repeat 50% 50%;
+        background-size: contain;
+        margin-right: 0.7em;
+        margin-top: -0.3em;
+    }
+}
+
+body.platform--orsay,
+body.platform--netcast{
+    .torrnet-folder-name::before{
+        display: none;
+    }
+    .torrent-item__ffprobe > div::before{
+        display: none;
+    }
+}

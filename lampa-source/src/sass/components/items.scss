@@ -1,0 +1,123 @@
+.items-line{
+    padding-bottom: 3em;
+    
+    &__head{
+        padding: 0 $offset;
+        margin-bottom: 1.4em;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    &__title{
+        font-size: 1.6em;
+        font-weight: 400;
+
+        .full-person{
+            &__name{
+                font-size: 1em;
+            }
+            
+            &__photo{
+                width: 2em;
+                height: 2em;
+
+                svg{
+                    width: 1em !important;
+                    height: 1em !important;
+                }
+            }
+
+            &--svg{
+                .full-person__photo{
+                    padding: 0.5em;
+                }
+            }
+        }
+    }
+
+    &__more{
+        margin-left: 2em;
+        padding: 0.4em 1em;
+        background: rgba(0,0,0,0.3);
+        border-radius: 2em;
+
+        &.focus{
+            background-color: #fff;
+            color: #000;
+        }
+    }
+
+    &--type{
+        &-cards{
+            min-height: 24em;
+        }
+        &-collection{
+            min-height: 15em;
+        }
+        &-player-cards{
+            .items-line__head{
+                padding-left: 0.8em;
+            }
+            .items-line__body .scroll__content{
+                padding: 0 1em;
+            }
+        }
+        &-top{
+            .items-cards .card{
+                &:nth-child(1),
+                &:nth-child(2),
+                &:nth-child(3){
+                    margin-left: 6em;
+
+                    &::before{
+                        content: "1";
+                        position: absolute;
+                        top: 0.2em;
+                        right: 84%;
+                        font-size: 16em;
+                        color: #000000;
+                        font-weight: 900;
+                        -webkit-text-stroke: 0.01em #ffffff;
+                        z-index: -1;
+                    }
+                }
+
+                &:nth-child(2){
+                    margin-left: 4.5em;
+
+                    &::before{
+                        content: "2";
+                        right: 74%;
+                    }
+                }
+
+                &:nth-child(3){
+                    margin-left: 3.7em;
+
+                    &::before{
+                        content: "3";
+                        right: 82%;
+                    }
+                }
+            }
+        }
+    }
+}
+
+.items-cards{
+    display: flex;
+    align-items: self-start;
+
+    .card--collection{
+        @media screen and (max-width: $media_md) {
+            width: 19.7em;
+        }
+    }
+}
+
+.items-line .mapping--line .card--collection{
+    @media screen and (max-width: $media_md) {
+        width: 19.7em;
+    }
+}

@@ -1,0 +1,54 @@
+.search-box{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    z-index: 50;
+    width: 100%;
+
+    display: flex;
+    flex-direction: column;
+    padding: $offset;
+    align-items: center;
+    justify-content: center;
+
+    .search__input{
+        padding-left: 0;
+        width: 50%;
+
+        &.filled::after{
+            content: "";
+            display: inline-block;
+            border-right: 0.15em solid #fff;
+            height: 1em;
+            margin: -1em 0;
+            margin-left: 0.1em;
+
+            animation: animation-search-input-line 0.8s infinite
+        }
+
+        @media screen and (max-width: $media_md) {
+            width: 100%;
+        }
+    }
+
+    &__keypad{
+        width: 50%;
+
+        @media screen and (max-width: $media_md) {
+            width: 100%;
+        }
+    }
+
+    &--focus{
+        justify-content: flex-start;
+    }
+}
+
+body.system--keyboard .search-box{
+    .simple-keyboard-input{
+        border-bottom: 2px solid rgb(255,255,255,0.15);
+    }
+}

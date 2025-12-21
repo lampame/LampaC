@@ -1,0 +1,367 @@
+@font-face {
+	font-family: "SegoeUI";
+	font-display: swap;
+	src: 
+		url("../fonts/SegoeUI/SegoeUI-Light.eot") format("embedded-opentype"),
+    	url("../fonts/SegoeUI/SegoeUI-Light.woff") format("woff"),
+    	url("../fonts/SegoeUI/SegoeUI-Light.ttf") format("truetype");
+	font-weight: 300;
+	font-style: normal;
+}
+@font-face {
+	font-family: "SegoeUI";
+	font-display: swap;
+	src: 
+		url("../fonts/SegoeUI/SegoeUI.eot") format("embedded-opentype"),
+    	url("../fonts/SegoeUI/SegoeUI.woff") format("woff"),
+    	url("../fonts/SegoeUI/SegoeUI.ttf") format("truetype");
+	font-weight: 400;
+	font-style: normal;
+}
+@font-face {
+	font-family: "SegoeUI";
+	font-display: swap;
+	src: 
+		url("../fonts/SegoeUI/SegoeUI-SemiBold.eot") format("embedded-opentype"),
+    	url("../fonts/SegoeUI/SegoeUI-SemiBold.woff") format("woff"),
+    	url("../fonts/SegoeUI/SegoeUI-SemiBold.ttf") format("truetype");
+	font-weight: 600;
+	font-style: normal;
+}
+@font-face {
+	font-family: "SegoeUI";
+	font-display: swap;
+	src: 
+		url("../fonts/SegoeUI/SegoeUI-Bold.eot") format("embedded-opentype"),
+    	url("../fonts/SegoeUI/SegoeUI-Bold.woff") format("woff"),
+    	url("../fonts/SegoeUI/SegoeUI-Bold.ttf") format("truetype");
+	font-weight: 700;
+	font-style: normal;
+}
+
+
+* {
+    box-sizing: border-box;
+    outline: none;
+	-webkit-user-drag: none;
+}
+
+* {
+	-webkit-tap-highlight-color: transparent;
+	-webkit-touch-callout: none; /* чтобы не показывало меню при долгом тапе */
+}
+
+html{
+	font-size: 16px;
+}
+
+*:after,
+*:before{
+	display: inline-block;
+	vertical-align: middle;
+}
+
+*:focus {
+	outline: none !important;
+}
+
+input::placeholder {
+	color: #6a6a6a;
+	opacity: 1;
+}
+
+::-webkit-scrollbar {
+	display: none;
+}
+
+input.hover::placeholder,
+input.enter::placeholder {
+	color: #fff;
+	opacity: 1;
+}
+
+*:not(input){
+	user-select: none;
+}
+
+body{
+	line-height: 1;
+    font-size: 16px;
+    color: #ffffff;
+    position: relative;
+    font-family: "SegoeUI", sans-serif;
+    background: #1d1f20;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+	user-select: none !important;
+	-webkit-touch-callout: none !important;
+
+	&.black--style{
+		background: #000 !important;
+
+		@media screen and (max-width: $media_xm) {
+			.selectbox__content,
+			.modal__content,
+			.settings__content{
+				background-color: #000 !important;
+			}
+		}
+	}
+}
+
+img{
+	vertical-align: middle;
+	max-width: 100%;
+	object-fit: cover;
+}
+
+svg{
+    width: 100%;
+    height: 100%
+}
+
+ul{
+    list-style: none;
+    padding: 0;
+}
+
+.mouse-layer{
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 300;
+}
+
+.hide{
+	display: none !important;
+}
+
+.selector{
+	cursor: pointer;
+}
+
+body.no--mask{
+	.scroll--mask{
+		mask-image: unset !important
+	}
+}
+
+body.no--animation *{
+	transition: none !important;
+}
+
+body.no--cursor{
+	cursor: none;
+}
+
+/** Фиг знает, баг **/
+body.no--animation .background canvas{
+	transition: opacity 0.1s !important;
+}
+
+.endless{
+	&-up{
+		animation: endless-up $speed ease;
+	}
+	&-down{
+		animation: endless-down $speed ease;
+	}
+}
+
+.normalization{
+	position: absolute;
+	top: 50%;
+	right: 1.5em;
+	padding: 0.4em;
+	height: auto;
+	background-color: rgba(0, 0, 0, 0.3);
+	border-radius: 0.3em;
+	z-index: 60;
+	opacity: 0;
+	transform: translateY(-50%) translateX(100%);
+	transition: all 0.1s;
+
+	&--visible{
+		opacity: 1;
+		transform: translateY(-50%) translateX(0);
+	}
+}
+
+.text-markdow{
+	line-height: 1.6;
+	font-weight: 100;
+	font-size: 1.15em;
+
+	> *:first-child{
+		margin-top: 0;
+	}
+
+	h2,h3,h4,h5{
+		font-size: 1.4em;
+		font-weight: 400;
+	}
+
+	&--compressed-sides{
+		padding-left: $offset;
+		padding-right: $offset;
+	}
+}
+
+.content-loading{
+	position: relative;
+	padding: 5em 0;
+
+	&::after{
+		content: '';
+		display: block;
+		height: 3em;
+		width: 3em;
+		background: url(../img/loader.svg) no-repeat 50% 50%;
+		background-size: contain;
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		margin-left: -1.5em;
+		margin-top: -1.5em;
+	}
+}
+
+body.platform--browser .normalization{
+	backdrop-filter: blur(5px);
+}
+
+body.platform--apple .normalization,
+body.selectbox--open .normalization,
+body.keyboard-input--visible .normalization{
+	display: none;
+}
+
+body.ambience--enable,
+body:not(.glass--style).keyboard-input--visible{
+	.wrap,
+	.head{
+		display: none;
+	}
+}
+
+.icon--blink:not(.focus){
+	&.animate{
+		background: linear-gradient(45deg, rgba(255,255,255,0) 0%,rgba(255,255,255,0) 40%,rgba(255,255,255,1) 50%,rgba(255,255,255,0) 60%,rgba(255,255,255,0) 100%);
+		background-size: 400% 400%;
+		animation: head-icon-blick 1s ease forwards;
+	}
+}
+.notice--icon.animate svg{
+	transform-origin: 50% 0;
+	animation: head-icon-notice 1s ease forwards;
+}
+
+.overhide{
+	overflow: hidden;
+}
+
+.no-shrink{
+	flex-shrink: 0;
+}
+
+/* Фикс для orsay */
+.online-prestige-watched__icon{
+	width: 1.5em;
+    height: 1.5em;
+}
+
+@keyframes head-icon-blick {
+	0% {
+		background-position: 0% 50%;
+	}
+	100% {
+		background-position: 100% 50%;
+	}
+}
+
+@keyframes head-icon-notice {
+	0% {
+		transform: rotateZ(0);
+	}
+	10% {
+		transform: rotateZ(30deg);
+	}
+	20% {
+		transform: rotateZ(-30deg);
+	}
+	30% {
+		transform: rotateZ(20deg);
+	}
+	40% {
+		transform: rotateZ(-20deg);
+	}
+	50% {
+		transform: rotateZ(10deg);
+	}
+	60% {
+		transform: rotateZ(-10deg);
+	}
+	70% {
+		transform: rotateZ(5deg);
+	}
+	80% {
+		transform: rotateZ(-5deg);
+	}
+	90% {
+		transform: rotateZ(0);
+	}
+}
+
+@keyframes endless-up {
+	0% {
+		transform: translate3d(0,-5em,0);
+	}
+	100% {
+		transform: translate3d(0,0,0);
+	}
+}
+@keyframes endless-down {
+	0% {
+		transform: translate3d(0,5em,0);
+	}
+	100% {
+		transform: translate3d(0,0,0);
+	}
+}
+
+@keyframes endless-left {
+	0% {
+		transform: translate3d(5em,0,0);
+	}
+	100% {
+		transform: translate3d(0,0,0);
+	}
+}
+@keyframes endless-right {
+	0% {
+		transform: translate3d(-5em,0,0);
+	}
+	100% {
+		transform: translate3d(0,0,0);
+	}
+}
+
+@keyframes pulse {
+	0% {
+		transform: scale(1)
+	}
+	20% {
+		transform: scale(1.3)
+	}
+	100% {
+		transform: scale(1)
+	}
+}

@@ -1,0 +1,51 @@
+.full-person {
+    display: flex;
+    align-items: center;
+    border-radius: 1em;
+    padding-right: 1.7em;
+    flex-shrink: 0;
+    font-size: 1.1em;
+
+    &__photo{
+        width: 7em;
+        height: 7em;
+        border-radius: 1em;
+        background-color: #fff;
+        margin-right: 1em;
+        flex-shrink: 0;
+        background-size: cover;
+        background-position: 50% 50%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+
+        > img{
+            width: 100%;
+            opacity: 0;
+        }
+    }
+
+    &__name {
+        font-size: 1.5em;
+    }
+
+    &__role {
+        font-size: 1.1em;
+        margin-top: 0.7em;
+    }
+
+    &.hover{
+        background-color: rgba(255,255,255,0.3);
+    }
+
+    &.focus{
+        background-color: #fff;
+        color: #000;
+    }
+
+    &--loaded{
+        .full-person__photo > img{
+            opacity: 1;
+        }
+    }
+}

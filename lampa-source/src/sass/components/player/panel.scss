@@ -1,0 +1,637 @@
+.player-panel{
+    position: fixed;
+    left: $offset;
+    bottom: $offset;
+    right: $offset;
+    width: 100%;
+    background-color: rgba(0,0,0,0.3);
+    transform: translateY(150%);
+    transition: transform 0.3s, opacity 0.3s;
+    width: auto;
+    border-radius: 0.5em;
+
+    @media screen and (max-width: $media_xm) {
+        right: 0;
+        left: 0;
+        bottom: 0;
+    }
+
+    &.panel--visible{
+        transform: translateY(0);
+    }
+
+    &.panel--footer-open{
+        transform: translateY(-150%);
+        opacity: 0;
+    }
+
+    &__body{
+        padding: $offset;
+        position: relative;
+    }
+
+    &__timeline{
+        position: relative;
+        height: 0.4em;
+        background-color: rgba(255,255,255,0.1);
+        border-radius: 2em;
+        margin-bottom: 0.6em;
+
+        &.focus{
+            box-shadow: 0 0 0 0.1em #fff;
+
+            .player-panel__position  > div:after{
+                transform: translateY(-50%) translateX(50%) scale(1.5) !important;
+            }
+        }
+
+        &-segment{
+            position: absolute;
+            height: 100%;
+            top: 0;
+            border-radius: 5em;
+
+            &--ad{
+                background-color: rgba(252, 198, 60, 0.5);
+            }
+            &--skip{
+                background-color: rgba(110, 219, 255, 0.5);
+            }
+        }
+    }
+
+    &__peding,
+    &__position{
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        border-radius: 5em;
+    }
+
+    &__peding{
+        background-color: rgba(255,255,255,0.3);
+    }
+
+    &__position{
+        background-color: #fff;
+        display: flex;
+        justify-content: flex-end;
+
+        > div{
+            position: relative;
+
+            &:after{
+                position: absolute;
+                content: '';
+                display: block;
+                width: 1em;
+                height: 1em;
+                border-radius: 100%;
+                flex-shrink: 0;
+                background-color: #fff;
+                top: 50%;
+                right: 0;
+                transform: translateY(-50%) translateX(50%);
+                font-size: 0.8em;
+                z-index: 1;
+            }
+        }
+    }
+
+    &__time{
+        position: absolute;
+        bottom: 100%;
+        background: rgba(0,0,0,0.3);
+        border-radius: 0.3em;
+        transform: translateX(-50%);
+        margin-bottom: 0.5em;
+        padding: 0.4em;
+    }
+
+    &__time-touch-zone{
+        position: absolute;
+        left: 0;
+        bottom: -1.3em;
+        right: 0;
+        top: -1.8em;
+    }
+
+    &__line{
+        display: flex;
+        align-items: center;
+
+        + .player-panel__line{
+            margin-top: 1em;
+        }
+    }
+
+    &__timeend{
+        margin-left: auto;
+    }
+
+    &__left,
+    &__right{
+        width: 35%;
+        display: flex;
+    }
+
+    &__right{
+        justify-content: flex-end;
+    }
+
+    &__left{
+        @media screen and (max-width: $media_sm) {
+            display: none;
+        }
+    }
+
+    &__center{
+        width: 30%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        @media screen and (max-width: $media_sm) {
+            margin-right: auto;
+            width: 60%;
+            justify-content: start;
+        }
+    }
+
+    .button{
+        width: 2em;
+        height: 2em;
+        border-radius: 100%;
+        background-size: 45%;
+        background-repeat: no-repeat;
+        background-position: 50% 50%;
+        padding: 0.4em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        &.focus{
+            background-color: #fff;
+            color: #000;
+        }
+    }
+
+    &__right,
+    &__left{
+        .button + .button{
+            margin-left: 1em;
+        }
+    }
+
+    &__playpause{
+        font-size: 1.4em;
+        margin: 0 1em;
+
+        > div:first-child{
+            display: none;
+        }
+
+        @media screen and (max-width: $media_sm) {
+            order: -1;
+            margin-left: 0;
+        }
+    }
+
+    &__filename{
+        font-size: 1.7em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2em;
+    }
+
+    
+    &__quality{
+        width: auto !important;
+        padding: 0.1em 0.5em !important;
+        border-radius: 0.2em !important;
+        text-transform: uppercase;
+    }
+
+    &__tstart{
+        margin-right: 1em;
+    }
+    &__tend{
+        margin-left: 1em;
+    }
+    &__next,
+    &__prev{
+        padding: 0.55em !important;
+    }
+    &__rprev,
+    &__rnext{
+        @media screen and (max-width: $media_md) {
+            display: none !important;
+        }
+    }
+    &__playlist{
+        padding: 0.5em !important;
+    }
+    &__subs{
+        padding: 0.45em !important;
+    }
+    &__settings{
+        padding: 0.35em !important;
+    }
+
+    &__next-episode-name{
+        align-self: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-left: 1em;
+    }
+
+    &__iptv{
+        display: none;
+    }
+
+    &__volume{
+        position: relative;
+
+        &-drop{
+            display: none;
+            position: absolute;
+            left: 50%;
+            bottom: 100%;
+            transform: translateX(-50%);
+            padding: 0.3em;
+            border-radius: 0.3em;
+            backdrop-filter: blur(1em);
+        }
+
+        &-range{
+            appearance: slider-vertical;
+            width: 0.5em;
+            height: 8em;
+        }
+
+        &:hover{
+            > div{
+                display: block;
+            }
+        }
+    }
+
+    &.panel--paused{
+        .player-panel__playpause{
+            > div{
+                &:first-child{
+                    display: block;
+                }
+                &:last-child{
+                    display: none;
+                }
+            }
+        }
+    }
+
+    &.panel--norewind{
+        .player-panel__timeline,
+        .player-panel__line-one{
+            display: none;
+        }
+        .player-panel__line-two{
+            margin-top: 0;
+        }
+    }
+}
+
+.player-panel-iptv{
+    position: relative;
+    height: 8em;
+
+    &__arrow-up,
+    &__arrow-down,
+    &__position{
+        position: absolute;
+        left: 18%;
+
+        @media screen and (max-width: $media_md) {
+            left: 25%;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            display: none;
+        }
+    }
+
+    &__arrow{
+        &-up,
+        &-down{
+            > svg{
+                width: 1.8em !important;
+                height: 1.8em !important;
+            }
+        }
+        &-up{
+            top: 0;
+        }
+        &-down{
+            bottom: 0;
+        }
+    }
+
+    &__position{
+        top: 50%;
+        font-size: 2.5em;
+        font-weight: 600;
+        margin-left: -0.5em;
+        margin-top: -0.5em;
+    }
+
+    &__channel{
+        > div{
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            opacity: 0;
+            transition: transform $speed, opacity $speed;
+            will-change: transform, opacity;
+        }
+    }
+}
+
+.player-panel-iptv-item{
+    display: flex;
+    align-items: center;
+
+    &__left{
+        width: 27%;
+
+        svg,
+        img{
+            width: 45% !important;
+            opacity: 0;
+            transition: opacity $speed;
+
+            &.loaded{
+                opacity: 1;
+            }
+    
+            @media screen and (max-width: $media_xm) {
+                width: 75% !important;
+            }
+        }
+
+        svg{
+            height: 100% !important;
+        }
+
+        @media screen and (max-width: $media_md) {
+            width: 36%;
+        }
+    }
+
+    &__body{
+        width: 73%;
+        line-height: 1.4;
+
+        @media screen and (max-width: $media_md) {
+            width: 64%;
+        }
+    }
+
+    &__group{
+        font-size: 1.2em;
+        opacity: 0.5;
+        margin-bottom: 0.3em;
+    }
+
+    &__name{
+        font-size: 2.6em;
+        font-weight: 900;
+
+        @media screen and (max-width: $media_sm) {
+            font-size: 2em;
+        }
+
+        @media screen and (max-width: $media_xm) {
+            font-size: 1.6em;
+        }
+    }
+
+    &__icons-item{
+        display: inline-block;
+        background-color: rgba(255,255,255,0.2);
+        border-radius: 100%;
+        padding: 0.2em;
+        margin-left: 0.5em;
+        margin-top: -0.2em;
+        vertical-align: middle;
+        
+        svg,
+        img{
+            width: 0.5em !important;
+            height: 0.5em !important;
+        }
+    }
+
+    &__prog{
+        display: flex;
+        margin-top: 0.4em;
+        height: 1.5em;
+        font-size: 1.1em;
+    }
+
+    &__prog-load{
+        font-size: 1.1em;
+        opacity: 0.3;
+        padding-top: 0.1em;
+    }
+
+    &__prog-item{
+        display: flex;
+        position: relative;
+        align-items: center;
+
+        span{
+            opacity: 0.5;
+            font-size: 1.2em;
+            max-width: 17em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        + .player-panel-iptv-item__prog-item{
+            &::before{
+                content: '|';
+                display: inline-block;
+                margin: 0 1em;
+                opacity: 0.5;
+            }
+
+            @media screen and (max-width: $media_md) {
+                display: none;
+            }
+        }
+
+        &.watch{
+            span{
+                opacity: 1;
+            }
+        }
+    }
+
+    &__prog-timeline{
+        flex-shrink: 0;
+        border-radius: 1em;
+        background-color: rgba(255,255,255,0.2);
+        margin-left: 1em;
+        width: 9em;
+        margin-top: 0.4em;
+        
+        > div{
+            height: 0.2em;
+            background-color: #fff;
+            border-radius: 1em;
+            min-height: 2px;
+        }
+
+        @media screen and (max-width: $media_sm) {
+            width: 4em;
+        }
+    }
+}
+
+.player-panel{
+    background-color: rgba(0,0,0,0.6);
+}
+
+body.platform--browser,
+body.platform--nw,
+body.glass--style.platform--apple,
+body.glass--style.platform--apple_tv,
+body.glass--style.platform--android{
+    .player-panel{
+        background-color: rgba(0,0,0,0.3);
+        backdrop-filter: blur(1em);
+    }
+}
+
+body.true--mobile.orientation--portrait .player-panel{
+    &__line:first-child{
+        flex-wrap: wrap;
+        padding-bottom: 2.4em;
+        margin: 0;
+    }
+
+    &__line:last-child{
+        flex-wrap: wrap;
+        padding-bottom: 2.4em;
+        margin: 0;
+    }
+
+    &__center{
+        width: 100%;
+        justify-content: center;
+        font-size: 1.8em;
+        margin-bottom: 1em;
+    }
+
+    &__tstart,
+    &__tend,
+    &__rnext,
+    &__rprev{
+        display: none;
+    }
+
+    &__playpause{
+        margin: 0 1em;
+    }
+
+    &__right{
+        width: 100%;
+        justify-content: space-between;
+        font-size: 1.2em;
+
+        > div + div{
+            margin-left: 0;
+        }
+    }
+
+    &__playlist{
+        order: -1;
+    }
+
+    &__timeline{
+        font-size: 1.6em;
+    }
+
+    &__center{
+        .player-panel__next,
+        .player-panel__prev{
+            display: flex !important;
+        }
+        .player-panel__prev{
+            order: -1;
+        }
+    }
+
+    &__left{
+        display: none;
+    }
+
+    &__quality{
+        width: 2em !important;
+        white-space: nowrap;
+    }
+}
+
+.player.youtube{
+    .player-video__loader,
+    .player-panel__settings{
+        display: none !important;
+    }
+}
+
+.player.iptv .player-panel{
+    &__body{
+        > div{
+            display: none;
+        }
+
+        > .player-panel__iptv{
+            display: block;
+        }
+    }
+}
+
+.player.player--loading{
+    .player-panel{
+        &__peding,
+        &__position{
+            display: none;
+        }
+
+        &__timeline{
+            &::after{
+                content: '';
+                display: block;
+                background-color: #fff;
+                position: absolute;
+                left: 0%;
+                height: 100%;
+                width: 20%;
+                border-radius: 5em;
+
+                animation-duration: 1s;
+                animation-name: scan;
+                animation-iteration-count: infinite;
+                animation-direction: alternate;
+                animation-timing-function: linear;
+            }
+        }
+    }
+}

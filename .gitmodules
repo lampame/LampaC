@@ -1,6 +1,0 @@
-[submodule "lampa-source"]
-	path = lampa-source
-	url = https://github.com/yumata/lampa-source
-[submodule "Lampac"]
-	path = Lampac
-	url = https://github.com/immisterio/Lampac

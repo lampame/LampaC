@@ -1,0 +1,54 @@
+.category-full{
+    display: flex;
+    flex-wrap: wrap;
+
+    padding: 0 1em;
+
+    .card{
+        margin-left: 0;
+        padding-left: 0.5em;
+        padding-right: 0.5em;
+
+        @media screen and (max-width: $media_xm) {
+            padding-left: math.div($offset, 3);
+            padding-right: math.div($offset, 3);
+        }
+    }
+
+    &__more{
+        text-align: center;
+        padding: 2em;
+        margin-top: 1.5em;
+        width: 100%;
+
+        > span{
+            font-size: 1.2em;
+        }
+
+        &.focus{
+            border-color: #fff;
+            color: #000;
+        }
+    }
+}
+
+body.platform--orsay,
+body.platform--netcast{
+    .category-full{
+        display: block;
+
+        .card{
+            float: left;
+        }
+
+        .card__title{
+            min-height: 3.6em;
+        }
+
+        &:after{
+            display: block;
+            content: '';
+            clear: both;
+        }
+    }
+}
