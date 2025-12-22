@@ -23,10 +23,10 @@ namespace SISI.Controllers.Chaturbate
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
-            string memKey = $"Chaturbate:list:{sort}:{pg}";
+            string memKey = $"Chaturbate:list:{sort}:{pg}:{rch.enable}";
 
             return await InvkSemaphore(memKey, async () =>
             {

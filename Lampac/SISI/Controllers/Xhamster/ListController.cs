@@ -25,10 +25,10 @@ namespace SISI.Controllers.Xhamster
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
-            string memKey = $"{plugin}:{search}:{sort}:{c}:{q}:{pg}";
+            string memKey = $"{plugin}:{search}:{sort}:{c}:{q}:{pg}:{rch.enable}";
 
             return await InvkSemaphore(memKey, async () =>
             {

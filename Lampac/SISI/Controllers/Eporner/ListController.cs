@@ -20,12 +20,12 @@ namespace SISI.Controllers.Eporner
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
             pg += 1;
 
-            string memKey = $"epr:{search}:{sort}:{c}:{pg}";
+            string memKey = $"epr:{search}:{sort}:{c}:{pg}:{rch.enable}";
 
             return await InvkSemaphore(memKey, async () =>
             {

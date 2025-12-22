@@ -20,10 +20,10 @@ namespace SISI.Controllers.Xvideos
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
-            string memKey = $"xvideos:view:{uri}";
+            string memKey = $"xvideos:view:{uri}:{rch.enable}";
 
             return await InvkSemaphore(memKey, async () =>
             {
@@ -31,7 +31,7 @@ namespace SISI.Controllers.Xvideos
                 {
                     reset:
                     stream_links = await XvideosTo.StreamLinks("xds/vidosik", $"{host}/xds/stars", init.corsHost(), uri, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(url, timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
+                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
                     );
 
                     if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)

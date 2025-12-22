@@ -20,10 +20,10 @@ namespace SISI.Controllers.Porntrex
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web,cors", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
-            string memKey = $"ptx:{search}:{sort}:{c}:{pg}";
+            string memKey = $"ptx:{search}:{sort}:{c}:{pg}:{rch.enable}";
 
             return await InvkSemaphore(memKey, async () =>
             {

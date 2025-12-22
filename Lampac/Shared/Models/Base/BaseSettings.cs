@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System.Text.RegularExpressions;
 
 namespace Shared.Models.Base
 {
@@ -53,6 +54,25 @@ namespace Shared.Models.Base
         /// Список устройств которым выводить источник при включеном rhub
         /// </summary>
         public string rch_access { get; set; }
+
+        public string rchNotSupport()
+        {
+            if (string.IsNullOrWhiteSpace(rch_access))
+                return null;
+
+            var noAccess = new List<string>(3);
+
+            if (!rch_access.Contains("apk"))
+                noAccess.Add("apk");
+
+            if (!rch_access.Contains("cors"))
+                noAccess.Add("cors");
+
+            if (!rch_access.Contains("web"))
+                noAccess.Add("web");
+
+            return noAccess.Count > 0 ? string.Join(",", noAccess) : null;
+        }
 
         public bool rip { get; set; }
 
@@ -125,6 +145,8 @@ namespace Shared.Models.Base
         public bool qualitys_proxy { get; set; } = true;
 
         public bool url_reserve { get; set; }
+
+        public string stream_access { get; set; }
         #endregion
 
         #region cors
@@ -138,14 +160,25 @@ namespace Shared.Models.Base
             if (string.IsNullOrWhiteSpace(crhost))
                 return host;
 
+            if (crhost.Contains("{host}") || crhost.Contains("{uri}"))
+                return crhost.Replace("{host}", host).Replace("{uri}", host);
+
             return $"{crhost}/{host}";
         }
 
         public string cors(string uri)
         {
             string crhost = !string.IsNullOrWhiteSpace(webcorshost) ? webcorshost : corseu ? AppInit.conf.corsehost : null;
-            if (string.IsNullOrWhiteSpace(crhost) || string.IsNullOrWhiteSpace(uri) || uri.Contains(crhost))
+            if (string.IsNullOrWhiteSpace(crhost) || string.IsNullOrWhiteSpace(uri))
                 return uri;
+
+            crhost = crhost.Trim();
+
+            if (uri.Contains(Regex.Match(crhost, "https?://([^/]+)", RegexOptions.IgnoreCase).Groups[1].Value))
+                return uri;
+
+            if (crhost.Contains("{host}") || crhost.Contains("{uri}"))
+                return crhost.Replace("{host}", uri).Replace("{uri}", uri);
 
             return $"{crhost}/{uri}";
         }
