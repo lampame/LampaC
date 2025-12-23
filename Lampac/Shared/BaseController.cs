@@ -290,8 +290,8 @@ namespace Shared
                         return $"{apn.host}/proxy/{aes}";
                     }
 
-                    if (apn.host.Contains("{uri}"))
-                        return apn.host.Replace("{uri}", link);
+                    if (apn.host.Contains("{encode_uri}") || apn.host.Contains("{uri}"))
+                        return apn.host.Replace("{encode_uri}", HttpUtility.UrlEncode(link)).Replace("{uri}", link);
 
                     return $"{apn.host}/{link}";
                 }
@@ -605,7 +605,12 @@ namespace Shared
         async public ValueTask<T> loadKit<T>(T _init, Func<JObject, T, T, T> func = null) where T : BaseSettings, ICloneable
         {
             if (_init.kit == false && _init.rhub_fallback == false)
-                return (T)_init.Clone();
+            {
+                var _clone = (T)_init.Clone();
+                InvkEvent.LoadKitInit(new EventLoadKit(null, _clone, null, requestInfo, hybridCache));
+
+                return _clone;
+            }
 
             return loadKit((T)_init.Clone(), await loadKitConf(), func, clone: false);
         }
@@ -613,11 +618,12 @@ namespace Shared
         public T loadKit<T>(T _init, JObject appinit, Func<JObject, T, T, T> func = null, bool clone = true) where T : BaseSettings, ICloneable
         {
             var init = clone ? (T)_init.Clone() : _init;
+            init.IsKitConf = false;
             var defaultinit = InvkEvent.conf.LoadKit != null ? (clone ? _init : (T)_init.Clone()) : null;
 
             InvkEvent.LoadKitInit(new EventLoadKit(defaultinit, init, appinit, requestInfo, hybridCache));
 
-            if (init == null || !init.kit || appinit == null || string.IsNullOrEmpty(init.plugin) || !appinit.ContainsKey(init.plugin))
+            if (!init.kit || appinit == null || string.IsNullOrEmpty(init.plugin) || !appinit.ContainsKey(init.plugin))
             {
                 InvkEvent.LoadKit(new EventLoadKit(defaultinit, init, appinit, requestInfo, hybridCache));
                 return init;
@@ -711,6 +717,7 @@ namespace Shared
             }
 
             IsKitConf = true;
+            init.IsKitConf = true;
 
             InvkEvent.LoadKit(new EventLoadKit(defaultinit, init, conf, requestInfo, hybridCache));
 

@@ -6,8 +6,6 @@ namespace Online.Controllers
 {
     public class HDVB : BaseOnlineController
     {
-        ProxyManager proxyManager = new ProxyManager(AppInit.conf.HDVB);
-
         [HttpGet]
         [Route("lite/hdvb")]
         async public ValueTask<ActionResult> Index(long kinopoisk_id, string title, string original_title, int t = -1, int s = -1, bool origsource = false, bool rjson = false, bool similar = false)
@@ -21,15 +19,17 @@ namespace Online.Controllers
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web,cors", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
             if (similar || kinopoisk_id == 0)
                 return await SpiderSearch(title, origsource, rjson);
+            
+            var proxyManager = new ProxyManager(init);
 
             #region search
             reset:
-            JArray data = await search(rch, kinopoisk_id);
+            JArray data = await search(proxyManager, rch, kinopoisk_id);
             if (data == null)
             {
                 if(init.rhub && init.rhub_fallback)
@@ -147,9 +147,10 @@ namespace Online.Controllers
             if (!play && rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web,cors", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
+            var proxyManager = new ProxyManager(init);
             var proxy = proxyManager.Get();
 
             string memKey = $"video:view:video:{iframe}";
@@ -266,9 +267,10 @@ namespace Online.Controllers
             if (!play && rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web,cors", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
+            var proxyManager = new ProxyManager(init);
             var proxy = proxyManager.Get();
 
             string memKey = $"video:view:serial:{iframe}:{t}:{s}:{e}";
@@ -401,7 +403,7 @@ namespace Online.Controllers
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web,cors", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
             var proxyManager = new ProxyManager(init);
@@ -447,7 +449,7 @@ namespace Online.Controllers
 
 
         #region search
-        async ValueTask<JArray> search(RchClient rch, long kinopoisk_id)
+        async ValueTask<JArray> search(ProxyManager proxyManager, RchClient rch, long kinopoisk_id)
         {
             string memKey = $"hdvb:view:{kinopoisk_id}";
 

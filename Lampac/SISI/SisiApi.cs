@@ -193,9 +193,9 @@ namespace SISI
             #endregion
 
             #region send
-            void send(string name, BaseSettings _init, string plugin = null, int displayindex = -1)
+            void send(string name, BaseSettings _init, string plugin = null, int displayindex = -1, BaseSettings myinit = null)
             {
-                var init = loadKit(_init, kitconf);
+                var init = myinit != null ? _init : loadKit(_init, kitconf);
                 bool enable = init.enable && !init.rip;
                 if (!enable)
                     return;
@@ -203,63 +203,66 @@ namespace SISI
                 if (spder == true && init.spider != true)
                     return;
 
-                if (init.rhub && !init.rhub_fallback)
+                if (rchtype != null)
                 {
-                    if (init.rch_access != null && rchtype != null)
+                    if (init.client_type != null && !init.client_type.Contains(rchtype))
+                        return;
+
+                    string rch_deny = init.RchAccessNotSupport();
+                    if (rch_deny != null && rch_deny.Contains(rchtype))
+                        return;
+
+                    string stream_deny = init.StreamAccessNotSupport();
+                    if (stream_deny != null && stream_deny.Contains(rchtype))
+                        return;
+
+                    if (init.rhub && !init.rhub_fallback && !init.corseu && string.IsNullOrWhiteSpace(init.webcorshost))
                     {
-                        enable = init.rch_access.Contains(rchtype);
-                        if (enable && init.rhub_geo_disable != null)
+                        if (init.rhub_geo_disable != null &&
+                            requestInfo.Country != null &&
+                            init.rhub_geo_disable.Contains(requestInfo.Country))
                         {
-                            if (requestInfo.Country != null && init.rhub_geo_disable.Contains(requestInfo.Country))
-                                enable = false;
+                            return;
                         }
                     }
                 }
 
-                if (!enable)
+                if (init.geo_hide != null &&
+                    requestInfo.Country != null && 
+                    init.geo_hide.Contains(requestInfo.Country))
+                {
                     return;
-
-                if (init.client_type != null && rchtype != null)
-                    enable = init.client_type.Contains(rchtype);
-
-                if (init.geo_hide != null)
-                {
-                    if (requestInfo.Country != null && init.geo_hide.Contains(requestInfo.Country))
-                        enable = false;
                 }
 
-                if (enable)
+                if (init.group > 0 && init.group_hide)
                 {
-                    if (init.group > 0 && init.group_hide)
-                    {
-                        var user = requestInfo.user;
-                        if (user == null || init.group > user.group)
-                            return;
-                    }
-
-                    string url = string.Empty;
-
-                    if (string.IsNullOrEmpty(init.overridepasswd))
-                    {
-                        url = init.overridehost;
-                        if (string.IsNullOrEmpty(url) && init.overridehosts != null && init.overridehosts.Length > 0)
-                            url = init.overridehosts[Random.Shared.Next(0, init.overridehosts.Length)];
-                    }
-
-                    string displayname = init.displayname ?? name;
-
-                    if (string.IsNullOrEmpty(url))
-                        url = $"{host}/{plugin ?? name.ToLower()}";
-
-                    if (displayindex == -1)
-                    {
-                        displayindex = init.displayindex;
-                        if (displayindex == 0)
-                            displayindex = 20 + channels.Count;
-                    }
-
-                    channels.Add(new ChannelItem(init.displayname ?? name, url, displayindex));
+                    var user = requestInfo.user;
+                    if (user == null || init.group > user.group)
+                        return;
                 }
+
+                string url = string.Empty;
+
+                if (string.IsNullOrEmpty(init.overridepasswd))
+                {
+                    url = init.overridehost;
+                    if (string.IsNullOrEmpty(url) && init.overridehosts != null && init.overridehosts.Length > 0)
+                        url = init.overridehosts[Random.Shared.Next(0, init.overridehosts.Length)];
+                }
+
+                string displayname = init.displayname ?? name;
+
+                if (string.IsNullOrEmpty(url))
+                    url = $"{host}/{plugin ?? name.ToLower()}";
+
+                if (displayindex == -1)
+                {
+                    displayindex = init.displayindex;
+                    if (displayindex == 0)
+                        displayindex = 20 + channels.Count;
+                }
+
+                channels.Add(new ChannelItem(init.displayname ?? name, url, displayindex));
             }
             #endregion
 
@@ -296,7 +299,7 @@ namespace SISI
                             }
                         }
 
-                        send(Regex.Replace(init.host, "^https?://", ""), init, $"nexthub?plugin={plugin}");
+                        send(Regex.Replace(init.host, "^https?://", ""), init, $"nexthub?plugin={plugin}", myinit: init);
                     }
                     catch (YamlDotNet.Core.YamlException ex)
                     {

@@ -4,8 +4,6 @@ namespace Online.Controllers
 {
     public class Animebesst : BaseOnlineController
     {
-        ProxyManager proxyManager = new ProxyManager(AppInit.conf.Animebesst);
-
         [HttpGet]
         [Route("lite/animebesst")]
         async public ValueTask<ActionResult> Index(string title, string uri, int s, bool rjson = false, bool similar = false)
@@ -19,8 +17,10 @@ namespace Online.Controllers
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("cors,web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
+
+            var proxyManager = new ProxyManager(init);
 
             reset:
             if (string.IsNullOrEmpty(uri))
@@ -159,7 +159,6 @@ namespace Online.Controllers
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
-            reset: 
             var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
 
             if (rch.IsNotConnected())
@@ -173,14 +172,14 @@ namespace Online.Controllers
             if (!play && rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("cors,web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
+            var proxyManager = new ProxyManager(init);
+
+            reset:
             var cache = await InvokeCache<string>($"animebesst:video:{uri}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
             {
-                if (rch.IsNotConnected())
-                    return res.Fail(rch.connectionMsg);
-
                 string iframe;
                 if (rch.enable)
                 {

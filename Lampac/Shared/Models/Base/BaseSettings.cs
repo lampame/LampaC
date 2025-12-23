@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.Text.RegularExpressions;
+using System.Web;
 
 namespace Shared.Models.Base
 {
@@ -29,6 +30,8 @@ namespace Shared.Models.Base
 
         public bool kit { get; set; } = true;
 
+        public bool IsKitConf { get; set; }
+
         public string plugin { get; set; }
 
         public int group { get; set; }
@@ -55,10 +58,19 @@ namespace Shared.Models.Base
         /// </summary>
         public string rch_access { get; set; }
 
-        public string rchNotSupport()
+        public string RchAccessNotSupport(bool nocheck = false)
         {
             if (string.IsNullOrWhiteSpace(rch_access))
                 return null;
+
+            if (nocheck == false)
+            {
+                // rch выключен
+                // разрешен fallback
+                // указан webcorshost или включен corseu
+                if (!rhub || rhub_fallback || !string.IsNullOrWhiteSpace(webcorshost) || corseu)
+                    return null;
+            }
 
             var noAccess = new List<string>(3);
 
@@ -142,11 +154,43 @@ namespace Shared.Models.Base
 
         public ApnConf apn { get; set; }
 
-        public bool qualitys_proxy { get; set; } = true;
+        public bool qualitys_proxy { get; set; }
 
         public bool url_reserve { get; set; }
 
         public string stream_access { get; set; }
+
+        public string StreamAccessNotSupport(bool nocheck = false)
+        {
+            if (string.IsNullOrWhiteSpace(stream_access))
+                return null;
+
+            if (nocheck == false)
+            {
+                if (AppInit.conf.serverproxy.forced_apn && !string.IsNullOrWhiteSpace(AppInit.conf?.apn?.host))
+                    return null;
+
+                if (rhub && !rhub_streamproxy && !rhub_fallback && rhub_geo_disable == null) { }
+                else
+                {
+                    if (streamproxy || apnstream || qualitys_proxy || geostreamproxy != null)
+                        return null;
+                }
+            }
+
+            var noAccess = new List<string>(3);
+
+            if (!stream_access.Contains("apk"))
+                noAccess.Add("apk");
+
+            if (!stream_access.Contains("cors"))
+                noAccess.Add("cors");
+
+            if (!stream_access.Contains("web"))
+                noAccess.Add("web");
+
+            return noAccess.Count > 0 ? string.Join(",", noAccess) : null;
+        }
         #endregion
 
         #region cors
@@ -160,8 +204,8 @@ namespace Shared.Models.Base
             if (string.IsNullOrWhiteSpace(crhost))
                 return host;
 
-            if (crhost.Contains("{host}") || crhost.Contains("{uri}"))
-                return crhost.Replace("{host}", host).Replace("{uri}", host);
+            if (crhost.Contains("{encode_uri}") || crhost.Contains("{uri}"))
+                return crhost.Replace("{encode_uri}", HttpUtility.UrlEncode(host)).Replace("{uri}", host);
 
             return $"{crhost}/{host}";
         }
@@ -177,8 +221,8 @@ namespace Shared.Models.Base
             if (uri.Contains(Regex.Match(crhost, "https?://([^/]+)", RegexOptions.IgnoreCase).Groups[1].Value))
                 return uri;
 
-            if (crhost.Contains("{host}") || crhost.Contains("{uri}"))
-                return crhost.Replace("{host}", uri).Replace("{uri}", uri);
+            if (crhost.Contains("{encode_uri}") || crhost.Contains("{uri}"))
+                return crhost.Replace("{encode_uri}", HttpUtility.UrlEncode(uri)).Replace("{uri}", uri);
 
             return $"{crhost}/{uri}";
         }

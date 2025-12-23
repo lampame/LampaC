@@ -26,7 +26,7 @@ namespace SISI.Controllers.Xvideos
                 return OnError(rch_error);
 
             string plugin = Regex.Match(HttpContext.Request.Path.Value, "^/([a-z]+)").Groups[1].Value;
-            string memKey = $"{plugin}:list:{search}:{sort}:{c}:{pg}:{rch.enable}";
+            string memKey = $"{plugin}:list:{search}:{sort}:{c}:{pg}";
 
             return await InvkSemaphore(memKey, async () =>
             {
@@ -81,7 +81,7 @@ namespace SISI.Controllers.Xvideos
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return OnError(rch_error);
 
             string plugin = Regex.Match(HttpContext.Request.Path.Value, "^/([a-z]+)").Groups[1].Value;

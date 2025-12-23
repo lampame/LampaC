@@ -8,8 +8,6 @@ namespace Online.Controllers
 {
     public class KinoPub : BaseOnlineController
     {
-        ProxyManager proxyManager = new ProxyManager(AppInit.conf.KinoPub);
-
         static CookieContainer cookies = new CookieContainer();
 
         #region kinopubpro
@@ -18,9 +16,11 @@ namespace Online.Controllers
         [Route("lite/kinopubpro")]
         async public Task<ActionResult> Pro(string code, string name)
         {
-            var proxy = proxyManager.Get();
             var init = AppInit.conf.KinoPub;
             var headers = httpHeaders(init);
+
+            var proxyManager = new ProxyManager(init);
+            var proxy = proxyManager.Get();
 
             if (string.IsNullOrWhiteSpace(code))
             {
@@ -73,9 +73,14 @@ namespace Online.Controllers
                 return badInitMsg;
 
             var rch = new RchClient(HttpContext, host, init, requestInfo);
+
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
+            if (rch.IsNotSupport(out string rch_error))
+                return ShowError(rch_error);
+
+            var proxyManager = new ProxyManager(init);
             var proxy = proxyManager.Get();
 
             string token = init.token;
@@ -136,6 +141,7 @@ namespace Online.Controllers
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
+            var proxyManager = new ProxyManager(init);
             var proxy = proxyManager.Get();
 
             string token = init.token;

@@ -13,12 +13,16 @@ namespace Online.Controllers
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(AppInit.conf.AniLiberty);
+            var proxyManager = new ProxyManager(init);
             var proxy = proxyManager.Get();
 
             var rch = new RchClient(HttpContext, host, init, requestInfo);
+
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
+
+            if (rch.IsNotSupport(out string rch_error))
+                return ShowError(rch_error);
 
             if (releases == 0)
             {
@@ -31,8 +35,9 @@ namespace Online.Controllers
                 var cache = await InvokeCache<List<(string title, string year, int releases, string cover)>>($"aniliberty:search:{title}:{similar}", cacheTime(40, init: init), rch.enable ? null : proxyManager, async res =>
                 {
                     string req_uri = $"{init.corsHost()}/api/v1/app/search/releases?query={HttpUtility.UrlEncode(title)}";
-                    var search = rch.enable ? await rch.Get<JArray>(req_uri, httpHeaders(init)) :
-                                              await Http.Get<JArray>(req_uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    var search = rch.enable 
+                        ? await rch.Get<JArray>(req_uri, httpHeaders(init)) 
+                        : await Http.Get<JArray>(req_uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
 
                     if (search == null || search.Count == 0)
                         return res.Fail("search");

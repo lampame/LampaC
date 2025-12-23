@@ -467,7 +467,7 @@ namespace SISI.Controllers.NextHUB
 
             try
             {
-                string memKey = $"nexthub:view18:goVideo:{url}:{rch.enable}";
+                string memKey = $"nexthub:view18:goVideo:{url}";
 
                 if (init.view.bindingToIP)
                     memKey = rch.ipkey(memKey, proxyManager);

@@ -1,14 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
-using Shared.Models.Online.Vibix;
 using Shared.Models.Online.Settings;
+using Shared.Models.Online.Vibix;
 
 namespace Online.Controllers
 {
     public class Vibix : BaseOnlineController
     {
-        ProxyManager proxyManager = new ProxyManager(AppInit.conf.Vibix);
-
         [HttpGet]
         [Route("lite/vibix")]
         async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title,  int s = -1, bool rjson = false, bool origsource = false)
@@ -20,18 +18,19 @@ namespace Online.Controllers
             if (string.IsNullOrEmpty(init.token))
                 return OnError();
 
-            var data = await search(init, imdb_id, kinopoisk_id);
+            var proxyManager = new ProxyManager(init);
+            var proxy = proxyManager.Get();
+
+            var data = await search(proxyManager, init, imdb_id, kinopoisk_id);
             if (data == null)
                 return OnError();
-
-            var proxy = proxyManager.Get();
 
             var rch = new RchClient(HttpContext, host, init, requestInfo);
 
             if (rch.IsNotConnected() || rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            if (rch.IsNotSupport("web", out string rch_error))
+            if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
             reset:
@@ -41,7 +40,8 @@ namespace Online.Controllers
                     .Replace("/embed/", "/api/v1/embed/")
                     .Replace("/embed-serials/", "/api/v1/embed-serials/");
 
-                api_url += $"?kp={CrypTo.unic(6).ToLower()}";
+                api_url += $"?iframe_url={HttpUtility.UrlEncode(data.iframe_url)}";
+                api_url += $"&kp={CrypTo.unic(6).ToLower()}";
 
                 var api_headers = httpHeaders(init, HeadersModel.Init(
                     ("accept", "*/*"),
@@ -78,7 +78,7 @@ namespace Online.Controllers
 
                         foreach (string q in new string[] { "1080", "720", "480" })
                         {
-                            var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+\\.mp4)").Match(movie.file).Groups;
+                            var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+)").Match(movie.file).Groups;
 
                             if (!string.IsNullOrEmpty(g["file"].Value))
                                 streams.Append(HostStreamProxy(init, g["file"].Value, proxy: proxy), $"{q}p");
@@ -138,7 +138,7 @@ namespace Online.Controllers
 
                                 foreach (string q in new string[] { "1080", "720", "480" })
                                 {
-                                    var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+\\.mp4)").Match(file).Groups;
+                                    var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+)").Match(file).Groups;
                                     if (!string.IsNullOrEmpty(g["file"].Value))
                                         streams.Append(HostStreamProxy(init, g["file"].Value, proxy: proxy), $"{q}p");
                                 }
@@ -157,7 +157,7 @@ namespace Online.Controllers
 
 
         #region search
-        async ValueTask<Video> search(OnlinesSettings init, string imdb_id, long kinopoisk_id)
+        async ValueTask<Video> search(ProxyManager proxyManager, OnlinesSettings init, string imdb_id, long kinopoisk_id)
         {
             string memKey = $"vibix:view:{kinopoisk_id}:{imdb_id}";
 
