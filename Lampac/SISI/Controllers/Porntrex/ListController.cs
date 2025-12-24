@@ -9,29 +9,21 @@ namespace SISI.Controllers.Porntrex
         async public ValueTask<ActionResult> Index(string search, string sort, string c, int pg = 1)
         {
             var init = await loadKit(AppInit.conf.Porntrex);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsBadInitialization(init, rch: true, rch_keepalive: -1))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"ptx:{search}:{sort}:{c}:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"ptx:{search}:{sort}:{c}:{pg}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out List<PlaylistItem> playlists, inmemory: false))
                 {
-                    reset:
                     string html = await PorntrexTo.InvokeHtml(init.corsHost(), search, sort, c, pg, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
+                        rch.enable
+                            ? rch.Get(init.cors(url), httpHeaders(init))
+                            : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
                     );
 
                     playlists = PorntrexTo.Playlist("ptx/vidosik", html);
@@ -47,7 +39,7 @@ namespace SISI.Controllers.Porntrex
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, playlists, cacheTime(10, init: init), inmemory: false);
+                    hybridCache.Set(e.key, playlists, cacheTime(10, init: init), inmemory: false);
                 }
 
                 return OnResult(

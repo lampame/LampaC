@@ -9,29 +9,21 @@ namespace SISI.Controllers.Xnxx
         async public ValueTask<ActionResult> Index(string search, int pg = 1)
         {
             var init = await loadKit(AppInit.conf.Xnxx);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsBadInitialization(init, rch: true, rch_keepalive: -1))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"xnx:list:{search}:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"xnx:list:{search}:{pg}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out List<PlaylistItem> playlists, inmemory: false))
                 {
-                    reset:
                     string html = await XnxxTo.InvokeHtml(init.corsHost(), search, pg, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
+                        rch.enable
+                            ? rch.Get(init.cors(url), httpHeaders(init))
+                            : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
                     );
 
                     playlists = XnxxTo.Playlist("xnx/vidosik", html);
@@ -47,12 +39,12 @@ namespace SISI.Controllers.Xnxx
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, playlists, cacheTime(10), inmemory: false);
+                    hybridCache.Set(e.key, playlists, cacheTime(10), inmemory: false);
                 }
 
                 return OnResult(
-                    playlists, 
-                    string.IsNullOrEmpty(search) ? XnxxTo.Menu(host) : null, 
+                    playlists,
+                    string.IsNullOrEmpty(search) ? XnxxTo.Menu(host) : null,
                     plugin: init.plugin,
                     imageHeaders: httpHeaders(init.host, init.headers_image)
                 );

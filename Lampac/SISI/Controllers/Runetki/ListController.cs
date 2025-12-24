@@ -9,40 +9,30 @@ namespace SISI.Controllers.Runetki
         [Route("runetki")]
         async public ValueTask<ActionResult> Index(string search, string sort, int pg = 1)
         {
-            var init = await loadKit(AppInit.conf.Runetki);
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
-
             if (!string.IsNullOrEmpty(search))
                 return OnError("no search", false);
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
+            var init = await loadKit(AppInit.conf.Runetki);
+            if (await IsBadInitialization(init, rch: true, rch_keepalive: -1))
+                return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"{init.plugin}:list:{sort}:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"{init.plugin}:list:{sort}:{pg}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out (List<PlaylistItem> playlists, int total_pages) cache, inmemory: false))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out (List<PlaylistItem> playlists, int total_pages) cache, inmemory: false))
                 {
-                    reset:
                     string html = await RunetkiTo.InvokeHtml(init.corsHost(), sort, pg, url =>
                     {
                         if (rch.enable)
                             return rch.Get(init.cors(url), httpHeaders(init));
 
                         if (init.priorityBrowser == "http")
-                            return Http.Get(init.cors(url), httpversion: 2, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy.proxy);
+                            return Http.Get(init.cors(url), httpversion: 2, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy);
 
-                        return PlaywrightBrowser.Get(init, init.cors(url), httpHeaders(init), proxy.data);
+                        return PlaywrightBrowser.Get(init, init.cors(url), httpHeaders(init), proxy_data);
                     });
 
                     cache.playlists = RunetkiTo.Playlist(html, out int total_pages);
@@ -59,14 +49,14 @@ namespace SISI.Controllers.Runetki
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, cache, cacheTime(5, init: init), inmemory: false);
+                    hybridCache.Set(e.key, cache, cacheTime(5, init: init), inmemory: false);
                 }
 
                 return OnResult(
-                    cache.playlists, 
-                    init, 
-                    RunetkiTo.Menu(host, sort), 
-                    proxy: proxy.proxy, 
+                    cache.playlists,
+                    init,
+                    RunetkiTo.Menu(host, sort),
+                    proxy: proxy,
                     total_pages: cache.total_pages
                 );
             });

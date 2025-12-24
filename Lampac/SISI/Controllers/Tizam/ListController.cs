@@ -8,29 +8,20 @@ namespace SISI.Controllers.Tizam
         [Route("tizam")]
         async public ValueTask<ActionResult> Index(string search, int pg = 1)
         {
-            var init = await loadKit(AppInit.conf.Tizam);
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
-
             if (!string.IsNullOrEmpty(search))
                 return OnError("no search", false);
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
+            var init = await loadKit(AppInit.conf.Tizam);
+            if (await IsBadInitialization(init, rch: true, rch_keepalive: -1))
+                return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"tizam:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"tizam:{pg}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out List<PlaylistItem> playlists, inmemory: false))
                 {
                     string uri = $"{init.corsHost()}/fil_my_dlya_vzroslyh/s_russkim_perevodom/";
 
@@ -38,9 +29,8 @@ namespace SISI.Controllers.Tizam
                     if (page > 0)
                         uri += $"?p={page}";
 
-                    reset:
-                    string html = rch.enable 
-                        ? await rch.Get(init.cors(uri), httpHeaders(init)) 
+                    string html = rch.enable
+                        ? await rch.Get(init.cors(uri), httpHeaders(init))
                         : await Http.Get(init.cors(uri), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init));
 
                     playlists = Playlist(html);
@@ -56,7 +46,7 @@ namespace SISI.Controllers.Tizam
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, playlists, cacheTime(60, init: init), inmemory: false);
+                    hybridCache.Set(e.key, playlists, cacheTime(60, init: init), inmemory: false);
                 }
 
                 return OnResult(playlists, null, plugin: init.plugin, imageHeaders: httpHeaders(init.host, init.headers_image));

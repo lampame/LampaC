@@ -128,6 +128,8 @@ namespace Shared.Engine
 
         public string connectionMsg { get; private set; }
 
+        public string ipkey(string key) => enableRhub ? $"{key}:{ip}" : key;
+
         public string ipkey(string key, ProxyManager proxy) => $"{key}:{(enableRhub ? ip : proxy?.CurrentProxyIp)}";
 
         public RchClient(string connectionId) 
@@ -203,6 +205,10 @@ namespace Shared.Engine
         {
             try
             {
+                // на версиях ниже java.lang.OutOfMemoryError
+                if (484 > InfoConnected()?.apkVersion)
+                    return default;
+
                 string json = await SendHub(url, data, headers, useDefaultHeaders, true).ConfigureAwait(false);
                 if (json == null)
                     return default;
@@ -278,8 +284,10 @@ namespace Shared.Engine
             if (hub == null)
                 return null;
 
+            var clientInfo = SocketClient();
+
             if (string.IsNullOrEmpty(connectionId) || !clients.ContainsKey(connectionId))
-                connectionId = SocketClient().connectionId;
+                connectionId = clientInfo.connectionId;
 
             if (string.IsNullOrEmpty(connectionId))
                 return null;
@@ -305,6 +313,26 @@ namespace Shared.Engine
                 {
                     foreach (var h in headers)
                         send_headers[h.name.ToLower().Trim()] = h.val;
+                }
+
+                if (clientInfo.data.rch_info.rchtype != "apk")
+                {
+                    var new_headers = new Dictionary<string, string>();
+                    foreach (var h in send_headers)
+                    {
+                        if (h.Key.ToLower().StartsWith("sec-ch-") || h.Key.ToLower().StartsWith("sec-fetch-"))
+                            continue;
+
+                        if (h.Key.ToLower() is "user-agent" or "cookie" or "referer" or "origin"
+                            or "accept" or "accept-language" or "accept-encoding" 
+                            or "cache-control" or "dnt" or "pragma" or "priority"
+                            or "upgrade-insecure-requests")
+                            continue;
+
+                        new_headers[h.Key] = h.Value;
+                    }
+
+                    send_headers = new_headers;
                 }
 
                 hub.Invoke(null, (connectionId, rchId, url, data, Http.NormalizeHeaders(send_headers), returnHeaders));
@@ -366,11 +394,10 @@ namespace Shared.Engine
 
         #region IsNotSupport
         /// <summary>
-        /// ⚠ УСТАРЕВШИЙ МЕТОД.
         /// Используйте <see cref="IsNotSupportRchAccess"/>.
         /// Метод может быть удалён в будущих версиях.
         /// </summary>
-        [Obsolete("Метод устарел. Используйте IsNotSupportRchAccess. Может быть удалён в следующих версиях.")]
+        [Obsolete("Используйте IsNotSupportRchAccess. Может быть удалён в следующих версиях.")]
         public bool IsNotSupport(string rch_deny, out string rch_msg)
             => IsNotSupportRchAccess(rch_deny, out rch_msg);
 

@@ -12,17 +12,6 @@ namespace SISI.Controllers.Ebalovo
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
             if (rch.enable && 484 > rch.InfoConnected()?.apkVersion)
             {
                 rch.Disabled(); // на версиях ниже java.lang.OutOfMemoryError
@@ -30,10 +19,13 @@ namespace SISI.Controllers.Ebalovo
                     return OnError("apkVersion", false);
             }
 
-            return await InvkSemaphore($"ebalovo:view:{uri}", async () =>
+            return await SemaphoreResult($"ebalovo:view:{uri}", async e =>
             {
                 reset:
-                string memKey = rch.ipkey($"ebalovo:view:{uri}", proxyManager);
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                string memKey = rch.ipkey(e.key, proxyManager);
                 if (!hybridCache.TryGetValue(memKey, out StreamItem stream_links))
                 {
                     string ehost = await RootController.goHost(init.corsHost());

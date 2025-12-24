@@ -13,33 +13,23 @@ namespace SISI.Controllers.Spankbang
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"spankbang:view:{uri}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"spankbang:view:{uri}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out StreamItem stream_links))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out StreamItem stream_links))
                 {
-                    reset:
                     stream_links = await SpankbangTo.StreamLinks("sbg/vidosik", init.corsHost(), uri, url =>
                     {
                         if (rch.enable)
                             return rch.Get(init.cors(url), httpHeaders(init));
 
                         if (init.priorityBrowser == "http")
-                            return Http.Get(init.cors(url), httpversion: 2, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy.proxy);
+                            return Http.Get(init.cors(url), httpversion: 2, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy);
 
-                        return PlaywrightBrowser.Get(init, init.cors(url), httpHeaders(init), proxy.data);
+                        return PlaywrightBrowser.Get(init, init.cors(url), httpHeaders(init), proxy_data);
                     });
 
                     if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)
@@ -53,13 +43,13 @@ namespace SISI.Controllers.Spankbang
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, stream_links, cacheTime(20, init: init));
+                    hybridCache.Set(e.key, stream_links, cacheTime(20, init: init));
                 }
 
                 if (related)
                     return OnResult(stream_links?.recomends, null, plugin: init.plugin, total_pages: 1);
 
-                return OnResult(stream_links, init, proxy.proxy);
+                return OnResult(stream_links, init, proxy);
             });
         }
     }

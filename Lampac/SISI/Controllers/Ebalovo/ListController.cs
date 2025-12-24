@@ -9,25 +9,16 @@ namespace SISI.Controllers.Ebalovo
         async public ValueTask<ActionResult> Index(string search, string sort, string c, int pg = 1)
         {
             var init = await loadKit(AppInit.conf.Ebalovo);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsBadInitialization(init, rch: true, rch_keepalive: -1))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"elo:{search}:{sort}:{c}:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"elo:{search}:{sort}:{c}:{pg}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out List<PlaylistItem> playlists, inmemory: false))
                 {
                     var headers = httpHeaders(init, HeadersModel.Init(
                         ("sec-fetch-dest", "document"),
@@ -39,9 +30,10 @@ namespace SISI.Controllers.Ebalovo
 
                     string ehost = await RootController.goHost(init.corsHost(), proxy);
 
-                    reset:
                     string html = await EbalovoTo.InvokeHtml(ehost, search, sort, c, pg, url =>
-                        rch.enable ? rch.Get(init.cors(url), headers) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: headers)
+                        rch.enable
+                            ? rch.Get(init.cors(url), headers)
+                            : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: headers)
                     );
 
                     playlists = EbalovoTo.Playlist("elo/vidosik", html);
@@ -57,12 +49,12 @@ namespace SISI.Controllers.Ebalovo
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, playlists, cacheTime(10, init: init), inmemory: false);
+                    hybridCache.Set(e.key, playlists, cacheTime(10, init: init), inmemory: false);
                 }
 
                 return OnResult(
-                    playlists, 
-                    string.IsNullOrEmpty(search) ? EbalovoTo.Menu(host, sort, c) : null, 
+                    playlists,
+                    string.IsNullOrEmpty(search) ? EbalovoTo.Menu(host, sort, c) : null,
                     plugin: init.plugin,
                     imageHeaders: httpHeaders(init.host, init.headers_image)
                 );

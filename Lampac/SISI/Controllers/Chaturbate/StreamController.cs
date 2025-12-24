@@ -12,26 +12,18 @@ namespace SISI.Controllers.Chaturbate
             if (await IsBadInitialization(init, rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"chaturbate:stream:{baba}";
-
-            return await InvkSemaphore(memKey, async () =>
+            return await SemaphoreResult($"chaturbate:stream:{baba}", async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out Dictionary<string, string> stream_links))
+                reset:
+                if (rch.enable == false)
+                    await e.semaphore.WaitAsync();
+
+                if (!hybridCache.TryGetValue(e.key, out Dictionary<string, string> stream_links))
                 {
-                    reset:
                     stream_links = await ChaturbateTo.StreamLinks(init.corsHost(), baba, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
+                        rch.enable
+                            ? rch.Get(init.cors(url), httpHeaders(init))
+                            : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
                     );
 
                     if (stream_links == null || stream_links.Count == 0)
@@ -45,7 +37,7 @@ namespace SISI.Controllers.Chaturbate
                     if (!init.rhub)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, stream_links, cacheTime(10, init: init));
+                    hybridCache.Set(e.key, stream_links, cacheTime(10, init: init));
                 }
 
                 return OnResult(stream_links, init, proxy);
