@@ -16,7 +16,7 @@ namespace Online.Controllers
             if (string.IsNullOrWhiteSpace(title))
                 return OnError();
 
-            reset:
+            rhubFallback:
             if (string.IsNullOrWhiteSpace(uri))
             {
                 #region Поиск
@@ -24,9 +24,7 @@ namespace Online.Controllers
                 {
                     string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
 
-                    string search = rch.enable 
-                        ? await rch.Post($"{init.corsHost()}/index.php?do=search", data, httpHeaders(init)) 
-                        : await Http.Post($"{init.corsHost()}/index.php?do=search", data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    string search = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", data);
 
                     if (search == null)
                         return e.Fail("search", refresh_proxy: true);
@@ -71,7 +69,7 @@ namespace Online.Controllers
                 });
 
                 if (IsRhubFallback(cache))
-                    goto reset;
+                    goto rhubFallback;
 
                 if (!similar && cache.Value != null && cache.Value.Count == 1)
                     return LocalRedirect(accsArgs($"/lite/animevost?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(cache.Value[0].uri)}&s={cache.Value[0].s}"));
@@ -79,7 +77,7 @@ namespace Online.Controllers
                 return OnResult(cache, () =>
                 {
                     if (cache.Value.Count == 0)
-                        return string.Empty;
+                        return default;
 
                     var stpl = new SimilarTpl(cache.Value.Count);
 
@@ -89,8 +87,7 @@ namespace Online.Controllers
                         stpl.Append(res.title, res.year, string.Empty, uri, PosterApi.Size(res.img));
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
-
+                    return stpl;
                 });
                 #endregion
             }
@@ -99,9 +96,7 @@ namespace Online.Controllers
                 #region Серии
                 var cache = await InvokeCacheResult<List<(string episode, string id)>>($"animevost:playlist:{uri}", 30, async e =>
                 {
-                    string news = rch.enable 
-                        ? await rch.Get(uri, httpHeaders(init)) 
-                        : await Http.Get(uri, timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init));
+                    string news = await httpHydra.Get(uri);
 
                     if (news == null)
                         return e.Fail("news", refresh_proxy: true);
@@ -128,7 +123,7 @@ namespace Online.Controllers
                 });
 
                 if (IsRhubFallback(cache))
-                    goto reset;
+                    goto rhubFallback;
 
                 return OnResult(cache, () =>
                 {
@@ -141,8 +136,7 @@ namespace Online.Controllers
                         etpl.Append(l.episode, title, s.ToString(), Regex.Match(l.episode, "^([0-9]+)").Groups[1].Value, link, "call", streamlink: accsArgs($"{link}&play=true"));
                     }
 
-                    return rjson ? etpl.ToJson() : etpl.ToHtml();
-
+                    return etpl;
                 });
                 #endregion
             }
@@ -170,14 +164,12 @@ namespace Online.Controllers
             if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<List<(string l, string q)>>($"animevost:video:{id}", 20, async e =>
             {
                 string uri = $"{init.corsHost()}/frame5.php?play={id}&old=1";
 
-                string iframe = rch.enable 
-                    ? await rch.Get(uri, httpHeaders(init)) 
-                    : await Http.Get(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                string iframe = await httpHydra.Get(uri);
 
                 var links = new List<(string l, string q)>(2);
 
@@ -196,7 +188,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             if (cache.IsSuccess && play)
                 return Redirect(HostStreamProxy(cache.Value[0].l));
@@ -205,7 +197,6 @@ namespace Online.Controllers
             {
                 string link = HostStreamProxy(cache.Value[0].l);
                 return VideoTpl.ToJson("play", link, title, vast: init.vast);
-
             });
         }
         #endregion

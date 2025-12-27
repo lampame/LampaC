@@ -23,14 +23,20 @@ namespace Online.Controllers
 
             requestInitialization = () => 
             {
+                string module = HttpContext.Request.Path.Value.StartsWith("/lite/collaps-dash") ? "dash" : "hls";
+
+                if (module == "dash")
+                    init.dash = true;
+                else if (init.two)
+                    init.dash = false;
+
                 oninvk = new CollapsInvoke
                 (
                    host,
+                   module == "dash" ? "lite/collaps-dash" : "lite/collaps",
                    init.corsHost(),
                    init.dash,
-                   ongettourl => rch.enable 
-                        ? rch.Get(init.cors(ongettourl), httpHeaders(init)) 
-                        : Http.Get(init.cors(ongettourl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
+                   ongettourl => httpHydra.Get(ongettourl),
                    onstreamtofile => rch.enable ? onstreamtofile : HostStreamProxy(onstreamtofile),
                    requesterror: () => proxyManager.Refresh(rch)
                 );
@@ -48,28 +54,15 @@ namespace Online.Controllers
             if (similar || (orid == 0 && kinopoisk_id == 0 && string.IsNullOrWhiteSpace(imdb_id)))
                 return await Search(title, rjson);
 
-            string module = HttpContext.Request.Path.Value.StartsWith("/lite/collaps-dash") ? "dash" : "hls";
-            if (module == "dash")
-                init.dash = true;
-            else if (init.two)
-                init.dash = false;
-
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult($"collaps:view:{imdb_id}:{kinopoisk_id}:{orid}", 20, 
                 () => oninvk.Embed(imdb_id, kinopoisk_id, orid)
             );
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => 
-            {
-                string html = oninvk.Html(cache.Value, imdb_id, kinopoisk_id, orid, title, original_title, s, vast: init.vast, rjson: rjson, headers: httpHeaders(init.host, init.headers_stream));
-                if (module == "dash")
-                    html = html.Replace("lite/collaps", "lite/collaps-dash");
-
-                return html;
-            });
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, imdb_id, kinopoisk_id, orid, title, original_title, s, vast: init.vast, rjson: rjson, headers: httpHeaders(init.host, init.headers_stream)));
         }
 
 
@@ -83,14 +76,12 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<ResultSearch[]>($"collaps:search:{title}", 40, async e =>
             {
                 string uri = $"{init.apihost}/list?token={init.token}&name={HttpUtility.UrlEncode(title)}";
 
-                var root = rch.enable 
-                    ? await rch.Get<JObject>(uri) 
-                    : await Http.Get<JObject>(uri, timeoutSeconds: 8, proxy: proxy);
+                var root = await httpHydra.Get<JObject>(uri);
 
                 if (root == null || !root.ContainsKey("results"))
                     return e.Fail("results", refresh_proxy: true);
@@ -99,7 +90,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             return OnResult(cache, () =>
             {
@@ -111,8 +102,7 @@ namespace Online.Controllers
                     stpl.Append(j.name ?? j.origin_name, j.year.ToString(), string.Empty, uri, PosterApi.Size(j.poster));
                 }
 
-                return rjson ? stpl.ToJson() : stpl.ToHtml();
-
+                return stpl;
             });
         }
     }

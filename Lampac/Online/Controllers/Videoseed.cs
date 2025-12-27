@@ -28,13 +28,12 @@ namespace Online.Controllers
                 if (!hybridCache.TryGetValue(key, out (Dictionary<string, JObject> seasons, string iframe) cache))
                 {
                     #region goSearch
-                    async ValueTask<JToken> goSearch(bool isOk, string arg)
+                    async Task<JToken> goSearch(bool isOk, string arg)
                     {
                         if (!isOk)
                             return null;
 
-                        string uri = $"{init.host}/apiv2.php?item={(serial == 1 ? "serial" : "movie")}&token={init.token}" + arg;
-                        var root = await Http.Get<JObject>(uri, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy);
+                        var root = await httpHydra.Get<JObject>($"{init.corsHost()}/apiv2.php?item={(serial == 1 ? "serial" : "movie")}&token={init.token}" + arg);
 
                         if (root == null || !root.ContainsKey("data") || root.Value<string>("status") == "error")
                         {
@@ -68,7 +67,7 @@ namespace Online.Controllers
                     }
 
                     proxyManager.Success();
-                    hybridCache.Set(key, cache, cacheTime(40, init: init));
+                    hybridCache.Set(key, cache, cacheTime(40));
                 }
                 #endregion
 
@@ -78,7 +77,7 @@ namespace Online.Controllers
                     var mtpl = new MovieTpl(title, original_title, 1);
                     mtpl.Append("По-умолчанию", accsArgs($"{host}/lite/videoseed/video/{AesTo.Encrypt(cache.iframe)}") + "#.m3u8", "call", vast: init.vast);
 
-                    return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                    return ContentTo(mtpl);
                     #endregion
                 }
                 else
@@ -97,7 +96,7 @@ namespace Online.Controllers
                             tpl.Append($"{season.Key} сезон", link, season.Key);
                         }
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return ContentTo(tpl);
                     }
                     else
                     {
@@ -112,7 +111,7 @@ namespace Online.Controllers
                             etpl.Append($"{video.Key} серия", title ?? original_title, sArhc, video.Key, accsArgs($"{host}/lite/videoseed/video/{AesTo.Encrypt(iframe)}"), "call", vast: init.vast);
                         }
 
-                        return ContentTo(rjson ? etpl.ToJson() : etpl.ToHtml());
+                        return ContentTo(etpl);
                     }
                     #endregion
                 }

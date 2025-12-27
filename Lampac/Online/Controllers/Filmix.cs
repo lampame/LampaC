@@ -60,23 +60,19 @@ namespace Online.Controllers
             if (init.tokens != null && init.tokens.Length > 1)
                 token = init.tokens[Random.Shared.Next(0, init.tokens.Length)];
 
-            reset:
-
             var oninvk = new FilmixInvoke
             (
                init,
                host,
                token,
-               ongettourl => rch.enable 
-                    ? rch.Get(init.cors(ongettourl), httpHeaders(init), useDefaultHeaders: false) 
-                    : Http.Get(init.cors(ongettourl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init), useDefaultHeaders: false),
-               (url, data, head) => rch.enable 
-                    ? rch.Post(init.cors(url), data, (head != null ? head : httpHeaders(init)), useDefaultHeaders: false) 
-                    : Http.Post(init.cors(url), data, timeoutSeconds: 8, headers: head != null ? head : httpHeaders(init), useDefaultHeaders: false),
+               ongettourl => httpHydra.Get(ongettourl, useDefaultHeaders: false),
+               (url, data, head) => httpHydra.Post(url, data, addheaders: head, useDefaultHeaders: false),
                streamfile => HostStreamProxy(streamfile),
                requesterror: () => proxyManager.Refresh(rch),
                rjson: rjson
             );
+
+            rhubFallback:
 
             if (postid == 0)
             {
@@ -88,7 +84,7 @@ namespace Online.Controllers
                     return OnError(search.ErrorMsg);
 
                 if (search.Value.id == 0)
-                    return ContentTo(rjson ? search.Value.similars.Value.ToJson() : search.Value.similars.Value.ToHtml());
+                    return ContentTo(search.Value.similars.Value);
 
                 postid = search.Value.id;
             }
@@ -98,9 +94,9 @@ namespace Online.Controllers
             );
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, init.pro, postid, title, original_title, t, s, vast: init.vast));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, init.pro, postid, title, original_title, t, s, vast: init.vast));
         }
     }
 }

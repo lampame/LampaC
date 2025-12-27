@@ -13,7 +13,7 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            reset:
+            rhubFallback:
             if (string.IsNullOrEmpty(uri))
             {
                 if (string.IsNullOrWhiteSpace(title))
@@ -24,9 +24,7 @@ namespace Online.Controllers
                 {
                     string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
 
-                    string search = rch.enable 
-                        ? await rch.Post($"{init.corsHost()}/index.php?do=search", data, httpHeaders(init)) 
-                        : await Http.Post($"{init.corsHost()}/index.php?do=search", data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    string search = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", data);
 
                     if (search == null)
                         return e.Fail("search");
@@ -67,7 +65,7 @@ namespace Online.Controllers
                 });
 
                 if (IsRhubFallback(cache))
-                    goto reset;
+                    goto rhubFallback;
 
                 if (cache.Value != null && cache.Value.Count == 0)
                     return OnError();
@@ -85,7 +83,7 @@ namespace Online.Controllers
                         stpl.Append(res.title, res.year, string.Empty, _u, PosterApi.Size(res.img));
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
+                    return stpl;
                 });
                 #endregion
             }
@@ -94,9 +92,7 @@ namespace Online.Controllers
                 #region Серии
                 var cache = await InvokeCacheResult<List<(string episode, string name, string uri)>>($"animebesst:playlist:{uri}", 30, async e =>
                 {
-                    string news = rch.enable 
-                        ? await rch.Get(uri, httpHeaders(init)) 
-                        : await Http.Get(uri, timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init));
+                    string news = await httpHydra.Get(uri);
 
                     if (news == null)
                         return e.Fail("news", refresh_proxy: true);
@@ -122,12 +118,11 @@ namespace Online.Controllers
                 });
 
                 if (IsRhubFallback(cache))
-                    goto reset;
+                    goto rhubFallback;
 
                 return OnResult(cache, () =>
                 {
                     var etpl = new EpisodeTpl(cache.Value.Count);
-                    string sArhc = s.ToString();
 
                     foreach (var l in cache.Value)
                     {
@@ -136,10 +131,10 @@ namespace Online.Controllers
 
                         string link = accsArgs($"{host}/lite/animebesst/video.m3u8?uri={HttpUtility.UrlEncode(l.uri)}&title={HttpUtility.UrlEncode(title)}");
 
-                        etpl.Append(name, $"{title} / {name}", sArhc, l.episode, link, "call", streamlink: $"{link}&play=true", voice_name: Regex.Unescape(voice_name));
+                        etpl.Append(name, $"{title} / {name}", s.ToString(), l.episode, link, "call", streamlink: $"{link}&play=true", voice_name: Regex.Unescape(voice_name));
                     }
 
-                    return rjson ? etpl.ToJson() : etpl.ToHtml();
+                    return etpl;
                 });
                 #endregion
             }
@@ -167,12 +162,10 @@ namespace Online.Controllers
             if (rch.IsNotSupport(out string rch_error))
                 return ShowError(rch_error);
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<string>($"animebesst:video:{uri}", 30, async e =>
             {
-                string iframe = rch.enable
-                    ? await rch.Get(init.cors($"https://{uri}"), httpHeaders(init))
-                    : await Http.Get(init.cors($"https://{uri}"), referer: init.host, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init), httpversion: 2);
+                string iframe = await httpHydra.Get($"https://{uri}", addheaders: HeadersModel.Init("referer", init.host));
 
                 if (iframe == null)
                     return e.Fail("iframe", refresh_proxy: true);
@@ -185,7 +178,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             if (!cache.IsSuccess)
                 return OnError(cache.ErrorMsg, gbcache: !rch.enable);

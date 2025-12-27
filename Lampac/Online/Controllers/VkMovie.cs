@@ -27,15 +27,13 @@ namespace Online.Controllers
 
             string searchTitle = StringConvert.SearchName(title);
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<CatalogVideo[]>(rch.ipkey($"vkmovie:view:{searchTitle}:{year}", proxyManager), 20, async e =>
             {
-                string url = $"{init.host}/method/catalog.getVideoSearchWeb2?v=5.264&client_id={client_id}";
+                string url = $"{init.corsHost()}/method/catalog.getVideoSearchWeb2?v=5.264&client_id={client_id}";
                 string data = $"screen_ref=search_video_service&input_method=keyboard_search_button&q={HttpUtility.UrlEncode($"{title} {year}")}&access_token={access_token}";
 
-                var root = rch.enable
-                    ? await rch.Post<JObject>(url, data, httpHeaders(init))
-                    : await Http.Post<JObject>(url, data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Post<JObject>(url, data);
 
                 if (root == null || !root.ContainsKey("response"))
                     return e.Fail("response", refresh_proxy: true);
@@ -48,7 +46,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             return OnResult(cache, () =>
             {
@@ -131,8 +129,7 @@ namespace Online.Controllers
                     mtpl.Append(video.title, streams.Firts().link, streamquality: streams, subtitles: subtitles, headers: HeadersModel.Init(init.headers), vast: init.vast);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
-
+                return mtpl;
             });
         }
 
@@ -160,7 +157,7 @@ namespace Online.Controllers
 
                 try
                 {
-                    root = await Http.Post<JObject>(url, postData, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    root = await httpHydra.Post<JObject>(url, postData);
                 }
                 catch
                 {

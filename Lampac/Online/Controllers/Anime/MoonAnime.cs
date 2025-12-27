@@ -34,7 +34,7 @@ namespace Online.Controllers
                             if (string.IsNullOrEmpty(arg.Split("=")?[1]))
                                 return null;
 
-                            var search = await Http.Get<JObject>($"{init.corsHost()}/api/2.0/titles?api_key={init.token}&limit=20" + arg, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                            var search = await httpHydra.Get<JObject>($"{init.corsHost()}/api/2.0/titles?api_key={init.token}&limit=20" + arg);
                             if (search == null || !search.ContainsKey("anime_list"))
                                 return null;
 
@@ -68,7 +68,7 @@ namespace Online.Controllers
                             return OnError();
 
                         proxyManager.Success();
-                        hybridCache.Set(key, catalog, cacheTime(40, init: init), inmemory: false);
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (!similar && catalog.Count == 1)
@@ -82,7 +82,7 @@ namespace Online.Controllers
                         stpl.Append(res.title, res.year, string.Empty, uri, PosterApi.Size(res.poster));
                     }
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return ContentTo(stpl);
                 });
                 #endregion
             }
@@ -93,12 +93,12 @@ namespace Online.Controllers
                 {
                     if (!hybridCache.TryGetValue(key, out JArray root))
                     {
-                        root = await Http.Get<JArray>($"{init.corsHost()}/api/2.0/title/{animeid}/videos?api_key={init.token}", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                        root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/2.0/title/{animeid}/videos?api_key={init.token}");
                         if (root == null)
                             return OnError(proxyManager);
 
                         proxyManager.Success();
-                        hybridCache.Set(key, root, cacheTime(30, init: init));
+                        hybridCache.Set(key, root, cacheTime(30));
                     }
 
                     if (s == -1)
@@ -122,7 +122,7 @@ namespace Online.Controllers
                             }
                         }
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return ContentTo(tpl);
                     }
                     else
                     {
@@ -148,7 +148,7 @@ namespace Online.Controllers
                         }
                         #endregion
 
-                        var etpl = new EpisodeTpl();
+                        var etpl = new EpisodeTpl(vtpl);
                         string sArhc = s.ToString();
 
                         foreach (var voices in root)
@@ -177,10 +177,7 @@ namespace Online.Controllers
                             }
                         }
 
-                        if (rjson)
-                            return ContentTo(etpl.ToJson(vtpl));
-
-                        return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                        return ContentTo(etpl);
                     }
                 });
                 #endregion
@@ -257,7 +254,7 @@ namespace Online.Controllers
                         cache.subtitle = Regex.Match(iframe, "thumbnails: ?\"([^\"]+)\"").Groups[1].Value;
 
                     proxyManager.Success();
-                    hybridCache.Set(key, cache, cacheTime(30, init: init));
+                    hybridCache.Set(key, cache, cacheTime(30));
                 }
 
                 var subtitles = new SubtitleTpl();

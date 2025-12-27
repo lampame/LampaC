@@ -46,7 +46,7 @@ namespace Online.Controllers
                     mtpl.Append(m.Value<string>("translator"), link, "call", accsArgs($"{link.Replace("/video", "/video.m3u8")}&play=true"));
                 }
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return ContentTo(mtpl);
                 #endregion
             }
             else
@@ -72,7 +72,7 @@ namespace Online.Controllers
                         }
                     }
 
-                    return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                    return ContentTo(tpl);
                 }
                 else
                 {
@@ -92,24 +92,19 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl();
+                    var etpl = new EpisodeTpl(vtpl);
                     string iframe = HttpUtility.UrlEncode(data[t].Value<string>("iframe_url"));
                     string translator = HttpUtility.UrlEncode(data[t].Value<string>("translator"));
-
-                    string sArhc = s.ToString();
 
                     foreach (int episode in data[t].Value<JArray>("serial_episodes").FirstOrDefault(i => i.Value<int>("season_number") == s).Value<JArray>("episodes").ToObject<List<int>>())
                     {
                         string link = $"{host}/lite/hdvb/serial?title={HttpUtility.UrlEncode(title)}&original_title={HttpUtility.UrlEncode(original_title)}&iframe={iframe}&t={translator}&s={s}&e={episode}";
                         string streamlink = accsArgs($"{link.Replace("/serial", "/serial.m3u8")}&play=true");
 
-                        etpl.Append($"{episode} серия", title ?? original_title, sArhc, episode.ToString(), link, "call", streamlink: streamlink);
+                        etpl.Append($"{episode} серия", title ?? original_title, s.ToString(), episode.ToString(), link, "call", streamlink: streamlink);
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return ContentTo(etpl);
                 }
                 #endregion
             }
@@ -216,7 +211,7 @@ namespace Online.Controllers
 
                     proxyManager.Success(rch);
 
-                    hybridCache.Set(key, urim3u8, cacheTime(20, init: init));
+                    hybridCache.Set(key, urim3u8, cacheTime(20));
                 }
 
                 string m3u8 = HostStreamProxy(urim3u8);
@@ -271,9 +266,7 @@ namespace Online.Controllers
                         ));
 
                         reset_playlist:
-                        string html = rch.enable 
-                            ? await rch.Get(iframe, cache.header) 
-                            : await Http.Get(iframe, timeoutSeconds: 8, proxy: proxy, headers: cache.header);
+                        string html = await httpHydra.Get(iframe, newheaders: cache.header);
 
                         if (html != null)
                         {
@@ -297,14 +290,12 @@ namespace Online.Controllers
                                     ("x-csrf-token", csrftoken)
                                 ));
 
-                                cache.playlist = rch.enable 
-                                    ? await rch.Post<List<Folder>>($"https://{vid}.{href}/playlist/{file}.txt", "", cache.header) 
-                                    : await Http.Post<List<Folder>>($"https://{vid}.{href}/playlist/{file}.txt", "", timeoutSeconds: 8, proxy: proxy, headers: cache.header, IgnoreDeserializeObject: true);
+                                cache.playlist = await httpHydra.Post<List<Folder>>($"https://{vid}.{href}/playlist/{file}.txt", "", newheaders: cache.header, IgnoreDeserializeObject: true);
 
                                 if (cache.playlist != null && cache.playlist.Count > 0)
                                 {
                                     cache.href = href;
-                                    hybridCache.Set(mkey_playlist, cache, cacheTime(40, init: init));
+                                    hybridCache.Set(mkey_playlist, cache, cacheTime(40));
                                 }
                                 else
                                 {
@@ -331,9 +322,7 @@ namespace Online.Controllers
                         episode = Regex.Replace(episode, "^/playlist/", "/");
                         episode = Regex.Replace(episode, "\\.txt$", "");
 
-                        urim3u8 = rch.enable 
-                            ? await rch.Post($"https://{vid}.{cache.href}/playlist/{episode}.txt", "", cache.header) 
-                            : await Http.Post($"https://{vid}.{cache.href}/playlist/{episode}.txt", "", timeoutSeconds: 8, proxy: proxy, headers: cache.header);
+                        urim3u8 = await httpHydra.Post($"https://{vid}.{cache.href}/playlist/{episode}.txt", "", newheaders: cache.header);
                     }
 
                     if (string.IsNullOrEmpty(urim3u8) || !urim3u8.Contains("/index.m3u8"))
@@ -351,7 +340,7 @@ namespace Online.Controllers
 
                     proxyManager.Success(rch);
 
-                    hybridCache.Set(key, urim3u8, cacheTime(20, init: init));
+                    hybridCache.Set(key, urim3u8, cacheTime(20));
                     #endregion
                 }
 
@@ -374,14 +363,10 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<JArray>($"hdvb:search:{title}", 40, async e =>
             {
-                string uri = $"{init.host}/api/videos.json?token={init.token}&title={HttpUtility.UrlEncode(title)}";
-
-                var root = rch.enable 
-                    ? await rch.Get<JArray>(uri) 
-                    : await Http.Get<JArray>(uri, timeoutSeconds: 8, proxy: proxy);
+                var root = await httpHydra.Get<JArray>($"{init.host}/api/videos.json?token={init.token}&title={HttpUtility.UrlEncode(title)}");
 
                 if (root == null)
                     return e.Fail("results");
@@ -390,7 +375,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             return OnResult(cache, () =>
             {
@@ -408,7 +393,7 @@ namespace Online.Controllers
                     }
                 }
 
-                return rjson ? stpl.ToJson() : stpl.ToHtml();
+                return stpl;
             });
         }
         #endregion
@@ -421,11 +406,7 @@ namespace Online.Controllers
 
             if (!hybridCache.TryGetValue(memKey, out JArray root, inmemory: false))
             {
-                string uri = $"{init.host}/api/videos.json?token={init.token}&id_kp={kinopoisk_id}";
-
-                root = rch.enable 
-                    ? await rch.Get<JArray>(uri) 
-                    : await Http.Get<JArray>(uri, timeoutSeconds: 8, proxy: proxyManager.Get());
+                root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/videos.json?token={init.token}&id_kp={kinopoisk_id}");
 
                 if (root == null)
                 {
@@ -435,7 +416,7 @@ namespace Online.Controllers
 
                 proxyManager.Success(rch);
 
-                hybridCache.Set(memKey, root, cacheTime(40, init: init), inmemory: false);
+                hybridCache.Set(memKey, root, cacheTime(40), inmemory: false);
             }
 
             if (root.Count == 0)

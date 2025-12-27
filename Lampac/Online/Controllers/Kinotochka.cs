@@ -10,7 +10,7 @@ namespace Online.Controllers
 
         [HttpGet]
         [Route("lite/kinotochka")]
-        async public ValueTask<ActionResult> Index(long kinopoisk_id, string title, string original_title, int serial, string newsuri, int s = -1, bool rjson = false)
+        async public ValueTask<ActionResult> Index(long kinopoisk_id, string title, string original_title, int serial, string newsuri, int s = -1)
         {
             if (string.IsNullOrWhiteSpace(title))
                 return OnError();
@@ -26,18 +26,14 @@ namespace Online.Controllers
                 if (s == -1)
                 {
                     #region Сезоны
-                    reset:
+                    rhubFallback:
                     var cache = await InvokeCacheResult<List<(string name, string uri, string season)>>($"kinotochka:seasons:{title}", 30, async e =>
                     {
                         List<(string, string, string)> links = null;
 
                         if (kinopoisk_id > 0) // https://kinovibe.co/embed.html
                         {
-                            string uri = $"{init.corsHost()}/api/find-by-kinopoisk.php?kinopoisk={kinopoisk_id}";
-
-                            var root = rch.enable 
-                                ? await rch.Get<JArray>(uri, httpHeaders(init)) 
-                                : await Http.Get<JArray>(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                            var root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/find-by-kinopoisk.php?kinopoisk={kinopoisk_id}");
 
                             if (root == null || root.Count == 0)
                                 return e.Fail("find-by-kinopoisk", refresh_proxy: true);
@@ -58,9 +54,7 @@ namespace Online.Controllers
                         {
                             string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
 
-                            string search = rch.enable 
-                                ? await rch.Post($"{init.corsHost()}/index.php?do=search", data, httpHeaders(init)) 
-                                : await Http.Post($"{init.corsHost()}/index.php?do=search", data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                            string search = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", data);
 
                             if (search == null) 
                                 return e.Fail("search", refresh_proxy: true);
@@ -92,7 +86,7 @@ namespace Online.Controllers
                     });
 
                     if (IsRhubFallback(cache))
-                        goto reset;
+                        goto rhubFallback;
 
                     return OnResult(cache, () =>
                     {
@@ -101,20 +95,17 @@ namespace Online.Controllers
                         foreach (var l in cache.Value)
                             tpl.Append(l.name, l.uri, l.season);
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
-
+                        return tpl;
                     });
                     #endregion
                 }
                 else
                 {
                     #region Серии
-                    reset: 
+                    rhubFallback: 
                     var cache = await InvokeCacheResult<List<(string name, string uri)>>($"kinotochka:playlist:{newsuri}", 30, async e =>
                     {
-                        string news = rch.enable 
-                            ? await rch.Get(newsuri, httpHeaders(init)) 
-                            : await Http.Get(newsuri, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
+                        string news = await httpHydra.Get(newsuri, addheaders: HeadersModel.Init("cookie", cookie));
 
                         if (news == null)
                             return e.Fail("news", refresh_proxy: true);
@@ -123,9 +114,7 @@ namespace Online.Controllers
                         if (string.IsNullOrEmpty(filetxt))
                             return e.Fail("filetxt");
 
-                        var root = rch.enable 
-                            ? await rch.Get<JObject>(filetxt, httpHeaders(init)) 
-                            : await Http.Get<JObject>(filetxt, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
+                        var root = await httpHydra.Get<JObject>(filetxt, addheaders: HeadersModel.Init("cookie", cookie));
 
                         if (root == null)
                             return e.Fail("root", refresh_proxy: true);
@@ -156,7 +145,7 @@ namespace Online.Controllers
                     });
 
                     if (IsRhubFallback(cache))
-                        goto reset;
+                        goto rhubFallback;
 
                     return OnResult(cache, () =>
                     {
@@ -165,8 +154,7 @@ namespace Online.Controllers
                         foreach (var l in cache.Value)
                             etpl.Append(l.name, title, s.ToString(), Regex.Match(l.name, "^([0-9]+)").Groups[1].Value, HostStreamProxy(l.uri), vast: init.vast);
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
-
+                        return etpl;
                     });
                     #endregion
                 }
@@ -177,14 +165,10 @@ namespace Online.Controllers
                 if (kinopoisk_id == 0)
                     return OnError();
 
-                reset:
+                rhubFallback:
                 var cache = await InvokeCacheResult<EmbedModel>($"kinotochka:view:{kinopoisk_id}", 30, async e =>
                 {
-                    string uri = $"{init.corsHost()}/embed/kinopoisk/{kinopoisk_id}";
-
-                    string embed = rch.enable 
-                        ? await rch.Get(uri, httpHeaders(init)) 
-                        : await Http.Get(uri, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
+                    string embed = await httpHydra.Get($"{init.corsHost()}/embed/kinopoisk/{kinopoisk_id}", addheaders: HeadersModel.Init("cookie", cookie));
 
                     if (embed == null)
                         return e.Fail("embed", refresh_proxy: true);
@@ -206,14 +190,14 @@ namespace Online.Controllers
                 });
 
                 if (IsRhubFallback(cache))
-                    goto reset;
+                    goto rhubFallback;
 
                 return OnResult(cache, () => 
                 {
                     var mtpl = new MovieTpl(title, original_title, 1);
                     mtpl.Append("По умолчанию", HostStreamProxy(cache.Value.content), vast: init.vast);
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                    return mtpl;
                 });
                 #endregion
             }

@@ -23,6 +23,7 @@ namespace Shared
 
     public class BaseOnlineController<T> : BaseController where T : BaseSettings, ICloneable
     {
+        #region RchClient
         RchClient? _rch = null;
         public RchClient rch 
         {
@@ -34,6 +35,21 @@ namespace Shared
                 return (RchClient)_rch;
             } 
         }
+        #endregion
+
+        #region HttpHydra
+        HttpHydra _httpHydra = null;
+        public HttpHydra httpHydra
+        {
+            get
+            {
+                if (_httpHydra == null)
+                    _httpHydra = new HttpHydra(init, httpHeaders(init), rch, proxy);
+
+                return _httpHydra;
+            }
+        }
+        #endregion
 
         public ProxyManager proxyManager { get; private set; }
 
@@ -42,6 +58,8 @@ namespace Shared
         public (string ip, string username, string password) proxy_data { get; private set; }
 
         public T init { get; private set; }
+
+        BaseSettings baseconf { get; set; }
 
         public Func<JObject, T, T, T> loadKitInitialization { get; set; }
 
@@ -52,10 +70,20 @@ namespace Shared
 
         public BaseOnlineController(T init)
         {
+            if (init != default)
+                Initialization(init);
+        }
+
+        public void Initialization(T init)
+        {
+            if (baseconf != default)
+                return;
+
+            baseconf = init;
             this.init = (T)init.Clone();
             this.init.IsCloneable = true;
 
-            proxyManager = new ProxyManager(init);
+            proxyManager = new ProxyManager(this.init);
             var bp = proxyManager.BaseGet();
             proxy = bp.proxy;
             proxy_data = bp.data;
@@ -63,6 +91,12 @@ namespace Shared
 
 
         #region IsRequestBlocked
+        public ValueTask<bool> IsRequestBlocked(T init, bool? rch = null, int? rch_keepalive = null, bool rch_check = true)
+        {
+            Initialization(init);
+            return IsRequestBlocked(rch, rch_keepalive, rch_check);
+        }
+
         async public ValueTask<bool> IsRequestBlocked(bool? rch = null, int? rch_keepalive = null, bool rch_check = true)
         {
             init = await loadKit(init, loadKitInitialization);
@@ -104,7 +138,7 @@ namespace Shared
 
             if (!init.enable || init.rip)
             {
-                badInitMsg = OnError("disable");
+                badInitMsg = OnError("disable", gbcache: false, statusCode: 403);
                 return true;
             }
 
@@ -262,6 +296,16 @@ namespace Shared
         }
         #endregion
 
+        #region ContentTo
+        public ActionResult ContentTo(ITplResult tpl)
+        {
+            return ContentTo(HttpContext.Request.Query["rjson"].ToString().Contains("true", StringComparison.OrdinalIgnoreCase)
+                ? tpl.ToJson()
+                : tpl.ToHtml()
+            );
+        }
+        #endregion
+
         #region ShowError
         public ActionResult ShowError(string msg) => Json(new { accsdb = true, msg });
 
@@ -289,19 +333,16 @@ namespace Shared
         #endregion
 
         #region InvokeCacheResult
-        async public ValueTask<CacheResult<Tresut>> InvokeCacheResult<Tresut>(string key, int cacheTime, Func<ValueTask<Tresut>> onget, bool? memory = null)
-            => await InvokeBaseCacheResult<Tresut>(key, base.cacheTime(cacheTime, init: init), rch, proxyManager, async e => e.Success(await onget()), memory);
-
         async public ValueTask<CacheResult<Tresut>> InvokeCacheResult<Tresut>(string key, int cacheTime, Func<Task<Tresut>> onget, bool? memory = null)
-            => await InvokeBaseCacheResult<Tresut>(key, base.cacheTime(cacheTime, init: init), rch, proxyManager, async e => e.Success(await onget()), memory);
+            => await InvokeBaseCacheResult<Tresut>(key, this.cacheTime(cacheTime), rch, proxyManager, async e => e.Success(await onget()), memory);
 
         public ValueTask<CacheResult<Tresut>> InvokeCacheResult<Tresut>(string key, int cacheTime, Func<CacheResult<Tresut>, Task<CacheResult<Tresut>>> onget, bool? memory = null)
-            => InvokeBaseCacheResult(key, base.cacheTime(cacheTime, init: init), rch, proxyManager, onget, memory);
+            => InvokeBaseCacheResult(key, this.cacheTime(cacheTime), rch, proxyManager, onget, memory);
         #endregion
 
         #region InvokeCache
-        public ValueTask<Tresut> InvokeCache<Tresut>(string key, int cacheTime, Func<ValueTask<Tresut>> onget, bool? memory = null)
-            => InvokeBaseCache(key, base.cacheTime(cacheTime, init: init), rch, onget, proxyManager, memory);
+        public ValueTask<Tresut> InvokeCache<Tresut>(string key, int cacheTime, Func<Task<Tresut>> onget, bool? memory = null)
+            => InvokeBaseCache(key, this.cacheTime(cacheTime), rch, onget, proxyManager, memory);
         #endregion
 
         #region HostStreamProxy
@@ -310,11 +351,19 @@ namespace Shared
         #endregion
 
         #region InvkSemaphore
-        public Task<ActionResult> InvkSemaphore(string key, Func<string, ValueTask<ActionResult>> func)
+        public Task<ActionResult> InvkSemaphore(string key, Func<string, Task<ActionResult>> func)
             => InvkSemaphore(key, rch, () => func.Invoke(key));
 
-        public Task<ActionResult> InvkSemaphore(string key, Func<ValueTask<ActionResult>> func)
+        public Task<ActionResult> InvkSemaphore(string key, Func<Task<ActionResult>> func)
             => InvkSemaphore(key, rch, func);
+        #endregion
+
+
+        #region cacheTime
+        public TimeSpan cacheTime(int multiaccess)
+        {
+            return cacheTimeBase(multiaccess, init: baseconf);
+        }
         #endregion
     }
 }

@@ -23,7 +23,7 @@ namespace Online.Controllers
                 {
                     if (!hybridCache.TryGetValue(key, out List<(string title, string url, string img)> catalog, inmemory: false))
                     {
-                        string search = await Http.Post($"{init.corsHost()}/index.php?do=search", $"do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title)}", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                        string search = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", $"do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title)}");
                         if (search == null)
                             return OnError(proxyManager);
 
@@ -50,7 +50,7 @@ namespace Online.Controllers
                             return OnError();
 
                         proxyManager.Success();
-                        hybridCache.Set(key, catalog, cacheTime(40, init: init), inmemory: false);
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (catalog.Count == 0)
@@ -67,7 +67,7 @@ namespace Online.Controllers
                         stpl.Append(res.title, string.Empty, string.Empty, uri, PosterApi.Size(res.img));
                     }
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return ContentTo(stpl);
                 });
                 #endregion
             }
@@ -78,7 +78,7 @@ namespace Online.Controllers
                 {
                     if (!hybridCache.TryGetValue(key, out List<(int episode, string s, string vod)> links, inmemory: false))
                     {
-                        string html = await Http.Get($"{init.corsHost()}/{news}", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                        string html = await httpHydra.Get($"{init.corsHost()}/{news}");
                         if (html == null)
                             return OnError(proxyManager);
 
@@ -109,7 +109,7 @@ namespace Online.Controllers
                             return OnError();
 
                         proxyManager.Success();
-                        hybridCache.Set(key, links, cacheTime(30, init: init), inmemory: false);
+                        hybridCache.Set(key, links, cacheTime(30), inmemory: false);
                     }
 
                     var etpl = new EpisodeTpl(links.Count);
@@ -117,7 +117,7 @@ namespace Online.Controllers
                     foreach (var l in links.OrderBy(i => i.episode))
                         etpl.Append($"{l.episode} серия", title, l.s, l.episode.ToString(), accsArgs($"{host}/lite/animedia/video.m3u8?vod={HttpUtility.UrlEncode(l.vod)}"), vast: init.vast);
 
-                    return ContentTo(rjson ? etpl.ToJson() : etpl.ToHtml());
+                    return ContentTo(etpl);
                 });
                 #endregion
             }
@@ -135,7 +135,7 @@ namespace Online.Controllers
             {
                 if (!hybridCache.TryGetValue(key, out string hls))
                 {
-                    string embed = await Http.Get(vod, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    string embed = await httpHydra.Get(vod);
 
                     if (string.IsNullOrEmpty(embed))
                         return OnError(proxyManager);
@@ -145,7 +145,7 @@ namespace Online.Controllers
                         return OnError(proxyManager);
 
                     proxyManager.Success();
-                    hybridCache.Set(key, hls, cacheTime(180, init: init));
+                    hybridCache.Set(key, hls, cacheTime(180));
                 }
 
                 return Redirect(HostStreamProxy(hls));

@@ -10,7 +10,7 @@ namespace Online.Controllers
 
         [HttpGet]
         [Route("lite/rutubemovie")]
-        async public ValueTask<ActionResult> Index(string title, string original_title, int year, int serial, bool rjson = false)
+        async public ValueTask<ActionResult> Index(string title, string original_title, int year, int serial)
         {
             string searchTitle = StringConvert.SearchName(title);
             if (string.IsNullOrEmpty(searchTitle) || year == 0 || serial == 1)
@@ -19,15 +19,13 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            reset:
+            rhubFallback:
             string memKey = $"rutubemovie:view:{searchTitle}:{year}:{(rch.enable ? requestInfo.Country : "")}";
             var cache = await InvokeCacheResult<Result[]>(memKey, 40, async e =>
             {
                 string uri = $"api/search/video/?content_type=video&duration=movie&query={HttpUtility.UrlEncode($"{title} {year}")}";
 
-                var root = rch.enable 
-                    ? await rch.Get<JObject>($"{init.host}/{uri}", httpHeaders(init)) 
-                    : await Http.Get<JObject>($"{init.host}/{uri}", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Get<JObject>($"{init.host}/{uri}");
 
                 if (root == null || !root.ContainsKey("results"))
                     return e.Fail("content", refresh_proxy: true);
@@ -36,7 +34,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             return OnResult(cache, () =>
             {
@@ -67,7 +65,7 @@ namespace Online.Controllers
                     }
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
             });
         }
 
@@ -82,14 +80,10 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<string>($"rutubemovie:play:{linkid}", 20, async e =>
             {
-                string uri = $"api/play/options/{linkid}/?no_404=true&referer=&pver=v2&client=wdp";
-
-                var root = rch.enable 
-                    ? await rch.Get<JObject>($"{init.host}/{uri}", httpHeaders(init)) 
-                    : await Http.Get<JObject>($"{init.host}/{uri}", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Get<JObject>($"{init.host}/api/play/options/{linkid}/?no_404=true&referer=&pver=v2&client=wdp");
 
                 if (root == null || !root.ContainsKey("video_balancer"))
                     return e.Fail("video_balancer", refresh_proxy: true);
@@ -98,7 +92,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             return ContentTo(VideoTpl.ToJson("play", HostStreamProxy(init, cache.Value, proxy: proxy), "auto", vast: init.vast));
         }

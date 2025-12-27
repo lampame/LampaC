@@ -93,7 +93,7 @@ namespace Online.Controllers
             var oninvk = new LumexInvoke
             (
                init,
-               (url, referer) => Http.Get(init.cors(url), referer: referer, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
+               (url, referer) => httpHydra.Get(url, addheaders: HeadersModel.Init("referer", referer)),
                streamfile => HostStreamProxy(streamfile),
                host,
                requesterror: () => proxyManager.Refresh()
@@ -109,10 +109,10 @@ namespace Online.Controllers
                         if (search.data?.Count == 0)
                             return OnError("search");
 
-                        hybridCache.Set(key, search, cacheTime(40, init: init));
+                        hybridCache.Set(key, search, cacheTime(40));
                     }
 
-                    return ContentTo(rjson ? search.ToJson() : search.ToHtml());
+                    return ContentTo(search);
                 });
             }
 
@@ -274,7 +274,7 @@ namespace Online.Controllers
                 return e.Success(md);
             });
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, accsArgs(string.Empty), content_id, content_type, imdb_id, kinopoisk_id, title, original_title, clarification, t, s, rjson: rjson));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, accsArgs(string.Empty), content_id, content_type, imdb_id, kinopoisk_id, title, original_title, clarification, t, s, rjson: rjson));
         }
 
         #region Video
@@ -310,7 +310,7 @@ namespace Online.Controllers
                     else
                         hls = url;
 
-                    hybridCache.Set(key, hls, cacheTime(20, init: init));
+                    hybridCache.Set(key, hls, cacheTime(20));
                 }
 
                 string sproxy(string uri) => HostStreamProxy(uri);

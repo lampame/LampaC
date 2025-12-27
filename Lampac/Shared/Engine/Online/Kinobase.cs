@@ -14,19 +14,17 @@ namespace Shared.Engine.Online
         KinobaseSettings init;
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
+        Func<string, Task<string>> onget;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
-        public KinobaseInvoke(string host, KinobaseSettings init, Func<string, ValueTask<string>> onget, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public KinobaseInvoke(string host, KinobaseSettings init, Func<string, Task<string>> onget, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.init = init;
             this.host = host != null ? $"{host}/" : null;
             apihost = init.host;
             this.onget = onget;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             this.requesterror = requesterror;
         }
         #endregion
@@ -181,11 +179,11 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel md, string title, string href, int s, string t, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel md, string title, string href, int s, string t, bool rjson = false)
         {
             if (md == null || md.IsEmpty)
-                return string.Empty;
+                return default;
 
             if (md.content != null)
             {
@@ -260,7 +258,7 @@ namespace Shared.Engine.Online
                     mtpl.Append(first.quality, first.link, streamquality: streamquality);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -279,7 +277,7 @@ namespace Shared.Engine.Online
                             string link = host + $"lite/kinobase?title={enc_title}&href={HttpUtility.UrlEncode(href)}&t={HttpUtility.UrlEncode(t)}&s=1";
                             tpl.Append("1 сезон", link, 1);
 
-                            return rjson ? tpl.ToJson() : tpl.ToHtml();
+                            return tpl;
                         }
                         else
                         {
@@ -299,7 +297,7 @@ namespace Shared.Engine.Online
                                 tpl.Append($"{season} сезон", link, season);
                             }
 
-                            return rjson ? tpl.ToJson() : tpl.ToHtml();
+                            return tpl;
                         }
                         else
                         {
@@ -307,7 +305,7 @@ namespace Shared.Engine.Online
                         }
                     }
 
-                    string renderSeason(Season[] episodes, string host, Func<string, string> onstreamfile)
+                    ITplResult renderSeason(Season[] episodes, string host, Func<string, string> onstreamfile)
                     {
                         #region Перевод
                         var vtpl = new VoiceTpl();
@@ -336,7 +334,7 @@ namespace Shared.Engine.Online
                         }
                         #endregion
 
-                        var etpl = new EpisodeTpl(episodes.Length);
+                        var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                         foreach (var episode in episodes)
                         {
@@ -387,16 +385,13 @@ namespace Shared.Engine.Online
                             etpl.Append(episode.title, title, sArhc, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, streamquality.Firts().link, subtitles: subtitles, streamquality: streamquality);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 else
                 {
                     #region uppod.js
-                    string finEpisode(Season[] data, Func<string, string> onstreamfile)
+                    ITplResult finEpisode(Season[] data, Func<string, string> onstreamfile)
                     {
                         var etpl = new EpisodeTpl(data.Length);
 
@@ -419,7 +414,7 @@ namespace Shared.Engine.Online
                             etpl.Append(episode.title, title, sArhc, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, streamquality.Firts().link, streamquality: streamquality);
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
 
                     if (md.serial.First().folder == null)
@@ -430,7 +425,7 @@ namespace Shared.Engine.Online
                             string link = host + $"lite/kinobase?title={enc_title}&href={HttpUtility.UrlEncode(href)}&s=1";
                             tpl.Append("1 сезон", link, 1);
 
-                            return rjson ? tpl.ToJson() : tpl.ToHtml();
+                            return tpl;
                         }
                         else
                         {
@@ -450,7 +445,7 @@ namespace Shared.Engine.Online
                                 tpl.Append($"{season} сезон", link, season);
                             }
 
-                            return rjson ? tpl.ToJson() : tpl.ToHtml();
+                            return tpl;
                         }
                         else
                         {

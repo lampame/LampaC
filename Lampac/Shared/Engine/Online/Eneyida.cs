@@ -12,13 +12,13 @@ namespace Shared.Engine.Online
         #region EneyidaInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
-        Func<string, string, ValueTask<string>> onpost;
+        Func<string, Task<string>> onget;
+        Func<string, string, Task<string>> onpost;
         Func<string, string> onstreamfile;
         Func<string, string> onlog;
         Action requesterror;
 
-        public EneyidaInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public EneyidaInvoke(string host, string apihost, Func<string, Task<string>> onget, Func<string, string, Task<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
@@ -31,7 +31,7 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(string original_title, int year, string href, bool similar)
+        public async Task<EmbedModel> Embed(string original_title, int year, string href, bool similar)
         {
             if (string.IsNullOrWhiteSpace(href) && (string.IsNullOrWhiteSpace(original_title) || year == 0))
                 return null;
@@ -152,11 +152,11 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, int clarification, string title, string original_title, int year, int t, int s, string href, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, int clarification, string title, string original_title, int year, int t, int s, string href, VastConf vast = null, bool rjson = false)
         {
             if (result == null || result.IsEmpty)
-                return string.Empty;
+                return default;
 
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -175,10 +175,10 @@ namespace Shared.Engine.Online
                         stpl.Append(similar.title, similar.year, string.Empty, link, PosterApi.Size(similar.img));
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
+                    return stpl;
                 }
 
-                return string.Empty;
+                return default;
             }
             #endregion
 
@@ -189,7 +189,7 @@ namespace Shared.Engine.Online
 
                 string hls = Regex.Match(result.content, "file: ?\"(https?://[^\"]+/index.m3u8)\"").Groups[1].Value;
                 if (string.IsNullOrWhiteSpace(hls))
-                    return string.Empty;
+                    return default;
 
                 #region subtitle
                 SubtitleTpl subtitles = new SubtitleTpl();
@@ -208,7 +208,7 @@ namespace Shared.Engine.Online
 
                 mtpl.Append(string.IsNullOrEmpty(result.quel) ? "По умолчанию" : result.quel, onstreamfile.Invoke(hls), subtitles: subtitles, vast: vast);
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -234,7 +234,7 @@ namespace Shared.Engine.Online
                             tpl.Append(season.title, link, numberseason);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                         #endregion
                     }
                     else
@@ -258,7 +258,7 @@ namespace Shared.Engine.Online
                         string sArch = s.ToString();
                         var episodes = season.folder[t].folder;
 
-                        var etpl = new EpisodeTpl(episodes.Length);
+                        var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                         foreach (var episode in episodes)
                         {
@@ -282,15 +282,12 @@ namespace Shared.Engine.Online
                             etpl.Append(episode.title, title ?? original_title, sArch, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, file, subtitles: subtitles, vast: vast);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

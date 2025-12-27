@@ -34,9 +34,7 @@ namespace Online.Controllers
                 {
                     string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
 
-                    string searchHtml = rch.enable 
-                        ? await rch.Post($"{init.corsHost()}/index.php?do=search", data, httpHeaders(init)) 
-                        : await Http.Post($"{init.corsHost()}/index.php?do=search", data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    string searchHtml = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", data);
 
                     if (searchHtml == null)
                         return e.Fail("search");
@@ -49,7 +47,7 @@ namespace Online.Controllers
                 });
 
                 if (similar || string.IsNullOrEmpty(search.Value?.link))
-                    return OnResult(search, () => rjson ? search.Value.similar.Value.ToJson() : search.Value.similar.Value.ToHtml());
+                    return OnResult(search, () => search.Value.similar.Value);
 
                 if (string.IsNullOrEmpty(search.Value?.link))
                 {
@@ -72,9 +70,7 @@ namespace Online.Controllers
             {
                 string targetHref = $"{init.corsHost()}/{href}";
 
-                string html = rch.enable 
-                    ? await rch.Get(targetHref, httpHeaders(init)) 
-                    : await Http.Get(init.cors(targetHref), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                string html = await httpHydra.Get(targetHref);
 
                 if (html == null) 
                     return e.Fail("html");
@@ -124,7 +120,7 @@ namespace Online.Controllers
 
 
         #region BuildResult
-        string BuildResult(JArray playlist, string title, string original_title, int year, int s, int t, bool rjson, string href)
+        ITplResult BuildResult(JArray playlist, string title, string original_title, int year, int s, int t, bool rjson, string href)
         {
             if (playlist.First.Value<string>("file") != null)
             {
@@ -163,7 +159,7 @@ namespace Online.Controllers
                     mtpl.Append(voice, HostStreamProxy(file), subtitles: subtitles, vast: init.vast);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
             }
             else
             {
@@ -184,7 +180,7 @@ namespace Online.Controllers
                         }
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                 }
                 else
                 {
@@ -213,8 +209,7 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl(episodes.Count());
-                    string sArhc = s.ToString();
+                    var etpl = new EpisodeTpl(vtpl, episodes.Count());
 
                     foreach (var episode in episodes)
                     {
@@ -247,13 +242,10 @@ namespace Online.Controllers
                         #endregion
 
                         string stream = HostStreamProxy(file);
-                        etpl.Append(name, title ?? original_title, sArhc, Regex.Match(name, " ([0-9]+)$").Groups[1].Value, stream, subtitles: subtitles, vast: init.vast);
+                        etpl.Append(name, title ?? original_title, s.ToString(), Regex.Match(name, " ([0-9]+)$").Groups[1].Value, stream, subtitles: subtitles, vast: init.vast);
                     }
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
-
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                 }
             }
         }

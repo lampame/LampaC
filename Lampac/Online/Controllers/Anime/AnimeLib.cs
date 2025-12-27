@@ -26,7 +26,7 @@ namespace Online.Controllers
             if (string.IsNullOrEmpty(init.token))
                 return OnError();
 
-            var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
+            var bearer = HeadersModel.Init("authorization", $"Bearer {init.token}");
 
             if (string.IsNullOrWhiteSpace(uri))
             {
@@ -45,9 +45,7 @@ namespace Online.Controllers
 
                             string req_uri = $"{init.corsHost()}/api/anime?fields[]=rate_avg&fields[]=rate&fields[]=releaseDate&q={HttpUtility.UrlEncode(q)}";
 
-                            var result = rch.enable 
-                                ? await rch.Get<JObject>(req_uri, headers) 
-                                : await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                            var result = await httpHydra.Get<JObject>(req_uri, addheaders: bearer);
 
                             if (result == null || !result.ContainsKey("data"))
                                 return null;
@@ -88,7 +86,7 @@ namespace Online.Controllers
                         if (!rch.enable)
                             proxyManager.Success();
 
-                        hybridCache.Set(key, catalog, cacheTime(40, init: init), inmemory: false);
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (!similar && catalog.Where(i => i.coincidence).Count() == 1)
@@ -99,7 +97,7 @@ namespace Online.Controllers
                     foreach (var res in catalog)
                         stpl.Append(res.title, res.year, string.Empty, $"{host}/lite/animelib?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(res.uri)}", PosterApi.Size(res.cover));
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return ContentTo(stpl);
                 });
                 #endregion
             }
@@ -112,9 +110,7 @@ namespace Online.Controllers
                     {
                         string req_uri = $"{init.corsHost()}/api/episodes?anime_id={uri}";
 
-                        var root = rch.enable 
-                            ? await rch.Get<JObject>(req_uri, headers) 
-                            : await Http.Get<JObject>(req_uri, timeoutSeconds: 8, httpversion: 2, proxy: proxy, headers: headers);
+                        var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer);
 
                         if (root == null || !root.ContainsKey("data"))
                             return OnError(proxyManager, refresh_proxy: !rch.enable);
@@ -127,7 +123,7 @@ namespace Online.Controllers
                         if (!rch.enable)
                             proxyManager.Success();
 
-                        hybridCache.Set(key, episodes, cacheTime(30, init: init));
+                        hybridCache.Set(key, episodes, cacheTime(30));
                     }
 
                     #region Перевод
@@ -139,15 +135,13 @@ namespace Online.Controllers
 
                         string req_uri = $"{init.corsHost()}/api/episodes/{episodes.First().id}";
 
-                        var root = rch.enable 
-                            ? await rch.Get<JObject>(req_uri, headers) 
-                            : await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                        var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer);
 
                         if (root == null || !root.ContainsKey("data"))
                             return OnError(proxyManager, refresh_proxy: !rch.enable);
 
                         players = root["data"]["players"].ToObject<Player[]>();
-                        hybridCache.Set(voice_memkey, players, cacheTime(30, init: init));
+                        hybridCache.Set(voice_memkey, players, cacheTime(30));
                     }
 
                     var vtpl = new VoiceTpl(players.Length);
@@ -165,7 +159,7 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl(episodes.Length);
+                    var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                     foreach (var episode in episodes)
                     {
@@ -176,10 +170,7 @@ namespace Online.Controllers
                         etpl.Append($"{episode.number} серия", name, episode.season, episode.number, link, "call", streamlink: accsArgs($"{link}&play=true"));
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return ContentTo(etpl);
                 });
                 #endregion
             }
@@ -209,15 +200,13 @@ namespace Online.Controllers
             if (!play && rch.IsRequiredConnected())
                 return ContentTo(rch.connectionMsg);
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<Player[]>($"animelib:video:{id}", 30, async e =>
             {
                 string req_uri = $"{init.corsHost()}/api/episodes/{id}";
-                var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
+                var bearer = HeadersModel.Init("authorization", $"Bearer {init.token}");
 
-                var root = rch.enable 
-                    ? await rch.Get<JObject>(req_uri, headers) 
-                    : await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer);
 
                 if (root == null || !root.ContainsKey("data"))
                     return e.Fail("data", refresh_proxy: true);
@@ -226,7 +215,7 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
             if (!cache.IsSuccess)
                 return OnError(cache.ErrorMsg);

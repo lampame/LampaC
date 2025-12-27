@@ -23,19 +23,18 @@ namespace Online.Controllers
                host,
                init.apihost,
                (url, head) => black_magic(url),
-               streamfile => HostStreamProxy(streamfile),
-               requesterror: () => proxyManager.Refresh(rch)
+               () => proxyManager.Refresh(rch)
             );
 
-            reset: 
+            rhubFallback: 
             var cache = await InvokeCacheResult(rch.ipkey($"videodb:view:{kinopoisk_id}", proxyManager), 20, 
                 () => oninvk.Embed(kinopoisk_id)
             );
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, accsArgs(string.Empty), kinopoisk_id, title, original_title, t, s, sid, rjson));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, accsArgs(string.Empty), kinopoisk_id, title, original_title, t, s, sid, rjson));
         }
 
 
@@ -90,7 +89,7 @@ namespace Online.Controllers
                         }
                         else if (init.priorityBrowser == "http")
                         {
-                            location = await Http.GetLocation(link, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                            location = await Http.GetLocation(link, httpversion: init.httpversion, timeoutSeconds: init.httptimeout, proxy: proxy, headers: headers);
                         }
                         else
                         {
@@ -151,7 +150,7 @@ namespace Online.Controllers
                     if (!rch.enable)
                         proxyManager.Success();
 
-                    hybridCache.Set(memKey, location, cacheTime(20, rhub: 2, init: init));
+                    hybridCache.Set(memKey, location, cacheTimeBase(20, rhub: 2, init: init));
                 }
 
                 string hls = HostStreamProxy(location);
@@ -165,7 +164,7 @@ namespace Online.Controllers
         #endregion
 
         #region black_magic
-        async ValueTask<string> black_magic(string iframe_uri)
+        async Task<string> black_magic(string iframe_uri)
         {
             try
             {
@@ -176,11 +175,8 @@ namespace Online.Controllers
                     ("referer", "{host}/")
                 ));
 
-                if (rch.enable)
-                    return await rch.Get(init.cors(iframe_uri), headers);
-
-                if (init.priorityBrowser == "http")
-                    return await Http.Get(init.cors(iframe_uri), httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                if (rch.enable || init.priorityBrowser == "http")
+                    return await httpHydra.Get(iframe_uri, newheaders: headers);
 
                 using (var browser = new PlaywrightBrowser(init.priorityBrowser))
                 {

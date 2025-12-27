@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Shared.Models.Online.Eneyida;
 
 namespace Online.Controllers
 {
@@ -27,25 +26,21 @@ namespace Online.Controllers
             (
                host,
                init.corsHost(),
-               ongettourl => rch.enable 
-                    ? rch.Get(init.cors(ongettourl), httpHeaders(init)) 
-                    : Http.Get(init.cors(ongettourl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
-               (url, data) => rch.enable 
-                    ? rch.Post(init.cors(url), data, httpHeaders(init)) 
-                    : Http.Post(init.cors(url), data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
+               ongettourl => httpHydra.Get(ongettourl),
+               (url, data) => httpHydra.Post(url, data),
                onstreamtofile => HostStreamProxy(onstreamtofile),
                requesterror: () => proxyManager.Refresh(rch)
             );
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult($"eneyida:view:{title}:{year}:{href}:{clarification}:{similar}", 40, 
                 () => oninvk.Embed((similar || clarification == 1) ? title : original_title, year, href, similar)
             );
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, clarification, title, original_title, year, t, s, href, vast: init.vast, rjson: rjson));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, clarification, title, original_title, year, t, s, href, vast: init.vast, rjson: rjson));
         }
     }
 }

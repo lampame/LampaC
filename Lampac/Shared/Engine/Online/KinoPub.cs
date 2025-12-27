@@ -12,19 +12,17 @@ namespace Shared.Engine.Online
         #region KinoPubInvoke
         string host, token;
         string apihost;
-        Func<string, ValueTask<string>> onget;
+        Func<string, Task<string>> onget;
         Func<string, string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
-        public KinoPubInvoke(string host, string apihost, string token, Func<string, ValueTask<string>> onget, Func<string, string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public KinoPubInvoke(string host, string apihost, string token, Func<string, Task<string>> onget, Func<string, string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
             this.token = token;
             this.onget = onget;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             this.requesterror = requesterror;
         }
         #endregion
@@ -127,11 +125,11 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(RootObject root, string filetype, string title, string original_title, int postid, int s = -1, int t = -1, string codec = null, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(RootObject root, string filetype, string title, string original_title, int postid, int s = -1, int t = -1, string codec = null, VastConf vast = null, bool rjson = false)
         {
             if (root == null)
-                return string.Empty;
+                return default;
 
             if (root?.item.videos != null)
             {
@@ -244,13 +242,13 @@ namespace Shared.Engine.Online
                     }
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
             {
                 if (root?.item.seasons == null || root.item.seasons.Length == 0)
-                    return string.Empty;
+                    return default;
 
                 #region Сериал
                 string enc_title = HttpUtility.UrlEncode(title);
@@ -267,7 +265,7 @@ namespace Shared.Engine.Online
                         tpl.Append($"{season.number} сезон", link, season.number);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                     #endregion
                 }
                 else
@@ -325,7 +323,7 @@ namespace Shared.Engine.Online
                             #endregion
 
                         #region Серии
-                        var etpl = new EpisodeTpl();
+                        var etpl = new EpisodeTpl(vtpl);
 
                         foreach (var episode in root.item.seasons.First(i => i.number == s).episodes)
                         {
@@ -383,10 +381,7 @@ namespace Shared.Engine.Online
                         }
                         #endregion
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                     else
                     {
@@ -455,7 +450,7 @@ namespace Shared.Engine.Online
                             }
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
                     #endregion
                 }

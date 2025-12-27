@@ -65,8 +65,8 @@ namespace Online.Controllers
                     init,
                     "video",
                     database,
-                    (uri, head) => Http.Get(init.cors(uri), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
-                    (uri, data) => Http.Post(init.cors(uri), data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
+                    (uri, head) => httpHydra.Get(uri),
+                    (uri, data) => httpHydra.Post(uri, data),
                     streamfile => HostStreamProxy(streamfile),
                     requesterror: proxyManager.Refresh
                 );
@@ -113,7 +113,7 @@ namespace Online.Controllers
                 }
 
                 if (string.IsNullOrEmpty(pick))
-                    return ContentTo(res?.stpl == null ? string.Empty : (rjson ? res.stpl.Value.ToJson() : res.stpl.Value.ToHtml()));
+                    return ContentTo(res?.stpl == null ? default : res.stpl.Value);
 
                 content = oninvk.Embed(res.result, pick);
             }
@@ -124,7 +124,7 @@ namespace Online.Controllers
                     return LocalRedirect(accsArgs($"/lite/kodik?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&original_title={HttpUtility.UrlEncode(original_title)}"));
             }
 
-            return ContentTo(await oninvk.Html(content, accsArgs(string.Empty), imdb_id, kinopoisk_id, title, original_title, clarification, pick, kid, s, true, rjson));
+            return ContentTo(await oninvk.Tpl(content, accsArgs(string.Empty), imdb_id, kinopoisk_id, title, original_title, clarification, pick, kid, s, true, rjson));
         }
 
         #region Video
@@ -168,7 +168,7 @@ namespace Online.Controllers
                         string deadline = DateTime.Now.AddHours(4).ToString("yyyy MM dd HH").Replace(" ", "");
                         string hmac = HMAC(init.secret_token, $"{link}:{userIp}:{deadline}");
 
-                        var root = await Http.Get<JObject>($"http://kodik.biz/api/video-links?link={link}&p={init.token}&ip={userIp}&d={deadline}&s={hmac}&auto_proxy={init.auto_proxy.ToString().ToLower()}&skip_segments=true", timeoutSeconds: 8, proxy: proxy);
+                        var root = await httpHydra.Get<JObject>($"http://kodik.biz/api/video-links?link={link}&p={init.token}&ip={userIp}&d={deadline}&s={hmac}&auto_proxy={init.auto_proxy.ToString().ToLower()}&skip_segments=true");
 
                         if (root == null || !root.ContainsKey("links"))
                             return OnError("links", proxyManager);
@@ -217,7 +217,7 @@ namespace Online.Controllers
                         }
 
                         proxyManager.Success();
-                        hybridCache.Set(key, cache, cacheTime(120, init: init));
+                        hybridCache.Set(key, cache, cacheTime(120));
                     }
 
                     var streamquality = new StreamQualityTpl();

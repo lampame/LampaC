@@ -72,13 +72,13 @@ namespace Online.Controllers
             string id = data.Value<string>("id");
             var cache = await InvokeCacheResult<JToken>($"IptvOnline:{id}:{init.token}", 20, async e =>
             {
-                var header = httpHeaders(init, HeadersModel.Init(
+                var bearer = HeadersModel.Init(
                     ("X-API-AUTH", codeauth),
                     ("X-API-ID", init.token.Split(":")[0])
-                ));
+                );
 
                 string uri = $"{init.host}/v1/api/media/{(serial == 1 ? "serials" : "movies")}/{id}/";
-                var root = await Http.Get<JObject>(init.cors(uri), timeoutSeconds: 8, proxy: proxy, headers: header, useDefaultHeaders: false);
+                var root = await httpHydra.Get<JObject>(uri, addheaders: bearer, useDefaultHeaders: false);
 
                 if (root == null || !root.ContainsKey("data"))
                     return e.Fail("data", refresh_proxy: true);
@@ -101,7 +101,7 @@ namespace Online.Controllers
 
                     mtpl.Append(quality ?? title, stream, vast: init.vast);
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                    return mtpl;
                     #endregion
                 }
                 else
@@ -125,7 +125,7 @@ namespace Online.Controllers
                             tpl.Append($"{season} сезон", link, season);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -144,13 +144,12 @@ namespace Online.Controllers
                             etpl.Append(name ?? $"{episode.Value<int>("episode")} серия", title ?? original_title, sArhc, episode.Value<int>("episode").ToString(), stream, vast: init.vast);
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
                     #endregion
                 }
             });
         }
-
 
         #region search
         async ValueTask<JToken> search(string codeauth, int serial, string imdb_id, long kinopoisk_id, string title, string original_title)
@@ -227,7 +226,7 @@ namespace Online.Controllers
                     return null;
 
                 proxyManager.Success();
-                hybridCache.Set(memKey, data, cacheTime(30, init: init));
+                hybridCache.Set(memKey, data, cacheTime(30));
             }
 
             return data;

@@ -32,7 +32,7 @@ namespace Online.Controllers
                host,
                ztfhost,
                init.hls,
-               (url, head) => Http.Get(init.cors(url), headers: httpHeaders(init, head), timeoutSeconds: 8, proxy: proxy),
+               (url, head) => httpHydra.Get(url, addheaders: head),
                onstreamtofile => HostStreamProxy(onstreamtofile)
                //AppInit.log
             );
@@ -145,7 +145,7 @@ namespace Online.Controllers
 
             OnLog(log + "\nStart OnResult");
 
-            return ContentTo(oninvk.Html(content, number_of_seasons, kinopoisk_id, title, original_title, t, s, vast: init.vast));
+            return ContentTo(oninvk.Tpl(content, number_of_seasons, kinopoisk_id, title, original_title, t, s, vast: init.vast));
         }
 
 
@@ -165,7 +165,7 @@ namespace Online.Controllers
                 return ztfhost;
             }
 
-            string html = await Http.Get(host, timeoutSeconds: 8, proxy: proxy);
+            string html = await httpHydra.Get(host);
             if (html != null)
             {
                 ztfhost = Regex.Match(html, "\"([^\"]+)\"\\);</script>").Groups[1].Value;

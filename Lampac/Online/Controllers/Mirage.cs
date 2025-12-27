@@ -63,7 +63,7 @@ namespace Online.Controllers
                     mtpl.Append(translation, link, "call", streamlink, voice_name: uhd ? "2160p" : quality, quality: uhd ? "2160p" : "");
                 }
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return ContentTo(mtpl);
                 #endregion
             }
             else
@@ -113,7 +113,7 @@ namespace Online.Controllers
                         foreach (int i in seasonNumbers.OrderBy(i => i))
                             tpl.Append($"{i} сезон", $"{host}/lite/mirage?rjson={rjson}&s={i}{defaultargs}", i.ToString());
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return ContentTo(tpl);
                     }
                     else
                     {
@@ -122,7 +122,7 @@ namespace Online.Controllers
                         foreach (var season in seasons)
                             tpl.Append($"{season.Key} сезон", $"{host}/lite/mirage?rjson={rjson}&s={season.Key}{defaultargs}", season.Key);
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return ContentTo(tpl);
                     }
                     #endregion
                 }
@@ -272,10 +272,9 @@ namespace Online.Controllers
                         }
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
+                    etpl.Append(vtpl);
 
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return ContentTo(etpl);
                 }
                 #endregion
             }
@@ -328,14 +327,14 @@ namespace Online.Controllers
                 string uri = $"{init.linkhost}/?token_movie={token_movie}&token={init.token}";
                 string referer = $"https://lgfilm.fun/" + reffers[Random.Shared.Next(0, reffers.Length)];
 
-                string html = await Http.Get(uri, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init, HeadersModel.Init(
+                string html = await httpHydra.Get(uri, addheaders: HeadersModel.Init(
                     ("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"),
                     ("referer", referer),
                     ("sec-fetch-dest", "iframe"),
                     ("sec-fetch-mode", "navigate"),
                     ("sec-fetch-site", "cross-site"),
                     ("upgrade-insecure-requests", "1")
-                )));
+                ));
 
                 string json = Regex.Match(html ?? "", "fileList = JSON.parse\\('([^\n\r]+)'\\);").Groups[1].Value;
                 if (string.IsNullOrEmpty(json))
@@ -493,7 +492,7 @@ namespace Online.Controllers
 
             var cache = await InvokeCacheResult<JArray>($"mirage:search:{title}", 40, async e =>
             {
-                var root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list", timeoutSeconds: 8, proxy: proxy);
+                var root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list");
                 if (root == null || !root.ContainsKey("data"))
                     return e.Fail("data");
 
@@ -510,7 +509,7 @@ namespace Online.Controllers
                     stpl.Append(j.Value<string>("name") ?? j.Value<string>("original_name"), j.Value<int>("year").ToString(), string.Empty, uri, PosterApi.Size(j.Value<string>("poster")));
                 }
 
-                return rjson ? stpl.ToJson() : stpl.ToHtml();
+                return stpl;
             });
         }
         #endregion
@@ -536,7 +535,7 @@ namespace Online.Controllers
                     if (string.IsNullOrWhiteSpace(title) || year == 0)
                         return default;
 
-                    root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list={(serial == 1 ? "serial" : "movie")}", proxy: proxy, timeoutSeconds: 8);
+                    root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list={(serial == 1 ? "serial" : "movie")}");
                     if (root == null)
                         return (true, 0, null);
 
@@ -562,7 +561,7 @@ namespace Online.Controllers
                 }
                 else
                 {
-                    root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&kp={kinopoisk_id}&imdb={imdb_id}&token_movie={token_movie}", proxy: proxy, timeoutSeconds: 8);
+                    root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&kp={kinopoisk_id}&imdb={imdb_id}&token_movie={token_movie}");
                     if (root == null)
                         return (true, 0, null);
 
@@ -574,9 +573,9 @@ namespace Online.Controllers
                 }
 
                 if (res.data != null || (root.ContainsKey("error_info") && root.Value<string>("error_info") == "not movie"))
-                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40));
                 else
-                    hybridCache.Set(memKey, res, cacheTime(2, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(2));
             }
 
             return (false, res.category_id, res.data);

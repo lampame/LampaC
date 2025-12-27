@@ -20,22 +20,20 @@ namespace Online.Controllers
             (
                host,
                init.corsHost(),
-               ongettourl => rch.enable
-                    ? rch.Get(init.cors(ongettourl), httpHeaders(init)) 
-                    : Http.Get(init.cors(ongettourl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init), statusCodeOK: false),
+               ongettourl => httpHydra.Get(ongettourl, statusCodeOK: false),
                streamfile => HostStreamProxy(streamfile),
                requesterror: () => proxyManager.Refresh(rch)
             );
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult($"ashdi:view:{kinopoisk_id}", 40, 
                 () => oninvk.Embed(kinopoisk_id)
             );
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, kinopoisk_id, title, original_title, t, s, vast: init.vast, rjson: rjson));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, kinopoisk_id, title, original_title, t, s, vast: init.vast, rjson: rjson));
         }
     }
 }

@@ -74,7 +74,7 @@ namespace Online.Controllers
                     mtpl.Append(translation.Value["name"].ToString(), link, "call", streamlink, voice_name: uhd ? "2160p" : translation.Value["quality"].ToString(), quality: uhd ? "2160p" : "");
                 }
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return ContentTo(mtpl);
                 #endregion
             }
             else
@@ -87,7 +87,7 @@ namespace Online.Controllers
                     foreach (var season in data.Value<JObject>("seasons").ToObject<Dictionary<string, object>>().Reverse())
                         tpl.Append($"{season.Key} сезон", $"{host}/lite/alloha?rjson={rjson}&s={season.Key}{defaultargs}", season.Key);
 
-                    return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                    return ContentTo(tpl);
                 }
                 else
                 {
@@ -114,7 +114,7 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl();
+                    var etpl = new EpisodeTpl(vtpl);
                     string sArhc = s.ToString();
 
                     foreach (var episode in data.Value<JObject>("seasons").GetValue(sArhc).Value<JObject>("episodes").ToObject<Dictionary<string, Episode>>().Reverse())
@@ -128,10 +128,7 @@ namespace Online.Controllers
                         etpl.Append($"{episode.Key} серия", title ?? original_title, sArhc, episode.Key, link, "call", streamlink: streamlink);
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return ContentTo(etpl);
                 }
                 #endregion
             }
@@ -180,7 +177,7 @@ namespace Online.Controllers
                             uri += "&directors_cut";
                         #endregion
 
-                        var root = await Http.Get<JObject>(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                        var root = await httpHydra.Get<JObject>(uri);
                         if (root == null)
                             return OnError("json", proxyManager);
 
@@ -190,7 +187,7 @@ namespace Online.Controllers
                         proxyManager.Success();
 
                         data = root["data"];
-                        hybridCache.Set(key, data, cacheTime(10, init: init));
+                        hybridCache.Set(key, data, cacheTime(10));
                     }
 
                     #region subtitle
@@ -364,7 +361,7 @@ namespace Online.Controllers
                         if (string.IsNullOrEmpty(cache.hls))
                             return OnError();
 
-                        hybridCache.Set(memKey, cache, cacheTime(20, init: init));
+                        hybridCache.Set(memKey, cache, cacheTime(20));
                     }
 
                     var streamquality = new StreamQualityTpl();
@@ -397,7 +394,7 @@ namespace Online.Controllers
 
             var cache = await InvokeCacheResult<JArray>($"alloha:search:{title}", 40, async e =>
             {
-                var root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list", timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list");
                 if (root == null || !root.ContainsKey("data"))
                     return e.Fail("data", refresh_proxy: true);
 
@@ -414,7 +411,7 @@ namespace Online.Controllers
                     stpl.Append(j.Value<string>("name") ?? j.Value<string>("original_name"), j.Value<int>("year").ToString(), string.Empty, uri, PosterApi.Size(j.Value<string>("poster")));
                 }
 
-                return rjson ? stpl.ToJson() : stpl.ToHtml();
+                return stpl;
             });
         }
         #endregion
@@ -487,9 +484,9 @@ namespace Online.Controllers
                     proxyManager.Success();
 
                 if (res.data != null || (root.ContainsKey("error_info") && root.Value<string>("error_info") == "not movie"))
-                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40));
                 else
-                    hybridCache.Set(memKey, res, cacheTime(2, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(2));
             }
 
             return (false, res.category_id, res.data);

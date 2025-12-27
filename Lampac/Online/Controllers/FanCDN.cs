@@ -40,11 +40,8 @@ namespace Online.Controllers
                        ("cookie", init.cookie)
                    ));
 
-                   if (rch.enable)
-                       return await rch.Get(init.cors(ongettourl), headers);
-
-                   if (init.priorityBrowser == "http")
-                       return await Http.Get(init.cors(ongettourl), httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                   if (rch.enable || init.priorityBrowser == "http")
+                       return await httpHydra.Get(ongettourl, newheaders: headers);
 
                    #region Browser Search
                    try
@@ -101,7 +98,7 @@ namespace Online.Controllers
                streamfile => HostStreamProxy(streamfile)
             );
 
-            reset:
+            rhubFallback:
             var cache = await InvokeCacheResult<EmbedModel>(rch.ipkey($"fancdn:{title}", proxyManager), 20, async e =>
             {
                 var result = !string.IsNullOrEmpty(init.token) && kinopoisk_id > 0 
@@ -115,9 +112,9 @@ namespace Online.Controllers
             });
 
             if (IsRhubFallback(cache))
-                goto reset;
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init)));
+            return OnResult(cache, () => oninvk.Tpl(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init)));
         }
 
 
@@ -133,11 +130,8 @@ namespace Online.Controllers
                     ("referer", $"{init.host}/")
                 ));
 
-                if (rch.enable)
-                    return await rch.Get(uri, headers);
-
-                if (init.priorityBrowser == "http")
-                    return await Http.Get(uri, httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: headers);
+                if (rch.enable || init.priorityBrowser == "http")
+                    return await httpHydra.Get(uri, newheaders: headers);
 
                 using (var browser = new PlaywrightBrowser())
                 {

@@ -14,8 +14,7 @@ namespace Online.Controllers
                 (
                    host,
                    init.corsHost(),
-                   ongettourl => Http.Get(init.cors(ongettourl), timeoutSeconds: 8, proxy: proxy, cookie: init.cookie, headers: httpHeaders(init)),
-                   (url, data) => Http.Post(init.cors(url), data, timeoutSeconds: 8, proxy: proxy, cookie: init.cookie, headers: httpHeaders(init)),
+                   ongettourl => httpHydra.Get(ongettourl, addheaders: HeadersModel.Init("cookie", init.cookie)),
                    streamfile => streamfile,
                    requesterror: () => proxyManager.Refresh()
                 );
@@ -32,11 +31,14 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
 
-            var content = await InvokeCache($"remux:{title}:{original_title}:{year}:{href}", 40, () => oninvk.Embed(title, original_title, year, href));
+            var content = await InvokeCache($"remux:{title}:{original_title}:{year}:{href}", 40, 
+                () => oninvk.Embed(title, original_title, year, href)
+            );
+
             if (content == null)
                 return OnError();
 
-            return ContentTo(oninvk.Html(content, title, original_title, year, rjson: rjson));
+            return ContentTo(oninvk.Tpl(content, title, original_title, year));
         }
 
 
