@@ -15,13 +15,15 @@ namespace Shared.Engine.Online
     {
         static ConcurrentDictionary<string, string> user_dev_ids = new ConcurrentDictionary<string, string>();
 
+        static readonly JsonSerializerSettings jsonSettings = new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } };
+
         #region FilmixInvoke
         FilmixSettings init;
 
         public bool disableSphinxSearch, reserve;
 
         public string token;
-        string host, args;
+        string host, args, route;
         string apihost;
         Func<string, Task<string>> onget;
         Func<string, string, List<HeadersModel>, Task<string>> onpost;
@@ -30,12 +32,13 @@ namespace Shared.Engine.Online
         Action requesterror;
         bool rjson;
 
-        public FilmixInvoke(FilmixSettings init, string host, string token, Func<string, Task<string>> onget, Func<string, string, List<HeadersModel>, Task<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null, bool rjson = false)
+        public FilmixInvoke(FilmixSettings init, string host, string token, string route, Func<string, Task<string>> onget, Func<string, string, List<HeadersModel>, Task<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null, bool rjson = false)
         {
             this.init = init;
             apihost = init.corsHost();
             reserve = init.reserve;
             this.token = token;
+            this.route = route;
             this.host = host != null ? $"{host}/" : null;
             this.onget = onget;
             this.onpost = onpost;
@@ -90,7 +93,7 @@ namespace Shared.Engine.Online
 
                 string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_title) ? $"{item.title} / {item.original_title}"  : (item.title ?? item.original_title);
 
-                stpl.Append(name, item.year.ToString(), string.Empty, host + $"lite/filmix?postid={item.id}&title={enc_title}&original_title={enc_original_title}", PosterApi.Size(item.poster)); 
+                stpl.Append(name, item.year.ToString(), string.Empty, host + $"{route}?postid={item.id}&title={enc_title}&original_title={enc_original_title}", PosterApi.Size(item.poster)); 
 
                 if ((!string.IsNullOrEmpty(stitle) && StringConvert.SearchName(item.title) == stitle) ||
                     (!string.IsNullOrEmpty(sorigtitle) && StringConvert.SearchName(item.original_title) == sorigtitle))
@@ -161,7 +164,7 @@ namespace Shared.Engine.Online
 
                 string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_name) ? $"{item.title} / {item.original_name}" : (item.title ?? item.original_name);
 
-                stpl.Append(name, item.year.ToString(), string.Empty, host + $"lite/filmix?postid={item.id}&title={enc_title}&original_title={enc_original_title}");
+                stpl.Append(name, item.year.ToString(), string.Empty, host + $"{route}?postid={item.id}&title={enc_title}&original_title={enc_original_title}");
 
                 if ((!string.IsNullOrEmpty(stitle) && StringConvert.SearchName(item.title) == stitle) ||
                     (!string.IsNullOrEmpty(sorigtitle) && StringConvert.SearchName(item.original_name) == sorigtitle))
@@ -231,7 +234,7 @@ namespace Shared.Engine.Online
                 {
                     string name = !string.IsNullOrEmpty(ftitle) && !string.IsNullOrEmpty(ftitle_orig) ? $"{ftitle} / {ftitle_orig}" : (ftitle ?? ftitle_orig);
 
-                    stpl.Append(name, fyear, string.Empty, host + $"lite/filmix?postid={id}&title={enc_title}&original_title={enc_original_title}");
+                    stpl.Append(name, fyear, string.Empty, host + $"{route}?postid={id}&title={enc_title}&original_title={enc_original_title}");
 
                     if ((!string.IsNullOrEmpty(stitle) && ftitle.ToLower() == stitle) ||
                         (!string.IsNullOrEmpty(sorigtitle) && ftitle_orig.ToLower() == sorigtitle))
@@ -266,7 +269,7 @@ namespace Shared.Engine.Online
 
             try
             {
-                var root = JsonConvert.DeserializeObject<RootObject>(json.Replace("\"playlist\":[],", "\"playlist\":null,"), new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } });
+                var root = JsonConvert.DeserializeObject<RootObject>(json.Replace("\"playlist\":[],", "\"playlist\":null,"), jsonSettings);
 
                 if (root?.player_links == null)
                     return null;
@@ -317,11 +320,11 @@ namespace Shared.Engine.Online
                         if (!v.link.Contains($"{q},"))
                             continue;
 
-                        string l = Regex.Replace(v.link, "_\\[[0-9,]+\\]\\.mp4", $"_{q}.mp4");
+                        string l = Regex.Replace(v.link, "_\\[[0-9,]+\\]\\.mp4", $"_{q}.mp4", RegexOptions.Compiled);
 
-                        if (init.hls && !Regex.IsMatch(l, "/(HDR10p?|HEVC)/"))
+                        if (init.hls && !Regex.IsMatch(l, "/(HDR10p?|HEVC)/", RegexOptions.Compiled))
                         {
-                            var m = Regex.Match(l, "^(https?://[^/]+)/s/([^/]+)/(.*)");
+                            var m = Regex.Match(l, "^(https?://[^/]+)/s/([^/]+)/(.*)", RegexOptions.Compiled);
                             if (m.Success)
                                 l = $"{m.Groups[1].Value}/hls/{m.Groups[3].Value}/index.m3u8?hash={m.Groups[2].Value}";
                         }
@@ -332,7 +335,7 @@ namespace Shared.Engine.Online
                             {
                                 if (!l.Contains(cdn))
                                 {
-                                    l += " or " + Regex.Replace(l, "^https?://[^/]+", cdn);
+                                    l += " or " + Regex.Replace(l, "^https?://[^/]+", cdn, RegexOptions.Compiled);
                                     break;
                                 }
                             }
@@ -363,7 +366,7 @@ namespace Shared.Engine.Online
 
                     foreach (var season in player_links.playlist)
                     {
-                        string link = host + $"lite/filmix?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={season.Key}";
+                        string link = host + $"{route}?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={season.Key}";
                         tpl.Append($"{season.Key.Replace("-1", "1")} сезон", link, season.Key);
                     }
 
@@ -385,7 +388,7 @@ namespace Shared.Engine.Online
 
                     foreach (var translation in voices)
                     {
-                        string link = host + $"lite/filmix?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={s}&t={indexTranslate}";
+                        string link = host + $"{route}?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={s}&t={indexTranslate}";
                         bool active = t == indexTranslate;
 
                         indexTranslate++;
@@ -421,7 +424,7 @@ namespace Shared.Engine.Online
                     #endregion
 
                     var cdns = reserve ? episodes
-                        .Select(e => Regex.Match(e.Value.link, "^(https?://[^/]+)").Groups[1].Value)
+                        .Select(e => Regex.Match(e.Value.link, "^(https?://[^/]+)", RegexOptions.Compiled).Groups[1].Value)
                         .ToHashSet() : null;
 
                     #region Серии
@@ -444,9 +447,9 @@ namespace Shared.Engine.Online
 
                             string l = episode.Value.link.Replace("_%s.mp4", $"_{lq}.mp4");
 
-                            if (init.hls && !Regex.IsMatch(l, "/(HDR10p?|HEVC)/"))
+                            if (init.hls && !Regex.IsMatch(l, "/(HDR10p?|HEVC)/", RegexOptions.Compiled))
                             {
-                                var m = Regex.Match(l, "^(https?://[^/]+)/s/([^/]+)/(.*)");
+                                var m = Regex.Match(l, "^(https?://[^/]+)/s/([^/]+)/(.*)", RegexOptions.Compiled);
                                 if (m.Success)
                                     l = $"{m.Groups[1].Value}/hls/{m.Groups[3].Value}/index.m3u8?hash={m.Groups[2].Value}";
                             }
@@ -457,7 +460,7 @@ namespace Shared.Engine.Online
                                 {
                                     if (!l.Contains(cdn))
                                     {
-                                        l += " or " + Regex.Replace(l, "^https?://[^/]+", cdn);
+                                        l += " or " + Regex.Replace(l, "^https?://[^/]+", cdn, RegexOptions.Compiled);
                                         break;
                                     }
                                 }

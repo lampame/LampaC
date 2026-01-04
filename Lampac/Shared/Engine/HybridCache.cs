@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using Shared.Models;
 using Shared.Models.SQL;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Threading;
 
 namespace Shared.Engine
@@ -65,35 +66,30 @@ namespace Shared.Engine
                 }
                 else
                 {
-                    var array = tempDb
-                        .Where(t => now > t.Value.extend)
-                        .Take(500);
+                    string[] delete_ids = tempDb.Where(t => now > t.Value.extend)
+                        .Select(k => k.Key)
+                        .ToArray();
 
-                    if (array.Any())
+                    if (delete_ids.Length > 0)
                     {
                         using (var sqlDb = new HybridCacheContext())
                         {
-                            var delete_ids = array.Select(k => k.Key).ToHashSet();
-                            if (delete_ids.Count > 0)
-                            {
-                                await sqlDb.files
-                                    .Where(x => delete_ids.Contains(x.Id))
-                                    .ExecuteDeleteAsync();
-                            }
+                            await sqlDb.files
+                                .Where(x => delete_ids.Contains(x.Id))
+                                .ExecuteDeleteAsync();
 
-                            var hash_ids = new HashSet<string>();
-
-                            foreach (var t in array)
+                            foreach (string tempid in delete_ids)
                             {
-                                if (t.Value.ex > now && hash_ids.Add(t.Key))
+                                if (tempDb.TryGetValue(tempid, out var c))
                                 {
                                     sqlDb.files.Add(new HybridCacheSqlModel()
                                     {
-                                        Id = t.Key,
-                                        ex = t.Value.ex,
-                                        value = t.Value.IsSerialize
-                                            ? JsonConvert.SerializeObject(t.Value.value)
-                                            : t.Value.value.ToString()
+                                        Id = tempid,
+                                        ex = c.ex,
+                                        value = c.IsSerialize
+                                            ? JsonConvert.SerializeObject(c.value)
+                                            : c.value.ToString(),
+                                        capacity = GetCapacity(c.value)
                                     });
                                 }
                             }
@@ -169,11 +165,6 @@ namespace Shared.Engine
 
 
         #region TryGetValue
-        public bool TryGetValue(string key, out object value)
-        {
-            return memoryCache.TryGetValue(key, out value);
-        }
-
         public bool TryGetValue<TItem>(string key, out TItem value, bool? inmemory = null)
         {
             if (AppInit.conf.mikrotik == false && AppInit.conf.cache.type != "mem")
@@ -221,22 +212,73 @@ namespace Shared.Engine
                 }
                 else
                 {
-                    using (var sqlDb = HybridCacheContext.Factory != null 
-                        ? HybridCacheContext.Factory.CreateDbContext()
-                        : new HybridCacheContext())
+                    using (var sqlDb = HybridCacheContext.Factory?.CreateDbContext() ?? new HybridCacheContext())
                     {
-                        var doc = sqlDb.files.Find(md5key);
+                        using (var conn = sqlDb.Database.GetDbConnection())
+                        {
+                            conn.Open();
 
-                        if (doc?.Id == null || DateTime.Now > doc.ex)
-                            return false;
+                            using (var cmd = conn.CreateCommand())
+                            {
+                                cmd.CommandText = "SELECT ex, value, capacity FROM files WHERE Id = $id";
+                                var p = cmd.CreateParameter();
+                                p.ParameterName = "$id";
+                                p.Value = md5key;
+                                cmd.Parameters.Add(p);
 
-                        if (IsDeserialize)
-                            value = JsonConvert.DeserializeObject<TItem>(doc.value);
-                        else
-                            value = (TItem)Convert.ChangeType(doc.value, type);
+                                using (var r = cmd.ExecuteReader())
+                                {
+                                    if (!r.Read())
+                                        return false;
 
-                        updateRequestHistory(key, doc.ex, value);
-                        return true;
+                                    var ex = r.GetDateTime(0);
+                                    if (DateTime.Now > ex)
+                                        return false;
+
+                                    if (IsDeserialize)
+                                    {
+                                        bool isCapacity = IsCapacityCollection(type);
+
+                                        int capacity = 0;
+                                        if (isCapacity && !r.IsDBNull(2))
+                                            capacity = r.GetInt32(2);
+
+                                        using (var textReader = r.GetTextReader(1))
+                                        {
+                                            using (var jsonReader = new JsonTextReader(textReader))
+                                            {
+                                                var serializer = JsonSerializer.CreateDefault();
+
+                                                if (isCapacity && capacity > 0)
+                                                {
+                                                    var instance = CreateCollectionWithCapacity(type, capacity);
+                                                    if (instance != null)
+                                                    {
+                                                        serializer.Populate(jsonReader, instance);
+                                                        value = (TItem)instance;
+                                                    }
+                                                    else
+                                                    {
+                                                        value = serializer.Deserialize<TItem>(jsonReader);
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    value = serializer.Deserialize<TItem>(jsonReader);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        value = (TItem)Convert.ChangeType(r.GetString(1), typeof(TItem), CultureInfo.InvariantCulture);
+                                    }
+
+                                    updateRequestHistory(key, ex, value);
+                                    return true;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -317,7 +359,7 @@ namespace Shared.Engine
 
 
         #region updateRequestHistory
-        void updateRequestHistory<TItem>(string key, DateTime ex, TItem value)
+        private void updateRequestHistory<TItem>(string key, DateTime ex, TItem value)
         {
             if (AppInit.conf.cache.type != "hybrid" || requestInfo == null)
                 return;
@@ -336,6 +378,70 @@ namespace Shared.Engine
                 requestHistory.TryRemove(key, out _);
                 tempDb.TryRemove(CrypTo.md5(key), out _);
             }
+        }
+        #endregion
+
+        #region collection capacity
+        static bool IsCapacityCollection(Type type)
+        {
+            if (type == typeof(string) || type.IsArray)
+                return false;
+
+            foreach (var iface in type.GetInterfaces())
+            {
+                if (!iface.IsGenericType)
+                    continue;
+
+                var def = iface.GetGenericTypeDefinition();
+                if (def == typeof(ICollection<>) || def == typeof(IReadOnlyCollection<>))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static int GetCapacity(object value)
+        {
+            if (value is string)
+                return 0;
+
+            foreach (var iface in value.GetType().GetInterfaces())
+            {
+                if (!iface.IsGenericType)
+                    continue;
+
+                var def = iface.GetGenericTypeDefinition();
+
+                if (def == typeof(ICollection<>) || def == typeof(IReadOnlyCollection<>))
+                {
+                    var countProperty = iface.GetProperty("Count");
+
+                    if (countProperty?.PropertyType == typeof(int))
+                        return (int)countProperty.GetValue(value);
+                }
+            }
+
+            return 0;
+        }
+
+        static object CreateCollectionWithCapacity(Type type, int capacity)
+        {
+            if (type == typeof(string) || type.IsArray)
+                return null;
+
+            var ctor = type.GetConstructor(new[] { typeof(int) });
+            if (ctor != null)
+                return ctor.Invoke(new object[] { capacity });
+
+            if (type.IsInterface && type.IsGenericType)
+            {
+                var listType = typeof(List<>).MakeGenericType(type.GetGenericArguments());
+                var listCtor = listType.GetConstructor(new[] { typeof(int) });
+                if (listCtor != null)
+                    return listCtor.Invoke(new object[] { capacity });
+            }
+
+            return null;
         }
         #endregion
     }
