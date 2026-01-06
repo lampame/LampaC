@@ -69,13 +69,18 @@ namespace Lampac.Controllers
             if (IsDeny(out string ermsg))
                 return Content(ermsg, "text/plain; charset=utf-8");
 
-            long req_min = memoryCache.Get<long>($"stats:request:{DateTime.Now.AddMinutes(-1).Minute}");
+            var now = DateTime.UtcNow;
+
+            long req_min = 0;
+            if (memoryCache.TryGetValue($"stats:request:{now.Hour}:{now.AddMinutes(-1).Minute}", out CounterRequestInfo _counter))
+                req_min = _counter.Value;
 
             long req_hour = req_min;
-            for (int i = 1; i < 58; i++)
+            for (int i = 1; i < 60; i++)
             {
-                if (memoryCache.TryGetValue($"stats:request:{DateTime.Now.AddMinutes(-i).Minute}", out long _r))
-                    req_hour += _r;
+                var cutoff = now.AddMinutes(-i);
+                if (memoryCache.TryGetValue($"stats:request:{cutoff.Hour}:{cutoff.AddMinutes(-i).Minute}", out CounterRequestInfo _r))
+                    req_hour += _r.Value;
             }
 
             var responseStats = RequestStatisticsTracker.GetResponseTimeStatsLastMinute();
