@@ -32,16 +32,18 @@ namespace SISI.Controllers.Xhamster
                 // fallback cache
                 if (!hybridCache.TryGetValue(semaphoreKey, out playlists))
                 {
+                    string memKey = headerKeys(semaphoreKey, "accept");
+
                     // user cache разделенный по ip
-                    if (rch == null || !hybridCache.TryGetValue(ipkey(semaphoreKey, rch), out playlists))
+                    if (rch == null || !hybridCache.TryGetValue(memKey, out playlists))
                     {
-                        string html = await XhamsterTo.InvokeHtml(init.corsHost(), plugin, search, c, q, sort, pg, 
-                            url => httpHydra.Get(url)
-                        );
+                        string url = XhamsterTo.Uri(init.corsHost(), plugin, search, c, q, sort, pg);
+
+                        ReadOnlySpan<char> html = await httpHydra.Get(url);
 
                         playlists = XhamsterTo.Playlist("xmr/vidosik", html);
 
-                        if (playlists.Count == 0)
+                        if (playlists == null || playlists.Count == 0)
                         {
                             if (IsRhubFallback())
                                 goto reset;
@@ -51,7 +53,7 @@ namespace SISI.Controllers.Xhamster
 
                         proxyManager?.Success();
 
-                        hybridCache.Set(ipkey(semaphoreKey, rch), playlists, cacheTime(10));
+                        hybridCache.Set(memKey, playlists, cacheTime(10));
                     }
                 }
             }

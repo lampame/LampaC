@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Text.Json.Nodes;
 
 namespace SISI.Controllers.Xvideos
 {
@@ -20,9 +21,9 @@ namespace SISI.Controllers.Xvideos
             rhubFallback:
             var cache = await InvokeCacheResult<List<PlaylistItem>>($"{plugin}:list:{search}:{sort}:{c}:{pg}", 10, async e =>
             {
-                string html = await XvideosTo.InvokeHtml(init.corsHost(), plugin, search, sort, c, pg, 
-                    url => httpHydra.Get(url)
-                );
+                string url = XvideosTo.Uri(init.corsHost(), plugin, search, sort, c, pg);
+
+                ReadOnlySpan<char> html = await httpHydra.Get(url);
 
                 var playlists = XvideosTo.Playlist("xds/vidosik", $"{plugin}/stars", html);
 
@@ -56,7 +57,7 @@ namespace SISI.Controllers.Xvideos
             var cache = await InvokeCacheResult<List<PlaylistItem>>($"{plugin}:stars:{uri}:{sort}:{pg}", 10, async e =>
             {
                 var playlists = await XvideosTo.Pornstars("xds/vidosik", $"{plugin}/stars", init.corsHost(), plugin, uri, sort, pg, 
-                    url => httpHydra.Get(url)
+                    url => httpHydra.Get<JsonObject>(url)
                 );
 
                 if (playlists == null || playlists.Count == 0)
