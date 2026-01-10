@@ -1,6 +1,7 @@
-﻿using System.Buffers;
+﻿using Microsoft.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace Shared.Models.Templates
 {
@@ -25,33 +26,61 @@ namespace Shared.Models.Templates
         #endregion
 
         #region WriteJson
+        static readonly ThreadLocal<RecyclableMemoryStream> _msmJson = new(PoolInvk.msm.GetStream);
+
+        static readonly char[] _rentedJson = new char[PoolInvk.rentLargeChunk];
+
+        static readonly Decoder _decoderJson = Encoding.UTF8.GetDecoder();
+
         public static void WriteJson<T>(StringBuilder sb, in T value, JsonSerializerOptions options)
         {
-            var bytes = new ArrayBufferWriter<byte>(1024);
-
-            using (var writer = new Utf8JsonWriter(bytes, new JsonWriterOptions
+            lock (_rentedJson)
             {
-                Indented = false,
-                SkipValidation = true
-            }))
-            {
-                JsonSerializer.Serialize(writer, value, options);
-            }
+                var ms = _msmJson.Value;
+                ms.SetLength(0);
+                ms.Position = 0;
 
-            ReadOnlySpan<byte> utf8 = bytes.WrittenSpan;
+                using (var writer = new Utf8JsonWriter((Stream)ms, new JsonWriterOptions
+                {
+                    Indented = false,
+                    SkipValidation = true
+                }))
+                {
+                    JsonSerializer.Serialize(writer, value, options);
+                }
 
-            // Декодируем одним вызовом в pooled char[]
-            int charCount = Encoding.UTF8.GetCharCount(utf8);
-            char[] rented = ArrayPool<char>.Shared.Rent(charCount);
+                foreach (var segment in ms.GetReadOnlySequence())
+                {
+                    ReadOnlySpan<byte> bytes = segment.Span;
 
-            try
-            {
-                int written = Encoding.UTF8.GetChars(utf8, rented);
-                sb.Append(rented, 0, written);
-            }
-            finally
-            {
-                ArrayPool<char>.Shared.Return(rented);
+                    while (!bytes.IsEmpty)
+                    {
+                        _decoderJson.Convert(
+                            bytes: bytes,
+                            chars: _rentedJson,
+                            flush: false,
+                            out int bytesUsed,
+                            out int charsUsed,
+                            out _);
+
+                        if (charsUsed > 0)
+                            sb.Append(_rentedJson, 0, charsUsed);
+
+                        bytes = bytes.Slice(bytesUsed);
+                    }
+                }
+
+                // финальный flush
+                _decoderJson.Convert(
+                    bytes: ReadOnlySpan<byte>.Empty,
+                    chars: _rentedJson,
+                    flush: true,
+                    out _,
+                    out int finalCharsUsed,
+                    out _);
+
+                if (finalCharsUsed > 0)
+                    sb.Append(_rentedJson, 0, finalCharsUsed);
             }
         }
         #endregion

@@ -9,7 +9,6 @@ using Shared.Models.Events;
 using Shared.Models.Module;
 using Shared.Models.SISI.Base;
 using Shared.Models.SISI.OnResult;
-using System.Buffers;
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
@@ -325,12 +324,7 @@ namespace Shared
             var headers_stream = HeadersModel.InitOrNull(init.headers_stream);
             var headers_image = httpHeaders(init.host, HeadersModel.InitOrNull(init.headers_image));
 
-            // ниже ~85k безопасно для LOH 
-            const int flushThreshold = 40_000;
-
-            var buffer = new ArrayBufferWriter<byte>(flushThreshold);
-
-            using (var writer = new Utf8JsonWriter(buffer, jsonWriterOptions))
+            using (var writer = new Utf8JsonWriter(Response.BodyWriter, jsonWriterOptions))
             {
                 writer.WriteStartObject();
                 writer.WriteNumber("count", playlists.Count);
@@ -359,7 +353,9 @@ namespace Shared
                     {
                         name = pl.name,
                         video = video,
-                        model = pl.model,
+                        model = pl.model != null
+                            ? new OnResultModel(pl.model.name, pl.model.uri)
+                            : null,
                         picture = HostImgProxy(pl.picture, 0, headers_image, init.plugin),
                         preview = pl.preview,
                         time = pl.time,
@@ -367,26 +363,26 @@ namespace Shared
                         related = pl.related,
                         quality = pl.quality,
                         qualitys = pl.qualitys,
-                        bookmark = pl.bookmark,
+                        bookmark = pl.bookmark != null
+                            ? new OnResultBookmark(pl.bookmark.uid, pl.bookmark.site, pl.bookmark.image, pl.bookmark.href)
+                            : null,
                         hide = pl.hide,
                         myarg = pl.myarg
                     }, jsonOptions);
 
-                    // Cбрасываем большой буфер в Response
-                    if (buffer.WrittenCount > flushThreshold) 
+                    // Cбрасываем накопленное из Utf8JsonWriter в транспорт
+                    if (writer.BytesPending > 50_000)
                     {
-                        writer.Flush(); // в буфер (не в Response) — безопасно
-                        await Response.BodyWriter.WriteAsync(buffer.WrittenMemory, ct);
-                        buffer.Clear();
+                        writer.Flush(); // flush в PipeWriter
+                        await Response.BodyWriter.FlushAsync(ct); // flush в транспорт
                     }
                 }
 
                 writer.WriteEndArray();
                 writer.WriteEndObject();
-                writer.Flush();
 
-                if (buffer.WrittenCount > 0)
-                    await Response.BodyWriter.WriteAsync(buffer.WrittenMemory, ct);
+                writer.Flush();
+                await Response.BodyWriter.FlushAsync(ct);
             }
 
             return new EmptyResult();

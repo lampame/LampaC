@@ -487,9 +487,9 @@ namespace Shared
             responseContentLength = true,
             buffering = new ServerproxyBufferingConf()
             {
-                enable = true, 
-                rent = 81920, // 80KB
-                length = 250  // 80KB * 250 ячеек = ~20MB
+                enable = true,
+                rent = 64 * 1024, // 64кб
+                length = 256      // rent * 256 = ~16 MB
             },
             image = new ServerproxyImageConf()
             {

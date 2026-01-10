@@ -1,5 +1,5 @@
-﻿using Microsoft.IO;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
+using Shared.Engine.Utilities;
 using Shared.Models;
 using Shared.Models.Events;
 using System.Buffers;
@@ -13,7 +13,7 @@ namespace Shared.Engine
 {
     public static class Http
     {
-        static readonly RecyclableMemoryStreamManager msm = new RecyclableMemoryStreamManager();
+        static readonly ThreadLocal<StringBuilder> sb = new(() => new StringBuilder());
 
         static readonly JsonSerializerSettings jsonSettings = new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } };
 
@@ -321,7 +321,7 @@ namespace Shared.Engine
         #region BaseGetAsync<T>
         async public static Task<(T content, HttpResponseMessage response)> BaseGetAsync<T>(string url, string cookie = null, string referer = null, long MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, List<HeadersModel> headers = null, bool IgnoreDeserializeObject = false, WebProxy proxy = null, bool statusCodeOK = true, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, HttpContent body = null, bool weblog = true)
         {
-            using (var ms = msm.GetStream())
+            using (var ms = PoolInvk.msm.GetStream())
             {
                 T result = default;
 
@@ -329,12 +329,15 @@ namespace Shared.Engine
                 {
                     try
                     {
-                        await e.stream.CopyToAsync(ms, 64_000, e.ct);
+                        await e.stream.CopyToAsync(ms, PoolInvk.bufferSize, e.ct);
                         ms.Position = 0;
 
-                        using (var streamReader = new StreamReader(ms))
+                        using (var streamReader = new StreamReader(ms, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: PoolInvk.bufferSize))
                         {
-                            using (var jsonReader = new JsonTextReader(streamReader))
+                            using (var jsonReader = new JsonTextReader(streamReader)
+                            {
+                                ArrayPool = new NewtonsoftCharArrayPool()
+                            })
                             {
                                 var serializer = JsonSerializer.Create(
                                     IgnoreDeserializeObject ? jsonSettings : null
@@ -362,7 +365,8 @@ namespace Shared.Engine
         {
             try
             {
-                var loglines = new StringBuilder();
+                var loglines = sb.Value;
+                loglines.Clear();
 
                 try
                 {
@@ -462,31 +466,22 @@ namespace Shared.Engine
         #region GetSpan
         async public static Task<bool> GetSpan(Action<ReadOnlySpan<char>> spanAction, string url, Encoding encoding = default, string cookie = null, string referer = null, long MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, List<HeadersModel> headers = null, bool IgnoreDeserializeObject = false, WebProxy proxy = null, bool statusCodeOK = true, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, HttpContent body = null, bool weblog = true)
         {
-            using (var ms = msm.GetStream())
+            using (var ms = PoolInvk.msm.GetStream())
             {
                 var req = await BaseGetReaderAsync(async e =>
                 {
                     try
                     {
-                        await e.stream.CopyToAsync(ms, 64_000, e.ct);
+                        await e.stream.CopyToAsync(ms, PoolInvk.bufferSize, e.ct);
                         ms.Position = 0;
 
-                        var encdg = encoding != default ? encoding : Encoding.UTF8;
-                        int charCount = encdg.GetMaxCharCount((int)ms.Length);
-
-                        using (IMemoryOwner<char> owner = MemoryPool<char>.Shared.Rent(charCount))
+                        OwnerTo.Span(ms, encoding != default ? encoding : Encoding.UTF8, span =>
                         {
-                            using (var reader = new StreamReader(ms, encdg, detectEncodingFromByteOrderMarks: false))
-                            {
-                                int actualChars = reader.Read(owner.Memory.Span);
-                                ReadOnlySpan<char> result = owner.Memory.Span.Slice(0, actualChars);
+                            spanAction.Invoke(span);
 
-                                spanAction.Invoke(result);
-
-                                if (IsLogged)
-                                    e.loglines.Append($"\n{result.ToString()}");
-                            }
-                        }
+                            if (IsLogged)
+                                e.loglines.Append($"\n{span.ToString()}");
+                        });
                     }
                     catch { }
                 },
@@ -501,31 +496,22 @@ namespace Shared.Engine
         #region PostSpan
         async public static Task<bool> PostSpan(Action<ReadOnlySpan<char>> spanAction, string url, string data, string cookie = null, int timeoutSeconds = 15, List<HeadersModel> headers = null, Encoding encoding = default, WebProxy proxy = null, bool IgnoreDeserializeObject = false, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, int httpversion = 1, int MaxResponseContentBufferSize = 0, bool statusCodeOK = true)
         {
-            using (var ms = msm.GetStream())
+            using (var ms = PoolInvk.msm.GetStream())
             {
                 var req = await BasePostReaderAsync(async e =>
                 {
                     try
                     {
-                        await e.stream.CopyToAsync(ms, 64_000, e.ct);
+                        await e.stream.CopyToAsync(ms, PoolInvk.bufferSize, e.ct);
                         ms.Position = 0;
 
-                        var encdg = encoding != default ? encoding : Encoding.UTF8;
-                        int charCount = encdg.GetMaxCharCount((int)ms.Length);
-
-                        using (IMemoryOwner<char> owner = MemoryPool<char>.Shared.Rent(charCount))
+                        OwnerTo.Span(ms, encoding != default ? encoding : Encoding.UTF8, span => 
                         {
-                            using (var reader = new StreamReader(ms, encdg, detectEncodingFromByteOrderMarks: false))
-                            {
-                                int actualChars = reader.Read(owner.Memory.Span);
-                                ReadOnlySpan<char> result = owner.Memory.Span.Slice(0, actualChars);
+                            spanAction.Invoke(span);
 
-                                spanAction.Invoke(result);
-
-                                if (IsLogged)
-                                    e.loglines.Append($"\n{result.ToString()}");
-                            }
-                        }
+                            if (IsLogged)
+                                e.loglines.Append($"\n{span.ToString()}");
+                        });
                     }
                     catch { }
                 },
@@ -549,7 +535,8 @@ namespace Shared.Engine
         #region BaseGet
         async public static Task<(string content, HttpResponseMessage response)> BaseGet(string url, Encoding encoding = default, string cookie = null, string referer = null, int timeoutSeconds = 15, long MaxResponseContentBufferSize = 0, List<HeadersModel> headers = null, WebProxy proxy = null, int httpversion = 1, bool statusCodeOK = true, bool weblog = true, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, HttpContent body = null)
         {
-            var loglines = new StringBuilder();
+            var loglines = sb.Value;
+            loglines.Clear();
 
             try
             {
@@ -685,7 +672,8 @@ namespace Shared.Engine
         #region BasePost
         async public static Task<(string content, HttpResponseMessage response)> BasePost(string url, HttpContent data, Encoding encoding = default, string cookie = null, int MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, List<HeadersModel> headers = null, WebProxy proxy = null, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, bool removeContentType = false, bool statusCodeOK = true)
         {
-            var loglines = new StringBuilder();
+            var loglines = sb.Value;
+            loglines.Clear();
 
             try
             {
@@ -815,7 +803,7 @@ namespace Shared.Engine
 
         async public static Task<T> Post<T>(string url, HttpContent data, string cookie = null, int timeoutSeconds = 15, List<HeadersModel> headers = null, Encoding encoding = default, WebProxy proxy = null, bool IgnoreDeserializeObject = false, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, int httpversion = 1, int MaxResponseContentBufferSize = 0, bool statusCodeOK = true)
         {
-            using (var ms = msm.GetStream())
+            using (var ms = PoolInvk.msm.GetStream())
             {
                 T result = default;
 
@@ -823,12 +811,17 @@ namespace Shared.Engine
                 {
                     try
                     {
-                        await e.stream.CopyToAsync(ms, 64_000, e.ct);
+                        await e.stream.CopyToAsync(ms, PoolInvk.bufferSize, e.ct);
                         ms.Position = 0;
 
-                        using (var streamReader = new StreamReader(ms))
+                        var encdg = encoding != default ? encoding : Encoding.UTF8;
+
+                        using (var streamReader = new StreamReader(ms, encdg, detectEncodingFromByteOrderMarks: false, bufferSize: PoolInvk.bufferSize))
                         {
-                            using (var jsonReader = new JsonTextReader(streamReader))
+                            using (var jsonReader = new JsonTextReader(streamReader)
+                            { 
+                                ArrayPool = new NewtonsoftCharArrayPool() 
+                            })
                             {
                                 var serializer = JsonSerializer.Create(
                                     IgnoreDeserializeObject ? jsonSettings : null
@@ -851,10 +844,11 @@ namespace Shared.Engine
         }
         #endregion
 
-        #region BasePostReaderAsync<T>
+        #region BasePostReaderAsync
         async public static Task<(bool success, HttpResponseMessage response)> BasePostReaderAsync(Action<(Stream stream, CancellationToken ct, StringBuilder loglines)> action, string url, HttpContent data, string cookie = null, int MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, List<HeadersModel> headers = null, WebProxy proxy = null, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, bool IgnoreDeserializeObject = false, bool statusCodeOK = true)
         {
-            var loglines = new StringBuilder();
+            var loglines = sb.Value;
+            loglines.Clear();
 
             try
             {
@@ -1028,9 +1022,9 @@ namespace Shared.Engine
 
                         using (var stream = await client.GetStreamAsync(url))
                         {
-                            using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                            using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PoolInvk.bufferSize))
                             {
-                                await stream.CopyToAsync(fileStream, 32_000);
+                                await stream.CopyToAsync(fileStream, PoolInvk.bufferSize);
                                 return true;
                             }
                         }
@@ -1099,7 +1093,7 @@ namespace Shared.Engine
             string patchlog = $"cache/logs/HttpClient_{dateLog}.log";
 
             if (logFileStream == null || !File.Exists(patchlog))
-                logFileStream = new FileStream(patchlog, FileMode.Append, FileAccess.Write, FileShare.Read);
+                logFileStream = new FileStream(patchlog, FileMode.Append, FileAccess.Write, FileShare.Read, PoolInvk.bufferSize);
 
             var buffer = Encoding.UTF8.GetBytes($"\n\n\n################################################################\n\n{log.ToString()}");
             logFileStream.Write(buffer, 0, buffer.Length);

@@ -2,6 +2,7 @@
 using Microsoft.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.Utilities;
 using Shared.Models;
 using Shared.Models.Base;
 using Shared.Models.Events;
@@ -32,8 +33,6 @@ namespace Shared.Engine
     public class RchClient
     {
         #region static
-        static readonly RecyclableMemoryStreamManager msm = new RecyclableMemoryStreamManager();
-
         static readonly Timer _checkConnectionTimer = new Timer(CheckConnection, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(4));
 
         static int _cronCheckConnectionWork = 0;
@@ -200,14 +199,31 @@ namespace Shared.Engine
         {
             try
             {
-                string json = await SendHub("eval", data, useDefaultHeaders: false).ConfigureAwait(false);
-                if (json == null)
-                    return default;
+                T result = default;
 
-                if (IgnoreDeserializeObject)
-                    return JsonConvert.DeserializeObject<T>(json, jsonSettings);
+                await SendHub("eval", data, useDefaultHeaders: false, msAction: ms =>
+                {
+                    try
+                    {
+                        using (var streamReader = new StreamReader(ms, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: PoolInvk.bufferSize))
+                        {
+                            using (var jsonReader = new JsonTextReader(streamReader)
+                            {
+                                ArrayPool = new NewtonsoftCharArrayPool()
+                            })
+                            {
+                                var serializer = JsonSerializer.Create(
+                                    IgnoreDeserializeObject ? jsonSettings : null
+                                );
 
-                return JsonConvert.DeserializeObject<T>(json);
+                                result = serializer.Deserialize<T>(jsonReader);
+                            }
+                        }
+                    }
+                    catch { }
+                }).ConfigureAwait(false);
+
+                return result;
             }
             catch
             {
@@ -252,14 +268,31 @@ namespace Shared.Engine
         {
             try
             {
-                string html = await SendHub(url, null, headers, useDefaultHeaders).ConfigureAwait(false);
-                if (html == null)
-                    return default;
+                T result = default;
 
-                if (IgnoreDeserializeObject)
-                    return JsonConvert.DeserializeObject<T>(html, jsonSettings);
+                await SendHub(url, null, headers, useDefaultHeaders, msAction: ms =>
+                {
+                    try
+                    {
+                        using (var streamReader = new StreamReader(ms, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: PoolInvk.bufferSize))
+                        {
+                            using (var jsonReader = new JsonTextReader(streamReader)
+                            {
+                                ArrayPool = new NewtonsoftCharArrayPool()
+                            })
+                            {
+                                var serializer = JsonSerializer.Create(
+                                    IgnoreDeserializeObject ? jsonSettings : null
+                                );
 
-                return JsonConvert.DeserializeObject<T>(html);
+                                result = serializer.Deserialize<T>(jsonReader);
+                            }
+                        }
+                    }
+                    catch { }
+                }).ConfigureAwait(false);
+
+                return result;
             }
             catch
             {
@@ -290,14 +323,31 @@ namespace Shared.Engine
         {
             try
             {
-                string json = await SendHub(url, data, headers, useDefaultHeaders).ConfigureAwait(false);
-                if (json == null)
-                    return default;
+                T result = default;
 
-                if (IgnoreDeserializeObject)
-                    return JsonConvert.DeserializeObject<T>(json, jsonSettings);
+                await SendHub(url, data, headers, useDefaultHeaders, msAction: ms =>
+                {
+                    try
+                    {
+                        using (var streamReader = new StreamReader(ms, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: PoolInvk.bufferSize))
+                        {
+                            using (var jsonReader = new JsonTextReader(streamReader)
+                            {
+                                ArrayPool = new NewtonsoftCharArrayPool()
+                            })
+                            {
+                                var serializer = JsonSerializer.Create(
+                                    IgnoreDeserializeObject ? jsonSettings : null
+                                );
 
-                return JsonConvert.DeserializeObject<T>(json);
+                                result = serializer.Deserialize<T>(jsonReader);
+                            }
+                        }
+                    }
+                    catch { }
+                }).ConfigureAwait(false);
+
+                return result;
             }
             catch
             {
@@ -307,7 +357,7 @@ namespace Shared.Engine
         #endregion
 
         #region SendHub
-        async Task<string> SendHub(string url, string data = null, List<HeadersModel> headers = null, bool useDefaultHeaders = true, bool returnHeaders = false, bool waiting = true, Action<ReadOnlySpan<char>> spanAction = null)
+        async Task<string> SendHub(string url, string data = null, List<HeadersModel> headers = null, bool useDefaultHeaders = true, bool returnHeaders = false, bool waiting = true, Action<ReadOnlySpan<char>> spanAction = null, Action<RecyclableMemoryStream> msAction = null)
         {
             if (hub == null)
                 return null;
@@ -322,7 +372,7 @@ namespace Shared.Engine
 
             string rchId = Guid.NewGuid().ToString();
 
-            using (var ms = msm.GetStream())
+            using (var ms = PoolInvk.msm.GetStream())
             {
                 try
                 {
@@ -402,25 +452,26 @@ namespace Shared.Engine
                         if (ms.Length == 0)
                             return null;
 
-                        var encoding = Encoding.UTF8;
-                        int charCount = encoding.GetMaxCharCount((int)ms.Length);
-
-                        using (IMemoryOwner<char> owner = MemoryPool<char>.Shared.Rent(charCount))
+                        if (msAction != null)
                         {
-                            using (var reader = new StreamReader(ms, encoding, detectEncodingFromByteOrderMarks: false))
-                            {
-                                int actualChars = reader.Read(owner.Memory.Span);
-                                ReadOnlySpan<char> result = owner.Memory.Span.Slice(0, actualChars);
-
-                                if (spanAction != null)
-                                {
-                                    spanAction.Invoke(result);
-                                    return null;
-                                }
-
-                                return result.ToString();
-                            }
+                            msAction.Invoke(ms);
+                            return null;
                         }
+
+                        string resultString = null;
+
+                        OwnerTo.Span(ms, Encoding.UTF8, span =>
+                        {
+                            if (spanAction != null)
+                            {
+                                spanAction.Invoke(span);
+                                return;
+                            }
+
+                            resultString = span.ToString();
+                        });
+
+                        return resultString;
                     }
                 }
                 catch
