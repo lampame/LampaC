@@ -6,7 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Shared;
 using Shared.Engine;
+using Shared.Engine.Pools;
+using Shared.Engine.Utilities;
 using Shared.Models.AppConf;
+using Shared.Models.Templates;
 using Shared.PlaywrightCore;
 using System;
 using System.Collections.Generic;
@@ -143,6 +146,36 @@ namespace Lampac.Controllers
                 {
                     clients = RchClient.clients.Count,
                     Ids = RchClient.rchIds.Count
+                },
+                pool = new
+                {
+                    msm = new
+                    {
+                        une = new
+                        {
+                            small = PoolInvk.msm.SmallPoolInUseSize,
+                            large = PoolInvk.msm.LargePoolInUseSize
+                        },
+                        free = new
+                        {
+                            PoolInvk.msm.SmallBlocksFree,
+                            PoolInvk.msm.SmallPoolFreeSize,
+                            PoolInvk.msm.LargeBuffersFree,
+                            PoolInvk.msm.LargePoolFreeSize
+                        }
+                    },
+                    StringBuilder = new
+                    {
+                        StringBuilderPool.Count,
+                        StringBuilderPool.GC
+                    },
+                    JsonConvert = JsonConvertPool.Count,
+                    UtilsTpl_Json = UtilsTpl.CountJson,
+                    //MemoryStream = new
+                    //{
+                    //    MemoryStreamPool.Count,
+                    //    MemoryStreamPool.GC
+                    //}
                 },
                 memoryCache = memoryCache.GetCurrentStatistics()
             });

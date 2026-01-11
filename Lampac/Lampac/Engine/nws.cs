@@ -365,35 +365,16 @@ namespace Lampac.Engine
 
                 using (var ms = PoolInvk.msm.GetStream())
                 {
-                    JsonSerializer.Serialize(ms, new { method, args = args ?? Array.Empty<object>() }, serializerOptions);
+                    JsonSerializer.Serialize(ms, new NwsSendModel(method, args = args ?? Array.Empty<object>()), serializerOptions);
                     ms.Position = 0;
 
                     if (connection.Socket.State == WebSocketState.Open)
                     {
-                        ReadOnlySequence<byte> seq = ms.GetReadOnlySequence();
-
                         using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
                         {
-                            if (seq.IsSingleSegment)
-                            {
-                                await connection.Socket
-                                    .SendAsync(seq.First, WebSocketMessageType.Text, true, cts.Token)
-                                    .ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                var pos = seq.Start;
-                                while (seq.TryGet(ref pos, out var mem))
-                                {
-                                    var next = pos;
-                                    bool hasMore = seq.TryGet(ref next, out _);
-                                    bool isLast = !hasMore;
-
-                                    await connection.Socket
-                                        .SendAsync(mem, WebSocketMessageType.Text, isLast, cts.Token)
-                                        .ConfigureAwait(false);
-                                }
-                            }
+                            await connection.Socket
+                                .SendAsync(ms.GetBuffer().AsMemory(0, (int)ms.Length), WebSocketMessageType.Text, true, cts.Token)
+                                .ConfigureAwait(false);
                         }
 
                         connection.UpdateActivity();
@@ -542,5 +523,19 @@ namespace Lampac.Engine
                 connection.Value.Cancel();
         }
         #endregion
+
+
+
+        readonly struct NwsSendModel
+        {
+            public string method { get; }
+            public object[] args { get; }
+
+            public NwsSendModel(string method, object[] args)
+            {
+                this.method = method;
+                this.args = args;
+            }
+        }
     }
 }

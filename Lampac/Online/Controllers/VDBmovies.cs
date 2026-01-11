@@ -14,8 +14,8 @@ namespace Online.Controllers
         {
             get
             {
-                if (AppInit.conf.multiaccess || databaseCache != null)
-                    return databaseCache ??= JsonHelper.ListReader<MovieDB>("data/cdnmovies.json", 105000);
+                if (AppInit.conf.multiaccess)
+                    return databaseCache ??= JsonHelper.ListReader<MovieDB>("data/cdnmovies.json", 130_000);
 
                 return JsonHelper.IEnumerableReader<MovieDB>("data/cdnmovies.json");
             }
@@ -184,7 +184,7 @@ namespace Online.Controllers
                             {
                                 if (!init.imitationHuman || route.Request.Url.EndsWith(".m3u8") || route.Request.Url.Contains("/cdn-cgi/challenge-platform/"))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                 }
                                 else

@@ -62,8 +62,8 @@ namespace Online.Controllers
         {
             get
             {
-                if (AppInit.conf.multiaccess || databaseCache != null)
-                    return databaseCache ??= JsonHelper.ListReader<DatumDB>("data/lumex.json", 105000);
+                if (AppInit.conf.multiaccess)
+                    return databaseCache ??= JsonHelper.ListReader<DatumDB>("data/lumex.json", 130_000);
 
                 return JsonHelper.IEnumerableReader<DatumDB>("data/lumex.json");
             }
@@ -200,7 +200,7 @@ namespace Online.Controllers
                                 {
                                     if (content_uri != null || browser.IsCompleted)
                                     {
-                                        PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                        PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                         await route.AbortAsync();
                                         return;
                                     }
