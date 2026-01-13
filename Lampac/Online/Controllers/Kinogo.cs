@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 using Shared.Models.Online.Settings;
 using Shared.PlaywrightCore;
 
@@ -13,7 +14,7 @@ namespace Online.Controllers
         {
             public string link { get; set; }
 
-            public SimilarTpl? similar { get; set; }
+            public SimilarTpl similar { get; set; }
         }
 
         [HttpGet]
@@ -32,16 +33,14 @@ namespace Online.Controllers
                 reset_search:
                 var search = await InvokeCacheResult<SearchModel>($"kinogo:search:{title}:{year}", 20, async e =>
                 {
-                    string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
+                    string search = rch?.enable == true
+                        ? await rch.Get($"{init.corsHost()}/search/{title}")
+                        : await PlaywrightBrowser.Get(init, $"{init.corsHost()}/search/{title}", proxy: proxy_data);
 
-                    string searchHtml = await httpHydra.Post($"{init.corsHost()}/index.php?do=search", data);
+                    var result = SearchResult(search, title, year);
 
-                    if (searchHtml == null)
-                        return e.Fail("search");
-
-                    var result = SearchResult(searchHtml, title, year);
                     if (result == null)
-                        return e.Fail("search-result");
+                        return e.Fail("search-result", refresh_proxy: true);
 
                     return e.Success(result);
                 });
@@ -62,24 +61,29 @@ namespace Online.Controllers
             #endregion
 
             if (string.IsNullOrEmpty(href))
-                return OnError();
+                return OnError("href");
 
             #region embed
             reset_embed:
+
             var cache = await InvokeCacheResult<JArray>(ipkey(href), 20, async e =>
             {
+                string embedUrl = null;
                 string targetHref = $"{init.corsHost()}/{href}";
 
-                string html = await httpHydra.Get(targetHref);
+                string iframe = rch?.enable == true
+                   ? await rch.Get(init.cors(targetHref))
+                   : await PlaywrightBrowser.Get(init, init.cors(targetHref));
 
-                if (html == null) 
-                    return e.Fail("html");
+                string iframeUri = Regex.Match(iframe, "<iframe [^>]+data-src=\"([^\"]+)\"").Groups[1].Value;
+                if (string.IsNullOrEmpty(iframeUri))
+                    return e.Fail("iframeUri", refresh_proxy: true);
 
-                string iframe = Regex.Match(html, "<iframe [^>]+data-src=\"([^\"]+)\"").Groups[1].Value;
-                if (string.IsNullOrEmpty(iframe))
-                    return e.Fail("iframe");
+                embedUrl = iframeUri.StartsWith("//") ? $"https:{iframeUri}" : iframeUri;
 
-                string embedUrl = iframe.StartsWith("//") ? $"https:{iframe}" : iframe;
+                if (string.IsNullOrEmpty(embedUrl))
+                    return e.Fail("embedUrl", refresh_proxy: true);
+
                 var embedHeaders = httpHeaders(init, HeadersModel.Init("referer", targetHref));
 
                 string embedHtml = rch?.enable == true
@@ -252,32 +256,34 @@ namespace Online.Controllers
         #endregion
 
         #region SearchResult
-        SearchModel SearchResult(string html, string title, int year)
+        SearchModel SearchResult(ReadOnlySpan<char> html, string title, int year)
         {
-            string stitle = StringConvert.SearchName(title);
-
-            var matches = Regex.Matches(html, "<div id=\"[0-9]+\" class=\"shortstory\">(.*?)<div class=\"shortstory__meta\">", RegexOptions.Singleline);
-            if (matches.Count == 0)
+            if (html.IsEmpty)
                 return null;
 
-            var similar = new SimilarTpl(matches.Count);
+            var rx = Rx.Matches("<div id=\"[0-9]+\" class=\"shortstory\">(.*?)<div class=\"shortstory__meta\">", html, 0, RegexOptions.Singleline);
+            if (rx.Count == 0)
+                return null;
+
+            string stitle = StringConvert.SearchName(title);
+
+            var similar = new SimilarTpl(rx.Count);
 
             string link = null;
 
-            foreach (Match match in matches)
+            foreach (var row in rx.Rows())
             {
-                string block = match.Groups[1].Value;
-                string href = Regex.Match(block, "<a href=\"https?://[^/]+/([^\"]+)\"").Groups[1].Value;
+                string href = row.Match("<a href=\"https?://[^/]+/([^\"]+)\"");
                 if (string.IsNullOrEmpty(href))
                     continue;
 
-                string name = Regex.Match(block, "<h2>([^<]+)</h2>").Groups[1].Value;
+                string name = row.Match("<h2>([^<]+)</h2>");
                 if (string.IsNullOrEmpty(name))
                     continue;
-                
-                string blockYear = Regex.Match(block, "Год выпуска:</b><a[^>]*>([0-9]{4})").Groups[1].Value;
 
-                string img = Regex.Match(block, "<img\\s+data-src=\"([^\"]+)\"").Groups[1].Value;
+                string blockYear = row.Match("Год выпуска:</b><a[^>]*>([0-9]{4})");
+
+                string img = row.Match("<img\\s+data-src=\"([^\"]+)\"");
                 if (!string.IsNullOrEmpty(img))
                     img = AppInit.conf.Kinogo.corsHost() + img;
 

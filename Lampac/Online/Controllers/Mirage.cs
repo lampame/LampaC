@@ -2,6 +2,7 @@
 using Microsoft.Playwright;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 using Shared.Models.Online.Settings;
 using Shared.PlaywrightCore;
 
@@ -324,19 +325,24 @@ namespace Online.Controllers
             string memKey = $"mirage:iframe:{token_movie}";
             if (!hybridCache.TryGetValue(memKey, out (JToken all, JToken active) cache))
             {
+                string json = null;
+
                 string uri = $"{init.linkhost}/?token_movie={token_movie}&token={init.token}";
                 string referer = $"https://lgfilm.fun/" + reffers[Random.Shared.Next(0, reffers.Length)];
 
-                string html = await httpHydra.Get(uri, safety: true, addheaders: HeadersModel.Init(
+                await httpHydra.GetSpan(uri, safety: true, addheaders: HeadersModel.Init(
                     ("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"),
                     ("referer", referer),
                     ("sec-fetch-dest", "iframe"),
                     ("sec-fetch-mode", "navigate"),
                     ("sec-fetch-site", "cross-site"),
                     ("upgrade-insecure-requests", "1")
-                ));
+                ), 
+                spanAction: html => 
+                {
+                    json = Rx.Match(html, "fileList = JSON.parse\\('([^\n\r]+)'\\);");
+                });
 
-                string json = Regex.Match(html ?? "", "fileList = JSON.parse\\('([^\n\r]+)'\\);").Groups[1].Value;
                 if (string.IsNullOrEmpty(json))
                     return default;
 
@@ -402,22 +408,46 @@ namespace Online.Controllers
                                     PostData = route.Request.PostDataBuffer
                                 }).ConfigureAwait(false);
 
-                                string body = await fetchResponse.TextAsync().ConfigureAwait(false);
+                                string json = await fetchResponse.TextAsync().ConfigureAwait(false);
 
                                 string targetStream = null;
-                                if (init.m4s)
-                                    targetStream = Regex.Match(body, "\"(2160|1440)\":\"([^\"]+)\"").Groups[2].Value;
+
+                                try
+                                {
+                                    foreach (var hlsSource in JsonConvert.DeserializeObject<JObject>(json)["hlsSource"])
+                                    {
+                                        // first or default
+                                        if (targetStream == null || hlsSource.Value<bool>("default"))
+                                        {
+                                            foreach (var q in hlsSource["quality"].ToObject<Dictionary<string, string>>())
+                                            {
+                                                if ((q.Key is "2160" or "1440") && !init.m4s)
+                                                    continue;
+
+                                                targetStream = q.Value;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
 
                                 if (string.IsNullOrWhiteSpace(targetStream))
-                                    targetStream = Regex.Match(body, "\"(1080|720)\":\"([^\"]+)\"").Groups[2].Value;
+                                {
+                                    if (init.m4s)
+                                        targetStream = Regex.Match(json, "\"(2160|1440)\":\"([^\"]+)\"").Groups[2].Value;
+
+                                    if (string.IsNullOrWhiteSpace(targetStream))
+                                        targetStream = Regex.Match(json, "\"(1080|720)\":\"([^\"]+)\"").Groups[2].Value;
+                                }
 
                                 if (!string.IsNullOrWhiteSpace(targetStream))
-                                    body = Regex.Replace(body, "\"(2160|1440|1080|720|480|360)\":\"[^\"]+\"", $"\"$1\":\"{targetStream}\"");
+                                    json = Regex.Replace(json, "\"(2160|1440|1080|720|480|360)\":\"[^\"]+\"", $"\"$1\":\"{targetStream}\"");
 
                                 await route.FulfillAsync(new RouteFulfillOptions
                                 {
                                     Status = fetchResponse.Status,
-                                    Body = body,
+                                    Body = json,
                                     Headers = fetchResponse.Headers
                                 }).ConfigureAwait(false);
                             }

@@ -160,7 +160,7 @@ namespace Lampac.Controllers
                     },
                     StringBuilder = new
                     {
-                        Rent = StringBuilderPool.RentCont,
+                        Rent = StringBuilderPool.RentNew,
                         Free = StringBuilderPool.FreeCont,
                         StringBuilderPool.GC
                     },
