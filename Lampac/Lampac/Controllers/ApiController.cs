@@ -525,7 +525,7 @@ namespace Lampac.Controllers
                     if (AppInit.conf.pirate_store)
                         sb = sb.Replace("{pirate_store}", FileCache.ReadAllText("plugins/pirate_store.js"));
 
-                    if (AppInit.conf.accsdb.enable)
+                    if (AppInit.conf.accsdb.enable || (!requestInfo.IsLocalIp && !AppInit.conf.WAF.allowExternalIpAccess))
                         sb = sb.Replace("{deny}", FileCache.ReadAllText("plugins/deny.js").Replace("{cubMesage}", AppInit.conf.accsdb.authMesage));
                 }
             }

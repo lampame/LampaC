@@ -99,6 +99,7 @@ namespace Lampac.Engine.Middlewares
             var req = new RequestModel()
             {
                 IsLocalRequest = IsLocalRequest,
+                IsLocalIp = Shared.Engine.Utilities.IPNetwork.IsLocalIp(clientIp),
                 IP = clientIp,
                 Country = cf_country,
                 Path = httpContext.Request.Path.Value,
@@ -219,12 +220,12 @@ namespace Lampac.Engine.Middlewares
                 <h5 class='card-title'>Укажите frontend для правильной обработки запроса</h5>
 				<br>
                 <p class='card-text'>Добавьте в init.conf следующий код:</p>
-                <pre style='background: #e9ecef;'><code>""listen"": {
+                <pre style='background: #e9ecef; padding: 1em;'><code>""listen"": {
   ""frontend"": ""cloudflare""
 }</code></pre>
 				<br>
                 <p class='card-text'>Либо отключите проверку CF-Connecting-IP:</p>
-                <pre style='background: #e9ecef;'><code>""listen"": {
+                <pre style='background: #e9ecef; padding: 1em;'><code>""listen"": {
   ""frontend"": ""off""
 }</code></pre>
 				<br>

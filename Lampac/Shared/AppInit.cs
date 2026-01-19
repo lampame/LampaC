@@ -412,7 +412,16 @@ namespace Shared
 
         public StaticacheConf Staticache { get; set; } = new StaticacheConf();
 
-        public WafConf WAF = new WafConf();
+        public WafConf WAF = new WafConf()
+        {
+            enable = true,
+            bruteForceProtection = true,
+            limit_map = new Dictionary<string, WafLimitMap>()
+            {
+                ["^/(tmdb|cub|dlna|transcoding|ts|proxy)"] = new WafLimitMap() { limit = 40, second = 1 },
+                [".*"] = new WafLimitMap() { limit = 10, second = 1 }
+            }
+        };
 
         public WebLogConf weblog = new WebLogConf();
 
@@ -540,7 +549,7 @@ namespace Shared
             intervalupdate = 90, // minute
             basetag = true, index = "lampa-main/index.html",
             git = "yumata/lampa",
-            tree = "edc8f61ed661d731fa60a16f2daef44909ae4938"
+            tree = "f498527d629c1e98455d8f13d963408caf29bcae"
         };
 
         public OnlineConf online = new OnlineConf()
@@ -567,7 +576,7 @@ namespace Shared
             denyMesage = "Добавьте {account_email} в init.conf или через {host}/admin",
             denyGroupMesage = "У вас нет прав для просмотра этой страницы",
             expiresMesage = "Время доступа для {account_email} истекло в {expires}",
-            maxip_hour = 15, maxrequest_hour = 500, maxlock_day = 3, blocked_hour = 36,
+            maxip_hour = 10, maxrequest_hour = 400, maxlock_day = 3, blocked_hour = 36,
             shared_daytime = 366*10, // 10 years
         };
 

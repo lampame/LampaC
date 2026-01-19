@@ -11,6 +11,8 @@ namespace Shared.Models
 
         public bool IsLocalRequest { get; set; }
 
+        public bool IsLocalIp { get; set; }
+
         public bool IsAnonymousRequest { get; set; }
 
         public string IP { get; set; }

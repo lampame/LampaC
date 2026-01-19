@@ -1,29 +1,31 @@
-﻿using System.Text;
+﻿using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Shared.Engine.Utilities
 {
     public static class OwnerTo
     {
-        static object _lock = new();
-
-        static char[] _buffer = new char[PoolInvk.rentCharMax];
-
-        public static void Span(Stream ms, Encoding encoding, Action<ReadOnlySpan<char>> spanAction)
+        public static unsafe void Span(Stream ms, Encoding encoding, Action<ReadOnlySpan<char>> spanAction)
         {
             try
             {
-                lock (_lock)
-                {
-                    int charCount = encoding.GetMaxCharCount((int)ms.Length);
-                    if (charCount > _buffer.Length)
-                        return;
+                int charCount = encoding.GetMaxCharCount((int)ms.Length);
+                if (charCount <= 0)
+                    return;
 
+                char* buffer = (char*)NativeMemory.Alloc((nuint)charCount, (nuint)sizeof(char));
+
+                try
+                {
                     using (var reader = new StreamReader(ms, encoding, detectEncodingFromByteOrderMarks: false, leaveOpen: true))
                     {
-                        int actual = reader.Read(_buffer, 0, _buffer.Length);
-
-                        spanAction(_buffer.AsSpan(0, actual));
+                        int actual = reader.Read(new Span<char>(buffer, charCount));
+                        spanAction(new ReadOnlySpan<char>(buffer, actual));
                     }
+                }
+                finally
+                {
+                    NativeMemory.Free(buffer);
                 }
             }
             catch { }

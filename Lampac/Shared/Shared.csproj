@@ -4,6 +4,7 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<OutputType>library</OutputType>
 		<IsPackable>true</IsPackable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>

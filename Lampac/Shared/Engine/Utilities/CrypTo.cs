@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -6,24 +6,23 @@ namespace Shared.Engine
 {
     public class CrypTo
     {
-        public static string md5(ReadOnlySpan<char> text)
+        public static unsafe string md5(ReadOnlySpan<char> text)
         {
             if (text.IsEmpty)
                 return string.Empty;
 
             int byteCount = Encoding.UTF8.GetByteCount(text);
 
-            byte[] rented = null;
-            Span<byte> utf8 = byteCount <= 512
-                ? stackalloc byte[byteCount]
-                : (rented = ArrayPool<byte>.Shared.Rent(PoolInvk.Rent(byteCount))).AsSpan(0, byteCount);
+            byte* nativeBuffer = (byte*)NativeMemory.Alloc((nuint)byteCount);
+            Span<byte> utf8 = new Span<byte>(nativeBuffer, byteCount);
 
             try
             {
                 Encoding.UTF8.GetBytes(text, utf8);
 
                 Span<byte> hash = stackalloc byte[16];     // MD5 = 16 байт
-                MD5.TryHashData(utf8, hash, out _);
+                if (!MD5.TryHashData(utf8, hash, out _))
+                    return string.Empty;
 
                 Span<char> hex = stackalloc char[32];      // 16 байт -> 32 hex-символа
                 if (!Convert.TryToHexStringLower(hash, hex, out _))
@@ -33,8 +32,7 @@ namespace Shared.Engine
             }
             finally
             {
-                if (rented is not null)
-                    ArrayPool<byte>.Shared.Return(rented);
+                NativeMemory.Free(nativeBuffer);
             }
         }
 

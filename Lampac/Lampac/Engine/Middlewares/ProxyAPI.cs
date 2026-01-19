@@ -316,15 +316,15 @@ namespace Lampac.Engine.Middlewares
                                             return;
                                         }
 
-                                        var array = await content.ReadAsByteArrayAsync(ctsHttp.Token).ConfigureAwait(false);
-                                        if (array == null)
+                                        string m3u8 = await content.ReadAsStringAsync(ctsHttp.Token).ConfigureAwait(false);
+                                        if (m3u8 == null)
                                         {
                                             httpContext.Response.StatusCode = 503;
                                             await httpContext.Response.WriteAsync("error array m3u8", ctsHttp.Token).ConfigureAwait(false);
                                             return;
                                         }
 
-                                        byte[] hlsArray = editm3u(Encoding.UTF8.GetString(array), httpContext, decryptLink);
+                                        byte[] hlsArray = editm3u(m3u8, httpContext, decryptLink);
 
                                         httpContext.Response.ContentType = contentType ?? "application/vnd.apple.mpegurl";
                                         httpContext.Response.StatusCode = (int)response.StatusCode;
@@ -381,15 +381,13 @@ namespace Lampac.Engine.Middlewares
                                             return;
                                         }
 
-                                        var array = await content.ReadAsByteArrayAsync(ctsHttp.Token).ConfigureAwait(false);
-                                        if (array == null)
+                                        string mpd = await content.ReadAsStringAsync(ctsHttp.Token).ConfigureAwait(false);
+                                        if (mpd == null)
                                         {
                                             httpContext.Response.StatusCode = 503;
                                             await httpContext.Response.WriteAsync("error array mpd", ctsHttp.Token).ConfigureAwait(false);
                                             return;
                                         }
-
-                                        string mpd = Encoding.UTF8.GetString(array);
 
                                         var m = Regex.Match(mpd, "<BaseURL>([^<]+)</BaseURL>");
                                         while (m.Success)
@@ -627,7 +625,7 @@ namespace Lampac.Engine.Middlewares
                 if (responseMessage.Content?.Headers != null)
                     responseMessage.Content.Headers.TryGetValues("Content-Type", out contentType);
 
-                string type = contentType?.FirstOrDefault()?.ToLower();
+                string type = contentType?.FirstOrDefault()?.ToLowerInvariant();
 
                 if (string.IsNullOrEmpty(type) || !AppInit.CompressionMimeTypes.Contains(type))
                     response.ContentLength = responseMessage.Content.Headers.ContentLength;
@@ -639,23 +637,23 @@ namespace Lampac.Engine.Middlewares
             {
                 foreach (var header in headers)
                 {
-                    string key = header.Key.ToLowerInvariant().Trim();
-
-                    if (key is "transfer-encoding" or "etag" or "connection" or "content-security-policy" or "content-disposition" or "content-length")
+                    if (header.Key.StartsWith("server", StringComparison.OrdinalIgnoreCase) || 
+                        header.Key.StartsWith("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.StartsWith("etag", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.StartsWith("connection", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.StartsWith("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.StartsWith("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.StartsWith("content-length", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (key.StartsWith("x-") || key.StartsWith("alt-"))
+                    if (header.Key.StartsWith("x-", StringComparison.OrdinalIgnoreCase) || 
+                        header.Key.StartsWith("alt-", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (key.StartsWith("access-control"))
+                    if (header.Key.StartsWith("access-control", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    string value = string.Empty;
-                    foreach (var val in header.Value)
-                        value += $"; {val}";
-
-                    response.Headers[key] = Regex.Replace(value, "^; ", "");
-                    //response.Headers[header.Key] = header.Value.ToArray();
+                    response.Headers[header.Key] = string.Join("; ", header.Value);
                 }
             }
             #endregion
