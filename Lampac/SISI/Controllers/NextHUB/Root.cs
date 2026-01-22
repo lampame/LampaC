@@ -36,7 +36,7 @@ namespace SISI.Controllers.NextHUB
             if (!File.Exists($"NextHUB/sites/{plugin}.yaml"))
                 return null;
 
-            var hybridCache = new HybridCache();
+            var hybridCache = IHybridCache.Get(null);
 
             string memKey = $"NextHUB:goInit:{plugin}";
             if (!hybridCache.TryGetValue(memKey, out NxtSettings init))

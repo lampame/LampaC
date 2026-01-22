@@ -1,6 +1,6 @@
 ﻿namespace Shared.Models.SISI.OnResult
 {
-    public struct OnErrorResult
+    public class OnErrorResult
     {
         public OnErrorResult(string msg)
         {

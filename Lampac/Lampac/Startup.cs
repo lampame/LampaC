@@ -441,6 +441,7 @@ namespace Lampac
 
             Shared.Startup.Configure(app, memory);
             HybridCache.Configure(memory);
+            HybridFileCache.Configure(memory);
             ProxyManager.Configure(memory);
 
             Http.httpClientFactory = httpClientFactory;

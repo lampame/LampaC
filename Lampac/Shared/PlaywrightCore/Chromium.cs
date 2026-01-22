@@ -1,6 +1,7 @@
 ﻿using Microsoft.Playwright;
 using Shared.Engine;
 using Shared.Models.Browser;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -18,7 +19,7 @@ namespace Shared.PlaywrightCore
             })
         };
 
-        static List<KeepopenPage> pages_keepopen = new();
+        static ConcurrentDictionary<KeepopenPage, byte> pages_keepopen = new();
 
         static IBrowserContext keepopen_context { get; set; }
 
@@ -224,7 +225,7 @@ namespace Shared.PlaywrightCore
 
                 if (pages_keepopen.Count > 0 && pages_keepopen.Count > init.context.min)
                 {
-                    foreach (var k in pages_keepopen.ToArray())
+                    foreach (var k in pages_keepopen.Keys)
                     {
                         if (init.context.min >= pages_keepopen.Count)
                             break;
@@ -233,10 +234,11 @@ namespace Shared.PlaywrightCore
                         {
                             try
                             {
-                                if (pages_keepopen.Remove(k))
+                                if (pages_keepopen.TryRemove(k, out _))
                                 {
-                                    await Task.Delay(TimeSpan.FromSeconds(20));
-                                    await k.context.CloseAsync();
+                                    _= Task.Delay(TimeSpan.FromSeconds(20))
+                                        .ContinueWith(t => k.context.CloseAsync())
+                                        .ConfigureAwait(false);
                                 }
                             }
                             catch { }
@@ -395,14 +397,14 @@ namespace Shared.PlaywrightCore
                     #region NewPageAsync
                     if (keepopen)
                     {
-                        foreach (var pg in pages_keepopen.ToArray())
+                        foreach (var pg in pages_keepopen.Keys)
                         {
                             if (pg.plugin == plugin)
                             {
                                 if (pg.proxy.ip != proxy.ip || pg.proxy.username != proxy.username || pg.proxy.password != proxy.password)
                                 {
                                     _ = pg.context.CloseAsync().ConfigureAwait(false);
-                                    pages_keepopen.Remove(pg);
+                                    pages_keepopen.TryRemove(pg, out _);
                                     continue;
                                 }
                             }
@@ -457,11 +459,11 @@ namespace Shared.PlaywrightCore
                         return page;
 
                     // один из контекстов уже использует этот прокси
-                    if (proxy != default && pages_keepopen.FirstOrDefault(i => i.proxy.ip == proxy.ip && i.proxy.username == proxy.username && i.proxy.password == proxy.password)?.proxy != default)
+                    if (proxy != default && pages_keepopen.Keys.FirstOrDefault(i => i.proxy.ip == proxy.ip && i.proxy.username == proxy.username && i.proxy.password == proxy.password)?.proxy != default)
                         return page;
 
                     keepopen_page = new KeepopenPage() { context = context, plugin = plugin, proxy = proxy };
-                    pages_keepopen.Add(keepopen_page);
+                    pages_keepopen.TryAdd(keepopen_page, 0);
                     return page;
                 }
                 else

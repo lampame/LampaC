@@ -22,6 +22,9 @@ namespace Lampac.Engine.Middlewares
     public class ProxyImg
     {
         #region ProxyImg
+        static readonly Regex rexPath = new Regex("/proxyimg([^/]+)?/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexRsize = new Regex("/proxyimg:([0-9]+):([0-9]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         static readonly FileSystemWatcher fileWatcher;
 
         static readonly ConcurrentDictionary<string, int> cacheFiles = new();
@@ -87,7 +90,7 @@ namespace Lampac.Engine.Middlewares
                 var init = AppInit.conf.serverproxy.image;
                 bool cacheimg = init.cache && AppInit.conf.mikrotik == false;
 
-                string servPath = Regex.Replace(httpContext.Request.Path.Value, "/proxyimg([^/]+)?/", "");
+                string servPath = rexPath.Replace(httpContext.Request.Path.Value, "");
                 string href = servPath + httpContext.Request.QueryString.Value;
 
                 #region Проверки
@@ -131,7 +134,7 @@ namespace Lampac.Engine.Middlewares
                     if (!cacheimg)
                         cacheimg = init.cache_rsize;
 
-                    var gimg = Regex.Match(httpContext.Request.Path.Value, "/proxyimg:([0-9]+):([0-9]+)").Groups;
+                    var gimg = rexRsize.Match(httpContext.Request.Path.Value).Groups;
                     width = int.Parse(gimg[1].Value);
                     height = int.Parse(gimg[2].Value);
                 }

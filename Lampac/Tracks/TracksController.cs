@@ -42,7 +42,7 @@ namespace Tracks.Controllers
         }
 
 
-        public static async Task<string> FfprobeJson(string host, HttpContext httpContext, HybridCache hybridCache, string media, bool showerror = false)
+        public static async Task<string> FfprobeJson(string host, HttpContext httpContext, IHybridCache hybridCache, string media, bool showerror = false)
         {
             string magnethash = null;
 

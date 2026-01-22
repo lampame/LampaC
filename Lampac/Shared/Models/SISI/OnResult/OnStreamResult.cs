@@ -1,10 +1,12 @@
-﻿namespace Shared.Models.SISI.OnResult
+﻿using Shared.Models.SISI.Base;
+
+namespace Shared.Models.SISI.OnResult
 {
-    public struct OnStreamResult
+    public class OnStreamResult
     {
         public OnStreamResult(int recomendsCount) 
         {
-            recomends = new OnResultPlaylistItem[recomendsCount];
+            recomends = new PlaylistItem[recomendsCount];
         }
 
         public Dictionary<string, string> qualitys { get; set; }
@@ -13,6 +15,6 @@
 
         public Dictionary<string, string> headers_stream { get; set; }
 
-        public OnResultPlaylistItem[] recomends { get; set; }
+        public PlaylistItem[] recomends { get; set; }
     }
 }

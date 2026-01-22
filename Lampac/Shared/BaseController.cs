@@ -34,14 +34,14 @@ namespace Shared
         protected ActionResult badInitMsg { get; set; }
 
         #region hybridCache
-        private HybridCache _hybridCache;
+        private IHybridCache _hybridCache;
 
-        protected HybridCache hybridCache
+        protected IHybridCache hybridCache
         {
             get
             {
                 if (_hybridCache == null)
-                    _hybridCache = new HybridCache(requestInfo);
+                    _hybridCache = IHybridCache.Get(requestInfo);
 
                 return _hybridCache;
             }
@@ -148,13 +148,35 @@ namespace Shared
         public List<HeadersModel> httpHeaders(string site, List<HeadersModel> _headers)
         {
             if (_headers == null || _headers.Count == 0)
-                return null;
+                return _headers;
 
+            #region проверка на changeHeaders
             bool changeHeaders = false;
-            var tempHeaders = new Dictionary<string, string>(_headers.Count);
+
+            foreach (var h in _headers)
+            {
+                if (string.IsNullOrEmpty(h.val) || string.IsNullOrEmpty(h.name))
+                    continue;
+
+                if (h.val.Contains("{account_email}") ||
+                    h.val.Contains("{ip}") ||
+                    h.val.Contains("{host}") ||
+                    h.val.Contains("{arg:") ||
+                    h.val.Contains("{head:") ||
+                    h.val.StartsWith("encrypt:"))
+                {
+                    changeHeaders = true;
+                    break;
+                }
+            }
+            #endregion
+
+            if (!changeHeaders && !InvkEvent.IsHttpHeaders())
+                return _headers;
+
+            var tempHeaders = new Dictionary<string, string>(_headers.Count, StringComparer.OrdinalIgnoreCase);
 
             string ip = requestInfo.IP;
-            string account_email = HttpContext.Request.Query["account_email"].ToString()?.ToLowerAndTrim() ?? string.Empty;
 
             foreach (var h in _headers)
             {
@@ -165,32 +187,21 @@ namespace Shared
 
                 if (val.Contains("{account_email}"))
                 {
-                    changeHeaders = true;
+                    string account_email = HttpContext.Request.Query["account_email"].ToString()?.ToLowerAndTrim() ?? string.Empty;
                     val = val.Replace("{account_email}", account_email);
                 }
 
                 if (val.Contains("{ip}"))
-                {
-                    changeHeaders = true;
                     val = val.Replace("{ip}", ip);
-                }
 
                 if (val.Contains("{host}"))
-                {
-                    changeHeaders = true;
                     val = val.Replace("{host}", site);
-                }
 
                 if (val.StartsWith("encrypt:"))
-                {
-                    changeHeaders = true;
-                    string encrypt = Regex.Match(val, "^encrypt:([^\n\r]+)").Groups[1].Value;
-                    val = BaseSettings.BaseDecrypt(encrypt);
-                }
+                    val = BaseSettings.BaseDecrypt(val.AsSpan().Slice(8));
 
                 if (val.Contains("{arg:"))
                 {
-                    changeHeaders = true;
                     foreach (Match m in Regex.Matches(val, "\\{arg:([^\\}]+)\\}"))
                     {
                         string _a = Regex.Match(HttpContext.Request.QueryString.Value, $"&{m.Groups[1].Value}=([^&]+)").Groups[1].Value;
@@ -200,7 +211,6 @@ namespace Shared
 
                 if (val.Contains("{head:"))
                 {
-                    changeHeaders = true;
                     foreach (Match m in Regex.Matches(val, "\\{head:([^\\}]+)\\}"))
                     {
                         if (HttpContext.Request.Headers.TryGetValue(m.Groups[1].Value, out var _h))
@@ -224,16 +234,10 @@ namespace Shared
             {
                 var eventHeaders = InvkEvent.HttpHeaders(new EventControllerHttpHeaders(site, tempHeaders, requestInfo, HttpContext.Request, HttpContext));
                 if (eventHeaders != null)
-                {
-                    changeHeaders = true;
                     tempHeaders = eventHeaders;
-                }
             }
 
-            if (changeHeaders)
-                return HeadersModel.InitOrNull(tempHeaders);
-
-            return _headers;
+            return HeadersModel.InitOrNull(tempHeaders);
         }
         #endregion
 
@@ -257,13 +261,14 @@ namespace Shared
                     return eventUri;
             }
 
-            if (width == 0 && height == 0 || plugin != null && init.rsize_disable != null && init.rsize_disable.Contains(plugin))
+            if ((width == 0 && height == 0) || (plugin != null && init.rsize_disable != null && init.rsize_disable.Contains(plugin)))
             {
                 if (!string.IsNullOrEmpty(init.bypass_host))
                 {
-                    string bypass_host = init.bypass_host
-                        .Replace("{sheme}", uri.StartsWith("https:") ? "https" : "http")
-                        .Replace("{uri}", Regex.Replace(uri, "^https?://", ""));
+                    string bypass_host = init.bypass_host.Replace("{sheme}", uri.StartsWith("https:") ? "https" : "http");
+
+                    if (bypass_host.Contains("{uri}"))
+                        bypass_host = bypass_host.Replace("{uri}", Regex.Replace(uri, "^https?://", ""));
 
                     if (bypass_host.Contains("{encrypt_uri}"))
                         bypass_host = bypass_host.Replace("{encrypt_uri}", ImgProxyToEncryptUri(HttpContext, uri, plugin, requestInfo.IP, headers));
@@ -276,11 +281,16 @@ namespace Shared
 
             if (!string.IsNullOrEmpty(init.rsize_host))
             {
-                string rsize_host = init.rsize_host
-                    .Replace("{width}", width.ToString())
-                    .Replace("{height}", height.ToString())
-                    .Replace("{sheme}", uri.StartsWith("https:") ? "https" : "http")
-                    .Replace("{uri}", Regex.Replace(uri, "^https?://", ""));
+                string rsize_host = init.rsize_host.Replace("{sheme}", uri.StartsWith("https:") ? "https" : "http");
+
+                if (rsize_host.Contains("{width}"))
+                    rsize_host = rsize_host.Replace("{width}", width.ToString());
+
+                if (rsize_host.Contains("{height}"))
+                    rsize_host = rsize_host.Replace("{height}", height.ToString());
+
+                if (rsize_host.Contains("{uri}"))
+                    rsize_host = rsize_host.Replace("{uri}", Regex.Replace(uri, "^https?://", ""));
 
                 if (rsize_host.Contains("{encrypt_uri}"))
                     rsize_host = rsize_host.Replace("{encrypt_uri}", ImgProxyToEncryptUri(HttpContext, uri, plugin, requestInfo.IP, headers));
@@ -307,7 +317,11 @@ namespace Shared
         public string HostStreamProxy(BaseSettings conf, string uri, List<HeadersModel> headers = null, WebProxy proxy = null, bool force_streamproxy = false, RchClient rch = null)
         {
             if (!AppInit.conf.serverproxy.enable || string.IsNullOrEmpty(uri) || conf == null)
-                return uri?.Split(" ")?[0]?.Trim();
+            {
+                return uri != null && uri.Contains(" ")
+                    ? uri.Split(" ")[0].Trim()
+                    : uri?.Trim();
+            }
 
             if (InvkEvent.IsHostStreamProxy())
             {
@@ -317,7 +331,11 @@ namespace Shared
             }
 
             if (conf.rhub && !conf.rhub_streamproxy)
-                return uri.Split(" ")[0].Trim();
+            {
+                return uri.Contains(" ")
+                    ? uri.Split(" ")[0].Trim()
+                    : uri.Trim();
+            }
 
             bool streamproxy = conf.streamproxy || conf.apnstream || conf.useproxystream || force_streamproxy;
 
@@ -382,7 +400,9 @@ namespace Shared
 
         static string apnlink(ApnConf apn, string uri, string ip, List<HeadersModel> headers)
         {
-            string link = uri.Split(" ")[0].Split("#")[0].Trim();
+            string link = uri.Contains(" ") || uri.Contains("#")
+                ? uri.Split(" ")[0].Split("#")[0].Trim()
+                : uri.Trim();
 
             if (apn.secure == "nginx")
             {

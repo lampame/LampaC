@@ -15,7 +15,7 @@ namespace Shared.Engine.Online
     {
         #region KodikInvoke
         static readonly ConcurrentDictionary<string, string> psingles = new ();
-        static readonly HybridCache hybridCache = new HybridCache();
+        static readonly IHybridCache hybridCache = IHybridCache.Get(null);
         readonly IEnumerable<Result> fallbackDatabase;
 
         string host;

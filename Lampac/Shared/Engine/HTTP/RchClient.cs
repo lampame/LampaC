@@ -403,7 +403,7 @@ namespace Shared.Engine
 
                 if (useDefaultHeaders && clientInfo.data.rch_info.rchtype == "apk")
                 {
-                    send_headers = new Dictionary<string, string>(Http.defaultUaHeaders)
+                    send_headers = new Dictionary<string, string>(Http.defaultUaHeaders, StringComparer.OrdinalIgnoreCase)
                     {
                         { "accept-language", "ru-RU,ru;q=0.9,uk-UA;q=0.8,uk;q=0.7,en-US;q=0.6,en;q=0.5" }
                     };
@@ -412,10 +412,10 @@ namespace Shared.Engine
                 if (headers != null)
                 {
                     if (send_headers == null)
-                        send_headers = new Dictionary<string, string>(headers.Count);
+                        send_headers = new Dictionary<string, string>(headers.Count, StringComparer.OrdinalIgnoreCase);
 
                     foreach (var h in headers)
-                        send_headers[h.name.ToLowerAndTrim()] = h.val;
+                        send_headers[h.name] = h.val;
                 }
 
                 if (send_headers != null && send_headers.Count > 0 && clientInfo.data.rch_info.rchtype != "apk")

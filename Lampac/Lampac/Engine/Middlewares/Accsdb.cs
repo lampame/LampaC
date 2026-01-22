@@ -13,7 +13,11 @@ namespace Lampac.Engine.Middlewares
 {
     public class Accsdb
     {
-        static readonly string jacpattern = "^/(api/v2.0/indexers|api/v1.0/|toloka|rutracker|rutor|torrentby|nnmclub|kinozal|bitru|selezen|megapeer|animelayer|anilibria|anifilm|toloka|lostfilm|bigfangroup|mazepa)";
+        static readonly Regex rexJac = new Regex("^/(api/v2.0/indexers|api/v1.0/|toloka|rutracker|rutor|torrentby|nnmclub|kinozal|bitru|selezen|megapeer|animelayer|anilibria|anifilm|toloka|lostfilm|bigfangroup|mazepa)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexStaticAssets = new Regex("\\.(js|css|ico|png|svg|jpe?g|woff|webmanifest)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexProxyPath = new Regex("/(proxy|proxyimg([^/]+)?)/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexTmdbPath = new Regex("^/tmdb/[^/]+/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexLockBypass = new Regex("^/(testaccsdb|proxy/|proxyimg|lifeevents|externalids|sisi/(bookmarks|historys)|(ts|transcoding|dlna|storage|bookmark|tmdb|cub)/|timecode)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         static Accsdb() 
         {
@@ -82,13 +86,15 @@ namespace Lampac.Engine.Middlewares
                 return _next(httpContext);
 
             #region jacred
-            if (!string.IsNullOrEmpty(AppInit.conf.apikey))
+            if (rexJac.IsMatch(httpContext.Request.Path.Value))
             {
-                if (Regex.IsMatch(httpContext.Request.Path.Value, jacpattern))
+                if (!string.IsNullOrEmpty(AppInit.conf.apikey))
                 {
                     if (AppInit.conf.apikey != httpContext.Request.Query["apikey"])
                         return Task.CompletedTask;
                 }
+
+                return _next(httpContext);
             }
             #endregion
 
@@ -111,9 +117,6 @@ namespace Lampac.Engine.Middlewares
                     return _next(httpContext);
                 }
 
-                if (Regex.IsMatch(httpContext.Request.Path.Value, jacpattern))
-                    return _next(httpContext);
-
                 bool limitip = false;
 
                 var user = requestInfo.user;
@@ -130,22 +133,22 @@ namespace Lampac.Engine.Middlewares
                 {
                     if (httpContext.Request.Path.Value.StartsWith("/proxy/") || httpContext.Request.Path.Value.StartsWith("/proxyimg"))
                     {
-                        string hash = Regex.Replace(httpContext.Request.Path.Value, "/(proxy|proxyimg([^/]+)?)/", "");
+                        string hash = rexProxyPath.Replace(httpContext.Request.Path.Value, "");
                         if (AppInit.conf.serverproxy.encrypt || ProxyLink.Decrypt(hash, requestInfo.IP)?.uri != null)
                             return _next(httpContext);
                     }
 
                     if (uri.StartsWith("/tmdb/api.themoviedb.org/") || uri.StartsWith("/tmdb/api/"))
                     {
-                        httpContext.Response.Redirect("https://api.themoviedb.org/" + Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/[^/]+/", ""));
+                        httpContext.Response.Redirect("https://api.themoviedb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                         return Task.CompletedTask;
                     }
 
-                    if (Regex.IsMatch(httpContext.Request.Path.Value, "\\.(js|css|ico|png|svg|jpe?g|woff|webmanifest)"))
+                    if (rexStaticAssets.IsMatch(httpContext.Request.Path.Value))
                     {
                         if (uri.StartsWith("/tmdb/image.tmdb.org/") || uri.StartsWith("/tmdb/img/"))
                         {
-                            httpContext.Response.Redirect("https://image.tmdb.org/" + Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/[^/]+/", ""));
+                            httpContext.Response.Redirect("https://image.tmdb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                             return Task.CompletedTask;
                         }
 
@@ -209,7 +212,7 @@ namespace Lampac.Engine.Middlewares
                 return islock;
             }
 
-            if (Regex.IsMatch(uri, "^/(testaccsdb|proxy/|proxyimg|lifeevents|externalids|sisi/(bookmarks|historys)|(ts|transcoding|dlna|storage|bookmark|tmdb|cub)/|timecode)"))
+            if (rexLockBypass.IsMatch(uri))
             {
                 islock = false;
                 return islock;

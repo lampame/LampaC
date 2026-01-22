@@ -153,6 +153,7 @@ namespace Lampac.Controllers
             return Json(new 
             {
                 HybridCache = HybridCache.Stat_ContTempDb,
+                HybridFileCache = HybridFileCache.Stat_ContTempDb,
                 ProxyLink = ProxyLink.Stat_ContLinks,
                 ProxyAPI = ProxyAPI.Stat_ContCacheFiles,
                 ProxyTmdb = ProxyTmdb.Stat_ContCacheFiles,

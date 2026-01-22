@@ -12,7 +12,7 @@ namespace JacRed.Engine
         #region Indexers
         async public static Task<List<TorrentDetails>> Indexers(string host, string query, string title, string title_original, int year, int is_serial, Dictionary<string, string> category)
         {
-            var hybridCache = new HybridCache();
+            var hybridCache = IHybridCache.Get(null);
 
             string mkey = $"JackettApi:{query}:{title}:{year}:{is_serial}";
             if (hybridCache.TryGetValue(mkey, out List<TorrentDetails> cache, inmemory: false))

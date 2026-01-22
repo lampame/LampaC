@@ -16,7 +16,7 @@ namespace Online.Controllers
                    init.corsHost(),
                    init.cookie,
                    httpHydra,
-                   streamfile => streamfile,
+                   streamfile => HostStreamProxy(streamfile),
                    requesterror: () => proxyManager?.Refresh()
                 );
             };

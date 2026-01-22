@@ -432,7 +432,7 @@ namespace Shared
 
         public HybridCacheConf cache = new HybridCacheConf() 
         {
-            type = "sql",  // mem|sql|hybrid
+            type = "sql",  // mem|sql|hybrid|fdb
             extend = -1,   // seconds (hybrid)
             reqIPs = 5
         };
@@ -576,7 +576,7 @@ namespace Shared
             intervalupdate = 90, // minute
             basetag = true, index = "lampa-main/index.html",
             git = "yumata/lampa",
-            tree = "f498527d629c1e98455d8f13d963408caf29bcae"
+            tree = "bcdbf2b094d6326decd774d4422a267a9b96383e"
         };
 
         public OnlineConf online = new OnlineConf()
@@ -1069,7 +1069,7 @@ namespace Shared
         /// api.vokino.org
         /// api.vokino.pro
         /// </summary>
-        public VokinoSettings VoKino { get; set; } = new VokinoSettings("VoKino", "http://api.vokino.pro", streamproxy: false)
+        public VokinoSettings VoKino { get; set; } = new VokinoSettings("VoKino", "http://api.vokino.org", streamproxy: false)
         {
             rchstreamproxy = "web",
             rhub_safety = false
@@ -1303,8 +1303,9 @@ namespace Shared
             httptimeout = 10
         };
 
-        public OnlinesSettings MoonAnime { get; set; } = new OnlinesSettings("MoonAnime", "kwwsv=22dsl1prrqdqlph1duw", token: ";98iHI0H5h4Ef05fd7640h9D4830:;3GIG0:6:F9E", rch_access: "apk", stream_access: "apk,cors,web") 
-        { 
+        public OnlinesSettings MoonAnime { get; set; } = new OnlinesSettings("MoonAnime", "kwwsv=22dsl1prrqdqlph1duw", token: ";98iHI0H5h4Ef05fd7640h9D4830:;3GIG0:6:F9E", rch_access: "apk", stream_access: "apk,cors") 
+        {
+            rchstreamproxy = "web",
             geo_hide = ["RU", "BY"] 
         };
 

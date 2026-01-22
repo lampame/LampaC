@@ -75,8 +75,8 @@ namespace Lampac.Engine.Middlewares
 
         public Task Invoke(HttpContext httpContext)
         {
-            var hybridCache = new HybridCache();
             var requestInfo = httpContext.Features.Get<RequestModel>();
+            var hybridCache = IHybridCache.Get(requestInfo);
 
             if (httpContext.Request.Path.Value.StartsWith("/tmdb/api/"))
                 return API(httpContext, hybridCache, requestInfo);
@@ -104,7 +104,7 @@ namespace Lampac.Engine.Middlewares
 
 
         #region API
-        async public Task API(HttpContext httpContex, HybridCache hybridCache, RequestModel requestInfo)
+        async public Task API(HttpContext httpContex, IHybridCache hybridCache, RequestModel requestInfo)
         {
             using (var ctsHttp = CancellationTokenSource.CreateLinkedTokenSource(httpContex.RequestAborted))
             {

@@ -11,7 +11,7 @@ using System.Threading;
 
 namespace Shared.Engine
 {
-    public class HybridCache
+    public class HybridCache : IHybridCache
     {
         #region static
         static readonly ThreadLocal<JsonSerializer> _serializer = new ThreadLocal<JsonSerializer>(JsonSerializer.CreateDefault);

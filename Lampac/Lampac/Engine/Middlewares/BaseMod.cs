@@ -92,6 +92,12 @@ namespace Lampac.Engine.Middlewares
                     continue;
                 }
 
+                if (path.StartsWith("/proxy/") || path.StartsWith("/proxyimg"))
+                {
+                    if (ch == ':' || ch == '+' || ch == '=')
+                        continue;
+                }
+
                 return false;
             }
 
@@ -121,7 +127,7 @@ namespace Lampac.Engine.Middlewares
             return true;
         }
 
-        static readonly ThreadLocal<StringBuilder> sbQueryValue = new(() => new StringBuilder(PoolInvk.rentChunk));
+        static readonly ThreadLocal<StringBuilder> sbQueryValue = new(() => new StringBuilder(256));
 
         static string ValidQueryValue(string name, StringValues values)
         {
@@ -136,6 +142,8 @@ namespace Lampac.Engine.Middlewares
             if (value.IsEmpty)
                 return string.Empty;
 
+            bool _newQuery = false;
+
             var sb = sbQueryValue.Value;
             sb.Clear();
 
@@ -146,6 +154,7 @@ namespace Lampac.Engine.Middlewares
                     ch == '-' || ch == '_' || ch == ' ' || // base
                     (ch >= '0' && ch <= '9') ||
                     ch == '@' || // email
+                    ch == '+' || // aes
                     char.IsLetter(ch) // ← любые буквы Unicode
                 )
                 {
@@ -166,9 +175,14 @@ namespace Lampac.Engine.Middlewares
                         continue;
                     }
                 }
+
+                _newQuery = true;
             }
 
-            return sb.ToString();
+            if (_newQuery)
+                return sb.ToString();
+
+            return values[0];
         }
         #endregion
     }

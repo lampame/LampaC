@@ -53,18 +53,19 @@ namespace Shared.Models.SQL
             }
         }
 
+        static readonly string _connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = "cache/HybridCache.sql",
+            Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 10,
+            Pooling = true
+        }.ToString();
+
         public static void ConfiguringDbBuilder(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
             {
-                optionsBuilder.UseSqlite(new SqliteConnectionStringBuilder
-                {
-                    DataSource = "cache/HybridCache.sql",
-                    Cache = SqliteCacheMode.Shared,
-                    DefaultTimeout = 10,
-                    Pooling = true
-                }.ToString());
-
+                optionsBuilder.UseSqlite(_connection);
                 optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
             }
         }

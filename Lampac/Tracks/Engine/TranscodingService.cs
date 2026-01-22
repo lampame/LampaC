@@ -100,7 +100,7 @@ namespace Tracks.Engine
             #region ffprobe
             JObject ffprobe = null;
 
-            string ffprobeJson = await TracksController.FfprobeJson(null, null, new HybridCache(), request.src);
+            string ffprobeJson = await TracksController.FfprobeJson(null, null, IHybridCache.Get(null), request.src);
             if (string.IsNullOrEmpty(ffprobeJson) || ffprobeJson == "{}")
                 return (null!, "ffprobe");
 

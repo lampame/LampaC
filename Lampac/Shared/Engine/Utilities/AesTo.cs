@@ -65,9 +65,9 @@ namespace Shared.Engine
             }
         }
 
-        public static string Decrypt(string cipherText)
+        public static string Decrypt(ReadOnlySpan<char> cipherText)
         {
-            if (string.IsNullOrWhiteSpace(cipherText))
+            if (cipherText.IsEmpty)
                 return null;
 
             try
@@ -75,7 +75,7 @@ namespace Shared.Engine
                 var state = tls.Value;
                 var aes = state.Aes;
 
-                if (!Convert.TryFromBase64String(cipherText, state.decryptCipherBuf, out int cipherLen))
+                if (!Convert.TryFromBase64Chars(cipherText, state.decryptCipherBuf, out int cipherLen))
                     return null;
 
                 // ВАЖНО: iv вторым параметром, destination третьим

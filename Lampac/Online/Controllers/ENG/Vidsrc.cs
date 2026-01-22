@@ -73,7 +73,7 @@ namespace Online.Controllers
                         catch { }
 
                         var lastHeaders_headers = httpHeaders(init.host, init.headers_stream);
-                        if (lastHeaders_headers.Count == 0)
+                        if (lastHeaders_headers == null || lastHeaders_headers.Count == 0)
                             lastHeaders_headers = lastHeaders;
 
                         string file = HostStreamProxy(data.Value<string>("source"), headers: lastHeaders_headers);
@@ -90,7 +90,7 @@ namespace Online.Controllers
                     return StatusCode(502);
 
                 var headers_stream = httpHeaders(init.host, init.headers_stream);
-                if (headers_stream.Count == 0)
+                if (headers_stream == null || headers_stream.Count == 0)
                     headers_stream = cache.headers;
 
                 string hls = HostStreamProxy(cache.m3u8, headers: headers_stream);

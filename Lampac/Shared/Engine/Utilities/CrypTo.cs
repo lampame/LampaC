@@ -6,12 +6,83 @@ namespace Shared.Engine
 {
     public class CrypTo
     {
+        #region md5 - StringBuilder
+        public static unsafe string md5(StringBuilder text)
+        {
+            if (text == null || text.Length == 0)
+                return string.Empty;
+
+            int byteCount = 0;
+            foreach (var chunk in text.GetChunks())
+            {
+                if (chunk.IsEmpty)
+                    continue;
+
+                byteCount += Encoding.UTF8.GetByteCount(chunk.Span);
+            }
+
+            if (byteCount == 0)
+                return string.Empty;
+
+            if (byteCount < 512)
+            {
+                Span<byte> utf8 = stackalloc byte[byteCount];
+                int offset = 0;
+
+                foreach (var chunk in text.GetChunks())
+                {
+                    if (chunk.IsEmpty)
+                        continue;
+
+                    offset += Encoding.UTF8.GetBytes(chunk.Span, utf8.Slice(offset));
+                }
+
+                Span<byte> hash = stackalloc byte[16];     // MD5 = 16 байт
+                if (!MD5.TryHashData(utf8, hash, out _))
+                    return string.Empty;
+
+                Span<char> hex = stackalloc char[32];      // 16 байт -> 32 hex-символа
+                if (!Convert.TryToHexStringLower(hash, hex, out _))
+                    return string.Empty;
+
+                return new string(hex);
+            }
+            else
+            {
+                char* nativeBuffer = (char*)NativeMemory.Alloc((nuint)(text.Length * sizeof(char)));
+                Span<char> buffer = new Span<char>(nativeBuffer, text.Length);
+
+                try
+                {
+                    int offset = 0;
+                    foreach (var chunk in text.GetChunks())
+                    {
+                        if (chunk.IsEmpty)
+                            continue;
+
+                        chunk.Span.CopyTo(buffer.Slice(offset));
+                        offset += chunk.Length;
+                    }
+
+                    return md5(buffer);
+                }
+                finally
+                {
+                    NativeMemory.Free(nativeBuffer);
+                }
+            }
+        }
+        #endregion
+
+        #region md5 - string
         public static unsafe string md5(ReadOnlySpan<char> text)
         {
             if (text.IsEmpty)
                 return string.Empty;
 
             int byteCount = Encoding.UTF8.GetByteCount(text);
+            if (byteCount < 512)
+                return md5Stack(text, byteCount);
 
             byte* nativeBuffer = (byte*)NativeMemory.Alloc((nuint)byteCount);
             Span<byte> utf8 = new Span<byte>(nativeBuffer, byteCount);
@@ -36,6 +107,25 @@ namespace Shared.Engine
             }
         }
 
+        static string md5Stack(ReadOnlySpan<char> text, int byteCount)
+        {
+            Span<byte> utf8 = stackalloc byte[byteCount];
+
+            Encoding.UTF8.GetBytes(text, utf8);
+
+            Span<byte> hash = stackalloc byte[16];     // MD5 = 16 байт
+            if (!MD5.TryHashData(utf8, hash, out _))
+                return string.Empty;
+
+            Span<char> hex = stackalloc char[32];      // 16 байт -> 32 hex-символа
+            if (!Convert.TryToHexStringLower(hash, hex, out _))
+                return string.Empty;
+
+            return new string(hex);
+        }
+        #endregion
+
+        #region md5File
         public static string md5File(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -60,7 +150,9 @@ namespace Shared.Engine
             }
             catch { return string.Empty; }
         }
+        #endregion
 
+        #region md5binary
         public static byte[] md5binary(string text)
         {
             if (text == null)
@@ -72,6 +164,7 @@ namespace Shared.Engine
                 return result;
             }
         }
+        #endregion
 
         public static string DecodeBase64(string base64Text)
         {

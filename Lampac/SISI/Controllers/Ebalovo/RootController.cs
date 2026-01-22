@@ -9,7 +9,7 @@ namespace SISI.Controllers.Ebalovo
             if (!Regex.IsMatch(host, "^https?://www\\."))
                 return host;
 
-            var hybridCache = new HybridCache();
+            var hybridCache = IHybridCache.Get(null);
             string backhost = "https://web.epalovo.com";
 
             string memkey = $"ebalovo:gohost:{host}";

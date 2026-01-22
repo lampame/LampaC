@@ -129,7 +129,7 @@ namespace Shared.Engine
 
         public static void DefaultRequestHeaders(string url, HttpRequestMessage client, string cookie, string referer, List<HeadersModel> headers, StringBuilder loglines, bool useDefaultHeaders = true)
         {
-            var addHeaders = new Dictionary<string, string>();
+            var addHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (useDefaultHeaders)
             {
@@ -148,19 +148,19 @@ namespace Shared.Engine
                 if (headers != null && headers.FirstOrDefault(i => i.name.Equals("user-agent", StringComparison.OrdinalIgnoreCase)) != null)
                 {
                     foreach (var h in defaultCommonHeaders)
-                        addHeaders.TryAdd(h.Key.ToLowerAndTrim(), h.Value);
+                        addHeaders.TryAdd(h.Key, h.Value);
                 }
                 else
                 {
                     foreach (var h in defaultFullHeaders)
-                        addHeaders.TryAdd(h.Key.ToLowerAndTrim(), h.Value);
+                        addHeaders.TryAdd(h.Key, h.Value);
                 }
             }
 
             if (headers != null)
             {
                 foreach (var h in headers)
-                    addHeaders[h.name.ToLowerAndTrim()] = h.val;
+                    addHeaders[h.name] = h.val;
             }
 
             if (NormalizeHeaders(addHeaders) is var normalizeHeaders && normalizeHeaders != null)

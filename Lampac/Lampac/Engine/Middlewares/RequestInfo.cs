@@ -48,18 +48,21 @@ namespace Lampac.Engine.Middlewares
             string clientIp = httpContext.Connection.RemoteIpAddress.ToString();
             bool IsLocalIp = Shared.Engine.Utilities.IPNetwork.IsLocalIp(clientIp);
 
-            if (httpContext.Request.Headers.TryGetValue("localrequest", out var _localpasswd))
+            if (httpContext.Request.Headers.TryGetValue("localrequest", out StringValues _localpasswd) && _localpasswd.Count > 0)
             {
                 if (!IsLocalIp && !AppInit.conf.BaseModule.allowExternalIpAccessToLocalRequest)
                     return httpContext.Response.WriteAsync("allowExternalIpAccessToLocalRequest false", httpContext.RequestAborted);
 
-                if (_localpasswd.ToString() != AppInit.rootPasswd)
+                if (_localpasswd[0] != AppInit.rootPasswd)
                     return httpContext.Response.WriteAsync("error passwd", httpContext.RequestAborted);
 
                 IsLocalRequest = true;
 
-                if (httpContext.Request.Headers.TryGetValue("x-client-ip", out var xip) && !string.IsNullOrEmpty(xip))
-                    clientIp = xip;
+                if (httpContext.Request.Headers.TryGetValue("x-client-ip", out StringValues xip) && xip.Count > 0)
+                {
+                    if (!string.IsNullOrEmpty(xip[0]))
+                        clientIp = xip[0];
+                }
             }
             else if (AppInit.conf.real_ip_cf || AppInit.conf.listen.frontend == "cloudflare")
             {
@@ -73,17 +76,26 @@ namespace Lampac.Engine.Middlewares
                         {
                             if (new System.Net.IPNetwork(cf.prefix, cf.prefixLength).Contains(clientIPAddress))
                             {
-                                if (httpContext.Request.Headers.TryGetValue("CF-Connecting-IP", out var xip) && !string.IsNullOrEmpty(xip))
-                                    clientIp = xip;
-
-                                if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Proto", out var xfp) && !string.IsNullOrEmpty(xfp))
+                                if (httpContext.Request.Headers.TryGetValue("CF-Connecting-IP", out StringValues xip) && xip.Count > 0)
                                 {
-                                    if (xfp == "http" || xfp == "https")
-                                        httpContext.Request.Scheme = xfp;
+                                    if (!string.IsNullOrEmpty(xip[0]))
+                                        clientIp = xip[0];
                                 }
 
-                                if (httpContext.Request.Headers.TryGetValue("CF-IPCountry", out var xcountry) && !string.IsNullOrEmpty(xcountry))
-                                    cf_country = xcountry;
+                                if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Proto", out StringValues xfp) && xfp.Count > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(xfp[0]))
+                                    {
+                                        if (xfp[0] == "http" || xfp[0] == "https")
+                                            httpContext.Request.Scheme = xfp;
+                                    }
+                                }
+
+                                if (httpContext.Request.Headers.TryGetValue("CF-IPCountry", out StringValues xcountry) && xcountry.Count > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(xcountry[0]))
+                                        cf_country = xcountry[0];
+                                }
 
                                 break;
                             }
@@ -107,8 +119,6 @@ namespace Lampac.Engine.Middlewares
                 IsLocalIp = IsLocalIp,
                 IP = clientIp,
                 Country = cf_country,
-                Path = httpContext.Request.Path.Value,
-                Query = httpContext.Request.QueryString.Value,
                 UserAgent = httpContext.Request.Headers.UserAgent
             };
 
@@ -162,6 +172,7 @@ namespace Lampac.Engine.Middlewares
         }
 
 
+        #region getuid
         static readonly string[] uids = ["token", "account_email", "uid", "box_mac"];
 
         static string getuid(HttpContext httpContext)
@@ -171,13 +182,38 @@ namespace Lampac.Engine.Middlewares
                 if (httpContext.Request.Query.ContainsKey(id))
                 {
                     StringValues val = httpContext.Request.Query[id];
-                    if (val.Count > 0)
-                        return Regex.Replace(val, "[^a-z0-9_+\\.\\-\\@\\=]", "", RegexOptions.IgnoreCase);
+                    if (val.Count > 0 && IsValidUid(val[0]))
+                        return val[0];
                 }
             }
 
             return null;
         }
+
+        static bool IsValidUid(ReadOnlySpan<char> value)
+        {
+            if (value.IsEmpty)
+                return false;
+
+            foreach (char ch in value)
+            {
+                if 
+                (
+                    (ch >= 'a' && ch <= 'z') || 
+                    (ch >= 'A' && ch <= 'Z') || 
+                    (ch >= '0' && ch <= '9') ||
+                    ch == '_' || ch == '+' || ch == '.' || ch == '-' || ch == '@' || ch == '='
+                )
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+        #endregion
 
 
         static string builderLog(HttpContext httpContext, RequestModel req)
@@ -194,7 +230,7 @@ namespace Lampac.Engine.Middlewares
         }
 
 
-        static string unknownFrontend = @"<!DOCTYPE html>
+        static readonly string unknownFrontend = @"<!DOCTYPE html>
 <html lang='ru'>
 <head>
     <meta charset='UTF-8'>

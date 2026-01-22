@@ -548,7 +548,7 @@ namespace Lampac.Engine.Middlewares
 
             #region Headers
             {
-                var addHeaders = new Dictionary<string, string[]>() 
+                var addHeaders = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase) 
                 {
                     ["accept"] = ["*/*"],
                     ["accept-language"] = ["ru-RU,ru;q=0.9,uk-UA;q=0.8,uk;q=0.7,en-US;q=0.6,en;q=0.5"]
@@ -557,7 +557,7 @@ namespace Lampac.Engine.Middlewares
                 if (headers != null && headers.Count > 0)
                 {
                     foreach (var h in headers)
-                        addHeaders[h.name.ToLowerAndTrim()] = [h.val];
+                        addHeaders[h.name] = [h.val];
                 }
 
                 if (ismedia)
@@ -569,9 +569,14 @@ namespace Lampac.Engine.Middlewares
                 {
                     foreach (var header in request.Headers)
                     {
-                        string key = header.Key.ToLowerAndTrim();
+                        string key = header.Key;
 
-                        if (key is "host" or "origin" or "user-agent" or "referer" or "content-disposition" or "accept-encoding")
+                        if (key.Equals("host", StringComparison.OrdinalIgnoreCase) ||
+                            key.Equals("origin", StringComparison.OrdinalIgnoreCase) ||
+                            key.Equals("user-agent", StringComparison.OrdinalIgnoreCase) ||
+                            key.Equals("referer", StringComparison.OrdinalIgnoreCase) ||
+                            key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                            key.Equals("accept-encoding", StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         if (key.StartsWith("x-"))
@@ -637,23 +642,38 @@ namespace Lampac.Engine.Middlewares
             {
                 foreach (var header in headers)
                 {
-                    if (header.Key.Equals("server", StringComparison.OrdinalIgnoreCase) || 
-                        header.Key.Equals("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("etag", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("connection", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("content-length", StringComparison.OrdinalIgnoreCase))
+                    string key = header.Key;
+
+                    if (key.Equals("server", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("etag", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("connection", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-length", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (header.Key.StartsWith("x-", StringComparison.OrdinalIgnoreCase) || 
-                        header.Key.StartsWith("alt-", StringComparison.OrdinalIgnoreCase))
+                    if (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase) ||
+                        key.StartsWith("alt-", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (header.Key.StartsWith("access-control", StringComparison.OrdinalIgnoreCase))
+                    if (key.StartsWith("access-control", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    response.Headers[header.Key] = string.Join("; ", header.Value);
+                    var values = header.Value;
+
+                    using (var e = values.GetEnumerator())
+                    {
+                        if (!e.MoveNext())
+                            continue;
+
+                        var first = e.Current;
+
+                        response.Headers[key] = e.MoveNext()
+                            ? string.Join("; ", values)
+                            : first;
+                    }
                 }
             }
             #endregion

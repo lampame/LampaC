@@ -200,12 +200,6 @@ namespace Shared
                 badInitMsg = await InvkEvent.BadInitialization(new EventBadInitialization(init, rch, requestInfo, host, HttpContext.Request, HttpContext, hybridCache));
                 if (badInitMsg != null)
                     return true;
-
-                if (!init.enable || init.rip)
-                {
-                    badInitMsg = OnError("disable", gbcache: false, statusCode: 403);
-                    return true;
-                }
             }
 
             if (NoAccessGroup(init, out string error_msg))
@@ -222,6 +216,12 @@ namespace Shared
                     badInitMsg = overridehost;
                     return true;
                 }
+            }
+
+            if (!init.enable || init.rip)
+            {
+                badInitMsg = OnError("disable", gbcache: false, statusCode: 403);
+                return true;
             }
 
             if (rch != null)

@@ -36,7 +36,7 @@ namespace Online.Controllers
                     return StatusCode(502);
 
                 var headers_stream = httpHeaders(init.host, init.headers_stream);
-                if (headers_stream.Count == 0)
+                if (headers_stream == null || headers_stream.Count == 0)
                     headers_stream = cache.headers;
 
                 string file = HostStreamProxy(cache.file, headers: headers_stream);

@@ -76,8 +76,8 @@ namespace Lampac.Engine.Middlewares
             {
                 ctsHttp.CancelAfter(TimeSpan.FromSeconds(30));
 
-                var hybridCache = new HybridCache();
                 var requestInfo = httpContext.Features.Get<RequestModel>();
+                var hybridCache = IHybridCache.Get(requestInfo);
 
                 var init = AppInit.conf.cub;
                 string domain = init.domain;
@@ -417,15 +417,19 @@ namespace Lampac.Engine.Middlewares
             #region Headers
             foreach (var header in request.Headers)
             {
-                string key = header.Key.ToLowerAndTrim();
+                string key = header.Key;
 
-                if (key is "host" or "origin" or "referer" or "content-disposition" or "accept-encoding")
+                if (key.Equals("host", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("origin", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("referer", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("accept-encoding", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (viewru && key == "cookie")
+                if (viewru && key.Equals("cookie", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (key.StartsWith("x-"))
+                if (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray()))
@@ -470,22 +474,37 @@ namespace Lampac.Engine.Middlewares
             {
                 foreach (var header in headers)
                 {
-                    string key = header.Key.ToLowerAndTrim();
+                    string key = header.Key;
 
-                    if (key is "transfer-encoding" or "etag" or "connection" or "content-security-policy" or "content-disposition" or "content-length")
+                    if (key.Equals("server", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("etag", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("connection", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-length", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (key.StartsWith("x-"))
+                    if (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase) ||
+                        key.StartsWith("alt-", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (key.Contains("access-control"))
+                    if (key.StartsWith("access-control", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    string value = string.Empty;
-                    foreach (var val in header.Value)
-                        value += $"; {val}";
+                    var values = header.Value;
 
-                    response.Headers[header.Key] = Regex.Replace(value, "^; ", "");
+                    using (var e = values.GetEnumerator())
+                    {
+                        if (!e.MoveNext())
+                            continue;
+
+                        var first = e.Current;
+
+                        response.Headers[key] = e.MoveNext()
+                            ? string.Join("; ", values)
+                            : first;
+                    }
                 }
             }
             #endregion

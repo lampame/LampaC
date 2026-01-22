@@ -14,6 +14,9 @@ namespace Lampac.Engine.Middlewares
             _next = next;
         }
 
+        static readonly Regex rexProxy = new Regex("^/(proxy-dash|cub|ts|kit|bind)(/|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexJs = new Regex("^/[a-zA-Z\\-]+\\.js", RegexOptions.Compiled);
+
         public Task Invoke(HttpContext httpContext)
         {
             var requestInfo = httpContext.Features.Get<RequestModel>();
@@ -28,10 +31,10 @@ namespace Lampac.Engine.Middlewares
             if (httpContext.Request.Path.Value == "/.well-known/appspecific/com.chrome.devtools.json")
                 requestInfo.IsAnonymousRequest = true;
 
-            if (Regex.IsMatch(httpContext.Request.Path.Value, "^/(proxy-dash|cub|ts|kit|bind)(/|$)", RegexOptions.IgnoreCase))
+            if (rexProxy.IsMatch(httpContext.Request.Path.Value))
                 requestInfo.IsAnonymousRequest = true;
 
-            if (Regex.IsMatch(httpContext.Request.Path.Value, "^/[a-zA-Z\\-]+\\.js"))
+            if (rexJs.IsMatch(httpContext.Request.Path.Value))
                 requestInfo.IsAnonymousRequest = true;
 
             return _next(httpContext);

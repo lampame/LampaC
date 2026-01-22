@@ -27,16 +27,17 @@ namespace Shared.Models.SQL
     {
         public DbSet<PlaywrightSqlModel> files { get; set; }
 
+        static readonly string _connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = "cache/Playwright.sql",
+            Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 10,
+            Pooling = true
+        }.ToString();
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite(new SqliteConnectionStringBuilder
-            {
-                DataSource = "cache/Playwright.sql",
-                Cache = SqliteCacheMode.Shared,
-                DefaultTimeout = 10,
-                Pooling = true
-            }.ToString());
-
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         }
 

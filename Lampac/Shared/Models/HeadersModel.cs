@@ -47,7 +47,7 @@
 
         public static List<HeadersModel> Init(IEnumerable<KeyValuePair<string, string>> headers)
         {
-            if (headers == null || headers.Count() == 0)
+            if (headers == null || !headers.Any())
                 return new List<HeadersModel>();
 
             var h = new List<HeadersModel>(headers.Count());

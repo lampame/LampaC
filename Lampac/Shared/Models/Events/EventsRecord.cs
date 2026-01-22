@@ -18,13 +18,13 @@ using System.Threading;
 
 namespace Shared.Models.Events
 {
-    public record EventLoadKit(BaseSettings defaultinit, BaseSettings init, JObject userconf, RequestModel requestInfo, HybridCache hybridCache);
+    public record EventLoadKit(BaseSettings defaultinit, BaseSettings init, JObject userconf, RequestModel requestInfo, IHybridCache hybridCache);
 
-    public record EventMiddleware(RequestModel requestInfo, HttpRequest request, HttpContext httpContext, HybridCache hybridCache, IMemoryCache memoryCache);
+    public record EventMiddleware(RequestModel requestInfo, HttpRequest request, HttpContext httpContext, IHybridCache hybridCache, IMemoryCache memoryCache);
 
-    public record EventBadInitialization(BaseSettings init, bool? rch, RequestModel requestInfo, string host, HttpRequest request, HttpContext httpContext, HybridCache hybridCache);
+    public record EventBadInitialization(BaseSettings init, bool? rch, RequestModel requestInfo, string host, HttpRequest request, HttpContext httpContext, IHybridCache hybridCache);
 
-    public record EventAppReplace(string source, string token, string arg, string host, RequestModel requestInfo, HttpRequest request, HybridCache hybridCache);
+    public record EventAppReplace(string source, string token, string arg, string host, RequestModel requestInfo, HttpRequest request, IHybridCache hybridCache);
 
     public record EventExternalids(string id, string imdb_id, string kinopoisk_id, int serial);
 
@@ -32,13 +32,13 @@ namespace Shared.Models.Events
 
     public record EventRedApi(TorrentDetails torrent);
 
-    public record EventPidTor(PidTorSettings init, RequestModel requestInfo, HybridCache hybridCache);
+    public record EventPidTor(PidTorSettings init, RequestModel requestInfo, IHybridCache hybridCache);
 
-    public record EventHostStreamProxy(BaseSettings conf, string uri, List<HeadersModel> headers, WebProxy proxy, RequestModel requestInfo, HttpContext httpContext, HybridCache hybridCache);
+    public record EventHostStreamProxy(BaseSettings conf, string uri, List<HeadersModel> headers, WebProxy proxy, RequestModel requestInfo, HttpContext httpContext, IHybridCache hybridCache);
 
     public record EventHostImgProxy(RequestModel requestInfo, HttpContext httpContext, string uri, int height, List<HeadersModel> headers, string plugin);
 
-    public record EventMyLocalIp(RequestModel requestInfo, HttpRequest request, HttpContext httpContext, HybridCache hybridCache);
+    public record EventMyLocalIp(RequestModel requestInfo, HttpRequest request, HttpContext httpContext, IHybridCache hybridCache);
 
     public record EventControllerHttpHeaders(string site, Dictionary<string, string> headers, RequestModel requestInfo, HttpRequest request, HttpContext httpContext);
 

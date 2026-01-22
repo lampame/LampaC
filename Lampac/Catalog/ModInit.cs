@@ -18,7 +18,7 @@ namespace Catalog
             site = site.ToLowerAndTrim();
             site = Regex.Replace(site, "[^a-z0-9\\-]", "", RegexOptions.IgnoreCase);
 
-            var hybridCache = new HybridCache();
+            var hybridCache = IHybridCache.Get(null);
 
             string memKey = $"catalog:goInit:{site}";
             if (!hybridCache.TryGetValue(memKey, out CatalogSettings init))

@@ -7,7 +7,7 @@ public static class Extensions
         if (headers == null)
             return null;
 
-        var result = new Dictionary<string, string>();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var h in headers)
             result.TryAdd(h.name, h.val);
 

@@ -45,5 +45,45 @@
 
             return false;
         }
+
+
+        public static ReadOnlySpan<char> ExtractHost(ReadOnlySpan<char> url)
+        {
+            int start = 0;
+            url = url.Trim();
+
+            int schemeIdx = url.IndexOf("://", StringComparison.Ordinal);
+            if (schemeIdx >= 0)
+            {
+                start = schemeIdx + 3;
+            }
+            else if (url.StartsWith("//", StringComparison.Ordinal))
+            {
+                start = 2;
+            }
+
+            ReadOnlySpan<char> rest = url.Slice(start);
+
+            int endRel = rest.IndexOfAny('/', '?', '#');
+            int end = (endRel < 0) ? url.Length : start + endRel;
+
+            // Срезаем порт: host:8080 -> host
+            var hostPort = url.Slice(start, end - start);
+
+            // IPv6: [::1]:8080 — аккуратнее: если начинается с '[', ищем ']'
+            if (!hostPort.IsEmpty && hostPort[0] == '[')
+            {
+                int rb = hostPort.IndexOf(']');
+                if (rb > 0)
+                    return hostPort.Slice(0, rb + 1); // включает ']'
+                return hostPort; // странный случай, но не падаем
+            }
+
+            int colon = hostPort.IndexOf(':');
+            if (colon >= 0)
+                return hostPort.Slice(0, colon);
+
+            return hostPort;
+        }
     }
 }

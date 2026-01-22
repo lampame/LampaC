@@ -6,8 +6,6 @@ using Shared.Models.SQL;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Shared.Engine
@@ -39,13 +37,13 @@ namespace Shared.Engine
 
             if (plugin == "posterapi")
             {
-                hash = AesTo.Encrypt(JsonSerializer.Serialize(new { u = uri_clear }));
+                hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload() { u = uri_clear }));
             }
             else if (!forceMd5 && AppInit.conf.serverproxy.encrypt_aes && (headers == null || headers.Count == 0) && proxy == null && !uri_clear.Contains(" or "))
             {
                 if (verifyip && AppInit.conf.serverproxy.verifyip)
                 {
-                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new
+                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload()
                     {
                         p = plugin,
                         u = uri_clear,
@@ -56,7 +54,7 @@ namespace Shared.Engine
                 }
                 else
                 {
-                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new { p = plugin, u = uri_clear }));
+                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload() { p = plugin, u = uri_clear }));
                 }
             }
             else
@@ -126,26 +124,34 @@ namespace Shared.Engine
 
             if (IsAes(hash))
             {
-                hash = Regex.Replace(hash, "\\.[a-z0-9]+$", "", RegexOptions.IgnoreCase);
+                ReadOnlySpan<char> hashSpan = hash.AsSpan();
+                int dot = hash.LastIndexOf('.');
+                if (dot > 0)
+                    hashSpan = hashSpan.Slice(0, dot);
 
-                string dec = AesTo.Decrypt(hash);
+                string dec = AesTo.Decrypt(hashSpan);
                 if (string.IsNullOrEmpty(dec))
                     return null;
 
-                var root = JsonNode.Parse(dec);
+                var root = JsonSerializer.Deserialize<AesPayload>(dec);
+                if (root == null)
+                    return null;
 
-                if (root["v"]?.GetValue<bool>() == true)
+                if (root.v)
                 {
-                    if (reqip != null && root["i"].GetValue<string>() != reqip)
+                    if (reqip != null && root.i != reqip)
                         return null;
 
-                    if (DateTime.Now > root["e"].GetValue<DateTime>())
+                    if (DateTime.Now > root.e)
                         return null;
                 }
 
-                var headers = HeadersModel.Init(root["h"]?.Deserialize<Dictionary<string, string>>());
+                List<HeadersModel> headers = null;
 
-                return new ProxyLinkModel(reqip, headers, null, root["u"].GetValue<string>(), root["p"]?.GetValue<string>());
+                if (root.h != null && root.h.Count > 0)
+                    headers = HeadersModel.Init(root.h);
+
+                return new ProxyLinkModel(reqip, headers, null, root.u, root.p);
             }
 
             if (!links.TryGetValue(hash, out ProxyLinkModel val))
@@ -183,20 +189,30 @@ namespace Shared.Engine
         #endregion
 
         #region IsAes
-        public static bool IsAes(string hash)
+        public static bool IsAes(ReadOnlySpan<char> hash)
         {
-            if (hash.StartsWith("http"))
+            if (hash.IsEmpty)
                 return false;
 
-            if (hash.Split('?', '&', '.')[0].Length == 32)
+            if (hash.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            return true;
+            // Ищем первый из ?, &, .
+            int idx = hash.IndexOfAny('?', '&', '.');
+
+            ReadOnlySpan<char> firstPart;
+            if (idx >= 0)
+                firstPart = hash.Slice(0, idx);
+            else
+                firstPart = hash;
+
+            // Если длина 32 — это не AES
+            return firstPart.Length != 32;
         }
         #endregion
 
         #region IsUseSql
-        static bool IsUseSql(string hash)
+        static bool IsUseSql(ReadOnlySpan<char> hash)
         {
             if (AppInit.conf.mikrotik)
                 return false;
@@ -204,10 +220,20 @@ namespace Shared.Engine
             bool useSql = true;
             if (AppInit.conf.serverproxy.image.noSqlDb)
             {
-                string extension = Regex.Match(hash, "\\.([a-z0-9]+)$", RegexOptions.IgnoreCase).Groups[1].Value;
+                int dot = hash.LastIndexOf('.');
+                if (dot > 0)
+                {
+                    ReadOnlySpan<char> ext = hash.Slice(dot + 1);
 
-                if (extension is "jpg" or "jpeg" or "png" or "webp")
-                    useSql = false;
+                    useSql = ext switch
+                    {
+                        var e when e.Equals("jpg", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("jpeg", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("png", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("webp", StringComparison.OrdinalIgnoreCase) => false,
+                        _ => true
+                    };
+                }
             }
 
             return useSql;
@@ -332,5 +358,18 @@ namespace Shared.Engine
             }
         }
         #endregion
+
+
+
+
+        sealed class AesPayload
+        {
+            public string p { get; set; }
+            public string u { get; set; }
+            public string i { get; set; }
+            public bool v { get; set; }
+            public DateTime e { get; set; }
+            public Dictionary<string, string> h { get; set; }
+        }
     }
 }

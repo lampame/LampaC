@@ -17,10 +17,6 @@ namespace Shared.Models
 
         public string IP { get; set; }
 
-        public string Path { get; set; }
-
-        public string Query { get; set; }
-
         public string UserAgent { get; set; }
 
         #region Country

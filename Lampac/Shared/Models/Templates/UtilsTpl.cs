@@ -45,20 +45,30 @@ namespace Shared.Models.Templates
 
                     int neededChars = Encoding.UTF8.GetCharCount(utf8);
 
-                    unsafe
+                    if (neededChars < 512)
                     {
-                        nint rentedJsonPtr = (nint)NativeMemory.Alloc((nuint)neededChars, (nuint)sizeof(char));
+                        Span<char> stackChars = stackalloc char[neededChars];
+                        int charsWritten = Encoding.UTF8.GetChars(utf8, stackChars);
+                        if (charsWritten > 0)
+                            sb.Append(stackChars.Slice(0, charsWritten));
+                    }
+                    else
+                    {
+                        unsafe
+                        {
+                            nint rentedJsonPtr = (nint)NativeMemory.Alloc((nuint)neededChars, (nuint)sizeof(char));
 
-                        try
-                        {
-                            Span<char> rentedChars = new Span<char>((void*)rentedJsonPtr, neededChars);
-                            int charsWritten = Encoding.UTF8.GetChars(utf8, rentedChars);
-                            if (charsWritten > 0)
-                                sb.Append(rentedChars.Slice(0, charsWritten));
-                        }
-                        finally
-                        {
-                            NativeMemory.Free((void*)rentedJsonPtr);
+                            try
+                            {
+                                Span<char> rentedChars = new Span<char>((void*)rentedJsonPtr, neededChars);
+                                int charsWritten = Encoding.UTF8.GetChars(utf8, rentedChars);
+                                if (charsWritten > 0)
+                                    sb.Append(rentedChars.Slice(0, charsWritten));
+                            }
+                            finally
+                            {
+                                NativeMemory.Free((void*)rentedJsonPtr);
+                            }
                         }
                     }
                 }
