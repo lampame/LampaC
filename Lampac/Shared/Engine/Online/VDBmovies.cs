@@ -217,11 +217,8 @@ namespace Shared.Engine.Online
                             if (string.IsNullOrEmpty(t))
                                 t = perevod;
 
-                            if (!hashvoices.Contains(perevod))
-                            {
-                                hashvoices.Add(perevod);
+                            if (hashvoices.Add(perevod))
                                 vtpl.Append(perevod, t == perevod, host + $"lite/vdbmovies?orid={orid}&imdb_id={imdb_id}&kinopoisk_id={kinopoisk_id}&rjson={rjson}&title={enc_title}&original_title={enc_original_title}&s={s}&sid={sid}&t={HttpUtility.UrlEncode(perevod)}");
-                            }
 
                             if (perevod != t)
                                 continue;

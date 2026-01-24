@@ -53,6 +53,7 @@ namespace SISI.Controllers.Runetki
 
             return await PlaylistResult(
                 cache.Value.playlists,
+                cache.ISingleCache,
                 RunetkiTo.Menu(host, sort),
                 total_pages: cache.Value.total_pages
             );

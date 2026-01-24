@@ -274,6 +274,9 @@ namespace Lampac.Engine.Middlewares
             var sb = sbQueryKeys.Value;
             sb.Clear();
 
+            sb.Append(httpContext.Request.Path.Value);
+            sb.Append(":");
+
             foreach (string key in keys)
             {
                 if (httpContext.Request.Query.TryGetValue(key, out StringValues value) && value.Count > 0)

@@ -36,6 +36,9 @@ namespace Lampac.Engine.Middlewares
             if (waf.whiteIps != null && waf.whiteIps.Contains(requestInfo.IP))
                 return _next(httpContext);
 
+            if (waf.bypassLocalIP && requestInfo.IsLocalIp)
+                return _next(httpContext);
+
             #region BruteForce
             if (waf.bruteForceProtection && !requestInfo.IsLocalIp)
             {
@@ -73,6 +76,43 @@ namespace Lampac.Engine.Middlewares
                 {
                     httpContext.Response.StatusCode = 403;
                     return Task.CompletedTask;
+                }
+            }
+            #endregion
+
+            #region ASN
+            if (waf.asnAllow != null)
+            {
+                // если мы не знаем asn или точно знаем, что он не в списке разрешенных
+                if (requestInfo.ASN == -1 || !waf.asnAllow.Contains(requestInfo.ASN))
+                {
+                    httpContext.Response.StatusCode = 403;
+                    return Task.CompletedTask;
+                }
+            }
+
+            if (waf.asnDeny != null)
+            {
+                if (waf.asnDeny.Contains(requestInfo.ASN))
+                {
+                    httpContext.Response.StatusCode = 403;
+                    return Task.CompletedTask;
+                }
+            }
+            #endregion
+
+            #region ASN Range Deny
+            if (waf.asnsDeny != null && requestInfo.ASN != -1)
+            {
+                long asn = requestInfo.ASN;
+
+                foreach (var r in waf.asnsDeny)
+                {
+                    if (asn >= r.start && asn <= r.end)
+                    {
+                        httpContext.Response.StatusCode = 403;
+                        return Task.CompletedTask;
+                    }
                 }
             }
             #endregion

@@ -5,8 +5,8 @@ using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.Playwright;
 using Newtonsoft.Json;
 using Shared.Models.CSharpGlobals;
-using Shared.PlaywrightCore;
 using Shared.Models.SISI.NextHUB;
+using Shared.PlaywrightCore;
 
 namespace SISI.Controllers.NextHUB
 {
@@ -76,7 +76,7 @@ namespace SISI.Controllers.NextHUB
                 };
 
                 if (related)
-                    return await PlaylistResult(stream_links?.recomends, null, total_pages: 1);
+                    return await PlaylistResult(stream_links?.recomends, false, null, total_pages: 1);
 
                 return OnResult(stream_links);
             });

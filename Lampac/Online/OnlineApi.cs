@@ -965,11 +965,8 @@ namespace Online.Controllers
                     send(conf.Zetflix);
             }
 
-            if (serial == -1 || serial == 0 || !string.IsNullOrEmpty(conf.FanCDN.token) || !string.IsNullOrEmpty(conf.FanCDN.overridehost) || conf.FanCDN.overridehosts?.Length > 0)
-            {
-                if (conf.FanCDN.rhub || conf.FanCDN.priorityBrowser == "http" || PlaywrightBrowser.Status != PlaywrightStatus.disabled || !string.IsNullOrEmpty(conf.FanCDN.overridehost) || conf.FanCDN.overridehosts?.Length > 0)
-                    send(conf.FanCDN);
-            }
+            if ((serial == -1 || serial == 0) && kinopoisk_id > 0)
+                send(conf.FanCDN);
 
             send(conf.VideoCDN);
 

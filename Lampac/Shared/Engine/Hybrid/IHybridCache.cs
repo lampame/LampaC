@@ -6,6 +6,8 @@ namespace Shared.Engine
     {
         bool TryGetValue<TItem>(string key, out TItem value, bool? inmemory = null);
 
+        HybridCacheEntry<TItem> Entry<TItem>(string key, bool? inmemory = null);
+
         TItem Set<TItem>(string key, TItem value, DateTimeOffset absoluteExpiration, bool? inmemory = null);
 
         TItem Set<TItem>(string key, TItem value, TimeSpan absoluteExpirationRelativeToNow, bool? inmemory = null);

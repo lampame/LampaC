@@ -63,6 +63,7 @@ namespace SISI.Controllers.XvideosRED
 
                 return await PlaylistResult(
                     playlists,
+                    false,
                     string.IsNullOrEmpty(search) ? XvideosTo.Menu(host, plugin, sort, c) : null
                 );
             });

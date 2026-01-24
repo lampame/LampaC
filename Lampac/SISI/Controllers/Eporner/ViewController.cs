@@ -28,7 +28,7 @@ namespace SISI.Controllers.Eporner
                 goto rhubFallback;
 
             if (related)
-                return await PlaylistResult(cache.Value?.recomends, null, total_pages: 1);
+                return await PlaylistResult(cache.Value?.recomends, cache.ISingleCache, null, total_pages: 1);
 
             return OnResult(cache);
         }

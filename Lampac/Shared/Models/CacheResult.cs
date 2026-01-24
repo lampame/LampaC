@@ -2,6 +2,8 @@
 {
     public class CacheResult<T>
     {
+        public bool ISingleCache { get; set; }
+
         public bool IsSuccess { get; set; }
 
         public string ErrorMsg { get; set; }

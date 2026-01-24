@@ -442,6 +442,7 @@ namespace Shared
         public WafConf WAF = new WafConf()
         {
             enable = true,
+            bypassLocalIP = true,
             bruteForceProtection = true,
             limit_map = new Dictionary<string, WafLimitMap>()
             {
@@ -577,7 +578,7 @@ namespace Shared
             intervalupdate = 90, // minute
             basetag = true, index = "lampa-main/index.html",
             git = "yumata/lampa",
-            tree = "bcdbf2b094d6326decd774d4422a267a9b96383e"
+            tree = "a02cdb6a678f724b8abf9f9ace35dfd3401d7b33"
         };
 
         public OnlineConf online = new OnlineConf()
@@ -987,6 +988,7 @@ namespace Shared
 
         public OnlinesSettings VDBmovies { get; set; } = new OnlinesSettings("VDBmovies", "kwwsv=22fgqprylhv0vwuhdp1rqolqh", streamproxy: true, rch_access: "apk", stream_access: "apk")
         {
+            enable = false,
             httpversion = 2,
             headers = HeadersModel.Init(Http.defaultFullHeaders,
                 ("sec-fetch-storage-access", "active"),
@@ -1002,9 +1004,9 @@ namespace Shared
             ).ToDictionary()
         };
 
-        public OnlinesSettings FanCDN { get; set; } = new OnlinesSettings("FanCDN", "kwwsv=22p|idqvhuldo1qhw", streamproxy: true, rch_access: "apk")
+        public OnlinesSettings FanCDN { get; set; } = new OnlinesSettings("FanCDN", "kwwsv=224idqvhuldov1qhw", streamproxy: true, rch_access: "apk")
         {
-            enable = false,
+            enable = true,
             rhub_safety = false,
             httpversion = 2,
             imitationHuman = true,
@@ -1013,8 +1015,8 @@ namespace Shared
                 ("upgrade-insecure-requests", "1")
             ).ToDictionary(),
             headers_stream = HeadersModel.Init(Http.defaultFullHeaders,
-                ("origin", "encrypt:kwwsv=22idqfgq1qhw"),
-                ("referer", "encrypt:kwwsv=22idqfgq1qhw2"),
+                ("origin", "{host}"),
+                ("referer", "{host}/"),
                 ("sec-fetch-dest", "empty"),
                 ("sec-fetch-mode", "cors"),
                 ("sec-fetch-site", "same-site")
@@ -1296,7 +1298,7 @@ namespace Shared
             ).ToDictionary()
         };
 
-        public OnlinesSettings AniMedia { get; set; } = new OnlinesSettings("AniMedia", "kwwsv=22dphgld1rqolqh");
+        public OnlinesSettings AniMedia { get; set; } = new OnlinesSettings("AniMedia", "kwwsv=22dpg1rqolqh");
 
         public OnlinesSettings Animevost { get; set; } = new OnlinesSettings("Animevost", "kwwsv=22dqlphyrvw1ruj", rch_access: "apk,cors", stream_access: "apk,cors")
         {

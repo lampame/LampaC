@@ -33,7 +33,8 @@ namespace SISI.Controllers.PornHubPremium
             }
 
             return await PlaylistResult(
-                cache.playlists, 
+                cache.playlists,
+                false,
                 string.IsNullOrEmpty(model) ? PornHubTo.Menu(host, "phubprem", search, sort, c, hd) : null, 
                 total_pages: cache.total_pages
             );

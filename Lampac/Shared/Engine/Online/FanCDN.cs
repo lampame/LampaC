@@ -14,13 +14,15 @@ namespace Shared.Engine.Online
         #region FanCDNInvoke
         string host;
         string apihost;
+        HttpHydra httpHydra;
         Func<string, Task<string>> onget;
         Func<string, string> onstreamfile;
 
-        public FanCDNInvoke(string host, string apihost, Func<string, Task<string>> onget, Func<string, string> onstreamfile)
+        public FanCDNInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, Task<string>> onget, Func<string, string> onstreamfile)
         {
             this.host = host != null ? $"{host}/" : null; this.apihost = apihost;
             this.onget = onget;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
         }
         #endregion
@@ -96,6 +98,22 @@ namespace Shared.Engine.Online
                 return null;
 
             return await Embed($"https://fancdn.net/iframe/?kinopoisk={kinopoisk_id}&key={token}");
+        }
+        #endregion
+
+        #region EmbedFilms
+        async public Task<EmbedModel> EmbedFilms(string host, long kinopoisk_id)
+        {
+            if (kinopoisk_id == 0)
+                return null;
+
+            string iframe_url = $"{host}/films.php?kp={kinopoisk_id}";
+
+            var movies = await httpHydra.Get<Episode[]>(iframe_url);
+            if (movies == null || movies.Length == 0)
+                return null;
+
+            return new EmbedModel() { movies = movies };
         }
         #endregion
 

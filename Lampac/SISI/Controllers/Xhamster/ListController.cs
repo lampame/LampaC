@@ -21,7 +21,8 @@ namespace SISI.Controllers.Xhamster
             string semaphoreKey = $"{plugin}:{search}:{sort}:{c}:{q}:{pg}";
             var semaphore = new SemaphorManager(semaphoreKey, TimeSpan.FromSeconds(30));
 
-            List<PlaylistItem> playlists;
+            List<PlaylistItem> playlists = null;
+            HybridCacheEntry<List<PlaylistItem>> entryCache;
 
             try
             {
@@ -29,13 +30,22 @@ namespace SISI.Controllers.Xhamster
                 if (rch?.enable != true)
                     await semaphore.WaitAsync();
 
+                entryCache = hybridCache.Entry<List<PlaylistItem>>(semaphoreKey);
+
                 // fallback cache
-                if (!hybridCache.TryGetValue(semaphoreKey, out playlists))
+                if (!entryCache.success)
                 {
                     string memKey = headerKeys(semaphoreKey, "accept");
 
-                    // user cache разделенный по ip
-                    if (rch == null || !hybridCache.TryGetValue(memKey, out playlists))
+                    bool next = rch == null;
+                    if (!next)
+                    {
+                        // user cache разделенный по ip
+                        entryCache = hybridCache.Entry<List<PlaylistItem>>(memKey);
+                        next = !entryCache.success;
+                    }
+
+                    if (next)
                     {
                         string url = XhamsterTo.Uri(init.corsHost(), plugin, search, c, q, sort, pg);
 
@@ -63,8 +73,12 @@ namespace SISI.Controllers.Xhamster
                 semaphore.Release();
             }
 
+            if (playlists == null)
+                playlists = entryCache.value;
+
             return await PlaylistResult(
                 playlists,
+                entryCache.singleCache,
                 string.IsNullOrEmpty(search) ? XhamsterTo.Menu(host, plugin, c, q, sort) : null
             );
         }

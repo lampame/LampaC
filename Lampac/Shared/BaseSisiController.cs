@@ -301,97 +301,120 @@ namespace Shared
 
             return await PlaylistResult(
                 cache.Value,
+                cache.ISingleCache,
                 menu,
                 total_pages
             );
         }
 
-        public async Task<ActionResult> PlaylistResult(IList<PlaylistItem> playlists, IList<MenuItem> menu, int total_pages = 0)
+        public async Task<ActionResult> PlaylistResult(IList<PlaylistItem> playlists, bool singleCache, IList<MenuItem> menu, int total_pages = 0)
         {
             if (playlists == null || playlists.Count == 0)
                 return OnError("playlists", false);
 
-            var ct = HttpContext.RequestAborted;
-
-            Response.ContentType = "application/json; charset=utf-8";
-            Response.Headers.CacheControl = "no-cache";
+            var msm = HttpContext.Features.Get<RecyclableMemoryStream>();
 
             var headers_stream = HeadersModel.InitOrNull(init.headers_stream);
             var headers_image = httpHeaders(init.host, HeadersModel.InitOrNull(init.headers_image));
 
-            var msm = HttpContext.Features.Get<RecyclableMemoryStream>();
-
-            using (var writer = new Utf8JsonWriter(msm != null ? msm : Response.BodyWriter, jsonWriterOptions))
+            if (singleCache && msm == null)
             {
-                writer.WriteStartObject();
-                writer.WriteNumber("count", playlists.Count);
-                writer.WriteNumber("totalPages", total_pages);
-
-                writer.WritePropertyName("menu");
-                JsonSerializer.Serialize(writer, menu ?? emptyMenu, SisiResultJsonContext.Default.ListMenuItem);
-
-                writer.WritePropertyName("list");
-                writer.WriteStartArray();
-
-                for (int i = 0; i < playlists.Count; i++)
+                foreach (var pl in playlists)
                 {
-                    ct.ThrowIfCancellationRequested();
+                    pl.picture = HostImgProxy(pl.picture, 0, headers_image, init.plugin);
 
-                    var pl = playlists[i];
-
-                    string video = pl.video.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                        ? pl.video
-                        : $"{host}/{pl.video}";
-
-                    if (!video.Contains(host, StringComparison.OrdinalIgnoreCase))
-                        video = HostStreamProxy(video, headers_stream);
-
-                    JsonSerializer.Serialize(writer, new OnResultPlaylistItem
+                    if (!pl.video.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                     {
-                        name = pl.name,
-                        video = video,
-                        model = pl.model != null
-                            ? new OnResultModel(pl.model.name, pl.model.uri)
-                            : null,
-                        picture = HostImgProxy(pl.picture, 0, headers_image, init.plugin),
-                        preview = pl.preview,
-                        time = pl.time,
-                        json = pl.json,
-                        related = pl.related,
-                        quality = pl.quality,
-                        qualitys = pl.qualitys,
-                        bookmark = pl.bookmark != null
-                            ? new OnResultBookmark(pl.bookmark.uid, pl.bookmark.site, pl.bookmark.image, pl.bookmark.href)
-                            : null,
-                        hide = pl.hide,
-                        myarg = pl.myarg
-                    }, SisiResultJsonContext.Default.OnResultPlaylistItem);
-
-                    // Cбрасываем накопленное из Utf8JsonWriter в транспорт
-                    if (msm == null && writer.BytesPending > 60_000)
+                        pl.video = $"{host}/{pl.video}";
+                    }
+                    else
                     {
-                        writer.Flush(); // flush в PipeWriter
-                        await Response.BodyWriter.FlushAsync(ct); // flush в транспорт
+                        if (!pl.video.Contains(host, StringComparison.OrdinalIgnoreCase))
+                            pl.video = HostStreamProxy(pl.video, headers_stream);
                     }
                 }
 
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-
-                writer.Flush();
-
-                if (msm != null)
-                {
-                    msm.Position = 0;
-                    await msm.CopyToAsync(Response.Body, PoolInvk.bufferSize, ct);
-                }
-                else
-                {
-                    await Response.BodyWriter.FlushAsync(ct);
-                }
+                return Json(new Channel() { list = playlists, menu = menu, total_pages = total_pages });
             }
+            else
+            {
+                var ct = HttpContext.RequestAborted;
 
-            return new EmptyResult();
+                Response.ContentType = "application/json; charset=utf-8";
+                Response.Headers.CacheControl = "no-cache";
+
+                using (var writer = new Utf8JsonWriter(msm != null ? msm : Response.BodyWriter, jsonWriterOptions))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("count", playlists.Count);
+                    writer.WriteNumber("totalPages", total_pages);
+
+                    writer.WritePropertyName("menu");
+                    JsonSerializer.Serialize(writer, menu ?? emptyMenu, SisiResultJsonContext.Default.ListMenuItem);
+
+                    writer.WritePropertyName("list");
+                    writer.WriteStartArray();
+
+                    for (int i = 0; i < playlists.Count; i++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        var pl = playlists[i];
+
+                        string video = pl.video.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? pl.video
+                            : $"{host}/{pl.video}";
+
+                        if (!video.Contains(host, StringComparison.OrdinalIgnoreCase))
+                            video = HostStreamProxy(video, headers_stream);
+
+                        JsonSerializer.Serialize(writer, new OnResultPlaylistItem
+                        {
+                            name = pl.name,
+                            video = video,
+                            model = pl.model != null
+                                ? new OnResultModel(pl.model.name, pl.model.uri)
+                                : null,
+                            picture = HostImgProxy(pl.picture, 0, headers_image, init.plugin),
+                            preview = pl.preview,
+                            time = pl.time,
+                            json = pl.json,
+                            related = pl.related,
+                            quality = pl.quality,
+                            qualitys = pl.qualitys,
+                            bookmark = pl.bookmark != null
+                                ? new OnResultBookmark(pl.bookmark.uid, pl.bookmark.site, pl.bookmark.image, pl.bookmark.href)
+                                : null,
+                            hide = pl.hide,
+                            myarg = pl.myarg
+                        }, SisiResultJsonContext.Default.OnResultPlaylistItem);
+
+                        // Cбрасываем накопленное из Utf8JsonWriter в транспорт
+                        if (msm == null && writer.BytesPending > 60_000)
+                        {
+                            writer.Flush(); // flush в PipeWriter
+                            await Response.BodyWriter.FlushAsync(ct); // flush в транспорт
+                        }
+                    }
+
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+
+                    writer.Flush();
+
+                    if (msm != null)
+                    {
+                        msm.Position = 0;
+                        await msm.CopyToAsync(Response.Body, PoolInvk.bufferSize, ct);
+                    }
+                    else
+                    {
+                        await Response.BodyWriter.FlushAsync(ct);
+                    }
+                }
+
+                return new EmptyResult();
+            }
         }
         #endregion
 

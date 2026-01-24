@@ -53,7 +53,7 @@ namespace Lampac.Engine.Middlewares
 
             #region valid query
             var builder = new QueryBuilder();
-            var dict = new Dictionary<string, StringValues>(StringComparer.Ordinal);
+            var dict = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
             var sbQuery = new StringBuilder(32);
 
             foreach (var q in context.Request.Query)
@@ -61,8 +61,9 @@ namespace Lampac.Engine.Middlewares
                 if (IsValidQueryName(q.Key))
                 {
                     string val = ValidQueryValue(sbQuery, q.Key, q.Value);
-                    builder.Add(q.Key, val);
-                    dict[q.Key] = val;
+
+                    if (dict.TryAdd(q.Key, val))
+                        builder.Add(q.Key, val);
                 }
             }
 
@@ -134,9 +135,6 @@ namespace Lampac.Engine.Middlewares
             if (values.Count == 0)
                 return string.Empty;
 
-            if (values.Count > 1)
-                return string.Empty;
-
             string value = values[0];
 
             if (string.IsNullOrEmpty(value))
@@ -148,7 +146,7 @@ namespace Lampac.Engine.Middlewares
             {
                 if (
                     ch == '/' || ch == ':' || ch == '?' || ch == '&' || ch == '=' || ch == '.' || // ссылки
-                    ch == '-' || ch == '_' || ch == ' ' || // base
+                    ch == '-' || ch == '_' || ch == ' ' || ch == ',' || // base
                     (ch >= '0' && ch <= '9') ||
                     ch == '@' || // email
                     ch == '+' || // aes
@@ -159,13 +157,13 @@ namespace Lampac.Engine.Middlewares
                     continue;
                 }
 
-                if (name is "title" or "original_title")
+                if (name is "title" or "original_title" or "t")
                 {
                     if (
                         char.IsDigit(ch) || // ← символ цифрой Unicode
                         ch == '\'' || ch == '!' || ch == ',' || ch == '+' || ch == '~' || ch == '"' || ch == ';' ||
                         ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '«' || ch == '»' || ch == '“' || ch == '”' ||
-                        ch == '$' || ch == '%' || ch == '^' || ch == '|' || ch == '#'
+                        ch == '$' || ch == '%' || ch == '^' || ch == '|' || ch == '#' || ch == '×'
                     )
                     {
                         sb.Append(ch);

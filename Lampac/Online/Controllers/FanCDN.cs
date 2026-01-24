@@ -18,15 +18,18 @@ namespace Online.Controllers
             if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            if (string.IsNullOrEmpty(init.token) && string.IsNullOrEmpty(init.cookie))
+            if (kinopoisk_id == 0 || serial == 1)
                 return OnError();
 
             var oninvk = new FanCDNInvoke
             (
                host,
                init.host,
+               httpHydra,
                async ongettourl => 
                {
+                   return await httpHydra.Get(ongettourl);
+
                    if (ongettourl.Contains("fancdn."))
                        return await black_magic(init.cors(ongettourl));
 
@@ -101,9 +104,11 @@ namespace Online.Controllers
             rhubFallback:
             var cache = await InvokeCacheResult<EmbedModel>(ipkey($"fancdn:{title}"), 20, async e =>
             {
-                var result = !string.IsNullOrEmpty(init.token) && kinopoisk_id > 0 
-                    ? await oninvk.EmbedToken(kinopoisk_id, init.token) 
-                    : await oninvk.EmbedSearch(title, original_title, year, serial);
+                //var result = !string.IsNullOrEmpty(init.token) && kinopoisk_id > 0 
+                //    ? await oninvk.EmbedToken(kinopoisk_id, init.token) 
+                //    : await oninvk.EmbedSearch(title, original_title, year, serial);
+
+                var result = await oninvk.EmbedFilms(init.corsHost(), kinopoisk_id);
 
                 if (result == null)
                     return e.Fail("result");
@@ -114,7 +119,9 @@ namespace Online.Controllers
             if (IsRhubFallback(cache, safety: true))
                 goto rhubFallback;
 
-            return await ContentTpl(cache, () => oninvk.Tpl(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init)));
+            return await ContentTpl(cache, 
+                () => oninvk.Tpl(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init))
+            );
         }
 
 

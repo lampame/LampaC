@@ -18,7 +18,8 @@ namespace SISI.Controllers.Eporner
             string semaphoreKey = $"epr:{search}:{sort}:{c}:{pg}";
             var semaphore = new SemaphorManager(semaphoreKey, TimeSpan.FromSeconds(30));
 
-            List<PlaylistItem> playlists;
+            List<PlaylistItem> playlists = null;
+            HybridCacheEntry<List<PlaylistItem>> entryCache;
 
             try
             {
@@ -27,13 +28,22 @@ namespace SISI.Controllers.Eporner
                 if (rch?.enable != true)
                     await semaphore.WaitAsync();
 
+                entryCache = hybridCache.Entry<List<PlaylistItem>>(semaphoreKey);
+
                 // fallback cache
-                if (!hybridCache.TryGetValue(semaphoreKey, out playlists))
+                if (!entryCache.success)
                 {
                     string memKey = headerKeys(semaphoreKey, "accept");
 
-                    // user cache разделенный по ip
-                    if (rch == null || !hybridCache.TryGetValue(memKey, out playlists))
+                    bool next = rch == null;
+                    if (!next)
+                    {
+                        // user cache разделенный по ip
+                        entryCache = hybridCache.Entry<List<PlaylistItem>>(memKey);
+                        next = !entryCache.success;
+                    }
+
+                    if (next)
                     {
                         string url = EpornerTo.Uri(init.corsHost(), search, sort, c, pg);
 
@@ -61,8 +71,12 @@ namespace SISI.Controllers.Eporner
                 semaphore.Release();
             }
 
+            if (playlists == null)
+                playlists = entryCache.value;
+
             return await PlaylistResult(
                 playlists,
+                entryCache.singleCache,
                 EpornerTo.Menu(host, search, sort, c)
             );
         }

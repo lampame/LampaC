@@ -186,17 +186,31 @@ namespace Shared.Engine
             if (memoryCache.TryGetValue(key, out value))
                 return true;
 
-            if (ReadCache(key, out value))
+            if (ReadCache(key, out value, out _))
                 return true;
 
             return false;
         }
         #endregion
+        
+        #region Entry
+        public HybridCacheEntry<TItem> Entry<TItem>(string key, bool? inmemory = null)
+        {
+            if (memoryCache.TryGetValue(key, out TItem value))
+                return new HybridCacheEntry<TItem>(true, value, false);
+
+            if (ReadCache(key, out value, out bool singleCache))
+                return new HybridCacheEntry<TItem>(true, value, singleCache);
+
+            return new HybridCacheEntry<TItem>(false, default, false);
+        }
+        #endregion
 
         #region ReadCache
-        private bool ReadCache<TItem>(string key, out TItem value)
+        private bool ReadCache<TItem>(string key, out TItem value, out bool singleCache)
         {
             value = default;
+            singleCache = false;
 
             var type = typeof(TItem);
             bool isText = type == typeof(string);
@@ -246,6 +260,7 @@ namespace Shared.Engine
                                         ArrayPool = NewtonsoftPool.Array
                                     })
                                     {
+                                        singleCache = true;
                                         var serializer = _serializer.Value;
 
                                         if (IsCapacityCollection(type) && _cache.capacity > 0)
@@ -272,6 +287,7 @@ namespace Shared.Engine
                     }
                     else
                     {
+                        singleCache = true;
                         string val = File.ReadAllText(path);
 
                         if (typeof(TItem) == typeof(string))

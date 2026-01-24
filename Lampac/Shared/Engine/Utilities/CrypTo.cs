@@ -75,7 +75,7 @@ namespace Shared.Engine
         #endregion
 
         #region md5 - string
-        public static unsafe string md5(ReadOnlySpan<char> text)
+        public static string md5(ReadOnlySpan<char> text)
         {
             if (text.IsEmpty)
                 return string.Empty;
@@ -84,6 +84,11 @@ namespace Shared.Engine
             if (byteCount < 512)
                 return md5Stack(text, byteCount);
 
+            return md5Native(text, byteCount);
+        }
+
+        static unsafe string md5Native(ReadOnlySpan<char> text, int byteCount)
+        {
             byte* nativeBuffer = (byte*)NativeMemory.Alloc((nuint)byteCount);
             Span<byte> utf8 = new Span<byte>(nativeBuffer, byteCount);
 

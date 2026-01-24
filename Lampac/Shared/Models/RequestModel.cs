@@ -48,6 +48,22 @@ namespace Shared.Models
         }
         #endregion
 
+        #region ASN
+        private long? _asn = null;
+        public long ASN
+        {
+            get
+            {
+                if (_asn != null)
+                    return _asn.Value;
+
+                _asn = GeoIP2.ASN(IP);
+
+                return _asn.Value;
+            }
+        }
+        #endregion
+
         public AccsUser user { get; set; }
 
         public string user_uid { get; set; }

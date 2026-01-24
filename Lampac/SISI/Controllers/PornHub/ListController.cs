@@ -21,7 +21,8 @@ namespace SISI.Controllers.PornHub
             string semaphoreKey = $"{plugin}:list:{search}:{model}:{sort}:{c}:{pg}";
             var semaphore = new SemaphorManager(semaphoreKey, TimeSpan.FromSeconds(30));
 
-            (int total_pages, List<PlaylistItem> playlists) cache;
+            PlaylistAndPage cache = null;
+            HybridCacheEntry<PlaylistAndPage> entryCache;
 
             try
             {
@@ -29,23 +30,34 @@ namespace SISI.Controllers.PornHub
                 if (rch?.enable != true)
                     await semaphore.WaitAsync();
 
+                entryCache = hybridCache.Entry<PlaylistAndPage>(semaphoreKey);
+
                 // fallback cache
-                if (!hybridCache.TryGetValue(semaphoreKey, out cache))
+                if (!entryCache.success)
                 {
                     string memKey = headerKeys(semaphoreKey, "accept");
 
-                    // user cache разделенный по ip
-                    if (rch == null || !hybridCache.TryGetValue(memKey, out cache))
+                    bool next = rch == null;
+                    if (!next)
+                    {
+                        // user cache разделенный по ip
+                        entryCache = hybridCache.Entry<PlaylistAndPage>(memKey);
+                        next = !entryCache.success;
+                    }
+
+                    if (next)
                     {
                         string uri = PornHubTo.Uri(init.corsHost(), plugin, search, model, sort, c, null, pg);
 
                         await httpHydra.GetSpan(uri, span => 
                         {
-                            cache.total_pages = PornHubTo.Pages(span);
-                            cache.playlists = PornHubTo.Playlist("phub/vidosik", "phub", span, IsModel_page: !string.IsNullOrEmpty(model));
+                            cache = new PlaylistAndPage(
+                                PornHubTo.Pages(span), 
+                                PornHubTo.Playlist("phub/vidosik", "phub", span, IsModel_page: !string.IsNullOrEmpty(model))
+                            );
                         });
 
-                        if (cache.playlists == null || cache.playlists.Count == 0)
+                        if (cache?.playlists == null || cache.playlists.Count == 0)
                         {
                             if (IsRhubFallback())
                                 goto reset;
@@ -64,8 +76,12 @@ namespace SISI.Controllers.PornHub
                 semaphore.Release();
             }
 
+            if (cache == null)
+                cache = entryCache.value;
+
             return await PlaylistResult(
                 cache.playlists,
+                entryCache.singleCache,
                 string.IsNullOrEmpty(model) ? PornHubTo.Menu(host, plugin, search, sort, c) : null,
                 total_pages: cache.total_pages
             );

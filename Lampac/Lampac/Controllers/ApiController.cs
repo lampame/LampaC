@@ -133,6 +133,7 @@ namespace Lampac.Controllers
 
         #region testaccsdb
         [HttpGet]
+        [HttpPost]
         [Route("/testaccsdb")]
         public ActionResult TestAccsdb(string account_email, string uid) 
         {

@@ -204,7 +204,25 @@ namespace Online.Controllers
                             });
 
                             PlaywrightBase.GotoAsync(page, uri);
-                            cache.m3u8 = await browser.WaitPageResult(20);
+
+                            for (int i = 0; i < 10 * 15; i++) // 15 second
+                            {
+                                if (browser.IsCompleted)
+                                    break;
+
+                                try
+                                {
+                                    var playBtn = await page.QuerySelectorAsync("#btn-play");
+                                    if (playBtn != null)
+                                        await playBtn.ClickAsync();
+                                }
+                                catch { }
+
+                                await Task.Delay(100);
+                            }
+
+                            //cache.m3u8 = await browser.WaitPageResult(20);
+                            cache.m3u8 = await browser.completionSource.Task;
                         }
                         #endregion
                     }

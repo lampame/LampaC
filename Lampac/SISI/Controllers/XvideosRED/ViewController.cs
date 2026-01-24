@@ -35,7 +35,7 @@ namespace SISI.Controllers.XvideosRED
                 }
 
                 if (related)
-                    return await PlaylistResult(stream_links?.recomends, null, total_pages: 1);
+                    return await PlaylistResult(stream_links?.recomends, false, null, total_pages: 1);
 
                 return OnResult(stream_links);
             });

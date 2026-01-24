@@ -53,6 +53,7 @@ namespace SISI.Controllers.BongaCams
 
             return await PlaylistResult(
                 cache.Value.playlists,
+                cache.ISingleCache,
                 BongaCamsTo.Menu(host, sort),
                 total_pages: cache.Value.total_pages
             );

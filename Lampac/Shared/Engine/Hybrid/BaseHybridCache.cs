@@ -1,5 +1,7 @@
 ﻿namespace Shared.Engine
 {
+    public record HybridCacheEntry<T>(bool success, T value, bool singleCache);
+
     public class BaseHybridCache
     {
         public record TempEntry(DateTime extend, bool IsSerialize, DateTime ex, object value);
