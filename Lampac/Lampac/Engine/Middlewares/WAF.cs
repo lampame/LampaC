@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using Shared;
 using Shared.Engine;
 using Shared.Models;
@@ -7,6 +8,7 @@ using Shared.Models.AppConf;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -196,7 +198,7 @@ namespace Lampac.Engine.Middlewares
             var (pattern, map) = MapLimited(waf, httpContext.Request.Path.Value);
             if (map.limit > 0)
             {
-                if (RateLimited(memoryCache, requestInfo.IP, map, pattern))
+                if (RateLimited(httpContext, memoryCache, requestInfo.IP, map, pattern))
                 {
                     httpContext.Response.StatusCode = 429;
                     return httpContext.Response.WriteAsync("429 Too Many Requests", httpContext.RequestAborted);
@@ -225,9 +227,38 @@ namespace Lampac.Engine.Middlewares
         #endregion
 
         #region RateLimited
-        static bool RateLimited(IMemoryCache cache, string userip, WafLimitMap map, string pattern)
+        static readonly ThreadLocal<StringBuilder> sbRateKey = new(() => new StringBuilder(PoolInvk.rentChunk));
+
+        static bool RateLimited(HttpContext httpContext, IMemoryCache cache, string userip, WafLimitMap map, string pattern)
         {
-            var counter = cache.GetOrCreate($"WAF:RateLimited:{userip}:{pattern}", entry =>
+            var sb = sbRateKey.Value;
+            sb.Clear();
+
+            sb.Append("WAF:RateLimited:");
+            sb.Append(userip);
+            sb.Append(":");
+            sb.Append(pattern);
+            sb.Append(":");
+
+            if (map.pathId)
+            {
+                sb.Append(httpContext.Request.Path.Value);
+                sb.Append(":");
+            }
+
+            if (map.queryIds != null)
+            {
+                foreach(string queryId in map.queryIds)
+                {
+                    if (httpContext.Request.Query.TryGetValue(queryId, out StringValues val) && val.Count > 0)
+                    {
+                        sb.Append(val[0]);
+                        sb.Append(":");
+                    }
+                }
+            }
+
+            var counter = cache.GetOrCreate(sb.ToString(), entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(map.second == 0 ? 60 : map.second);
                 return new Counter();

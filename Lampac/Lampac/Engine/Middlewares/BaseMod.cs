@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Primitives;
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Lampac.Engine.Middlewares
@@ -28,6 +30,19 @@ namespace Lampac.Engine.Middlewares
             {
                 context.Response.StatusCode = 400; 
                 return context.Response.WriteAsync("400 Bad Request", context.RequestAborted);
+            }
+
+            if (Program.RuntimeCve2025_55315)
+            {
+                if (Regex.IsMatch(context.Request.Path.Value, "^/(ffprobe|transcoding|dlna|admin)", RegexOptions.IgnoreCase))
+                {
+                    string ip = context.Connection.RemoteIpAddress.ToString();
+                    if (!Shared.Engine.Utilities.IPNetwork.IsLocalIp(ip))
+                    {
+                        context.Response.StatusCode = 400;
+                        return context.Response.WriteAsync("Please update dotnet\nhttps://github.com/dotnet/core/blob/main/release-notes/9.0/9.0.12/9.0.113.md", context.RequestAborted);
+                    }
+                }
             }
 
             var builder = new QueryBuilder();
@@ -95,7 +110,8 @@ namespace Lampac.Engine.Middlewares
                     ch == '-' || ch == '_' ||
                     (ch >= 'A' && ch <= 'Z') ||
                     (ch >= 'a' && ch <= 'z') ||
-                    (ch >= '0' && ch <= '9')
+                    (ch >= '0' && ch <= '9') ||
+                    ch == '.' // tmdb
                 )
                 {
                     continue;
@@ -128,6 +144,7 @@ namespace Lampac.Engine.Middlewares
                     ch == '@' || // email
                     ch == '+' || // aes
                     ch == '*' || // merchant
+                    ch == '|' || // tmdb
                     char.IsLetter(ch) // ← любые буквы Unicode
                 )
                 {
@@ -141,7 +158,7 @@ namespace Lampac.Engine.Middlewares
                         char.IsDigit(ch) || // ← символ цифрой Unicode
                         ch == '\'' || ch == '!' || ch == ',' || ch == '+' || ch == '~' || ch == '"' || ch == ';' ||
                         ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '«' || ch == '»' || ch == '“' || ch == '”' ||
-                        ch == '$' || ch == '%' || ch == '^' || ch == '|' || ch == '#' || ch == '×'
+                        ch == '$' || ch == '%' || ch == '^' || ch == '#' || ch == '×'
                     )
                     {
                         sb.Append(ch);

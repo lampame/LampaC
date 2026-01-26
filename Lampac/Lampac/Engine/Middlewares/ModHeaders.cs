@@ -16,7 +16,7 @@ namespace Lampac.Engine.Middlewares
 
         public Task Invoke(HttpContext httpContext)
         {
-            if (httpContext.Request.Path.Value.StartsWith("/cors/check"))
+            if (httpContext.Request.Path.Value.StartsWith("/cors/check", StringComparison.OrdinalIgnoreCase))
                 return Task.CompletedTask;
 
             httpContext.Response.Headers["Access-Control-Allow-Credentials"] = "true";
@@ -35,8 +35,8 @@ namespace Lampac.Engine.Middlewares
             else
                 httpContext.Response.Headers["Access-Control-Allow-Origin"] = "*";
 
-            if (Regex.IsMatch(httpContext.Request.Path.Value, "^/(lampainit|sisi|lite|online|tmdbproxy|cubproxy|tracks|transcoding|dlna|timecode|bookmark|catalog|sync|backup|ts|invc-ws)\\.js") ||
-                Regex.IsMatch(httpContext.Request.Path.Value, "^/(on/|(lite|online|sisi|timecode|bookmark|sync|tmdbproxy|dlna|ts|tracks|transcoding|backup|catalog|invc-ws)/js/)"))
+            if (Regex.IsMatch(httpContext.Request.Path.Value, "^/(lampainit|sisi|lite|online|tmdbproxy|cubproxy|tracks|transcoding|dlna|timecode|bookmark|catalog|sync|backup|ts|invc-ws)\\.js", RegexOptions.IgnoreCase) ||
+                Regex.IsMatch(httpContext.Request.Path.Value, "^/(on/|(lite|online|sisi|timecode|bookmark|sync|tmdbproxy|dlna|ts|tracks|transcoding|backup|catalog|invc-ws)/js/)", RegexOptions.IgnoreCase))
             {
                 httpContext.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate"; // HTTP 1.1.
                 httpContext.Response.Headers["Pragma"] = "no-cache"; // HTTP 1.0.

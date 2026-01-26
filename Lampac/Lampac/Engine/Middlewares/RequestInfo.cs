@@ -27,7 +27,8 @@ namespace Lampac.Engine.Middlewares
 
         public Task Invoke(HttpContext httpContext)
         {
-            bool IsWsRequest = httpContext.Request.Path.StartsWithSegments("/nws") || httpContext.Request.Path.StartsWithSegments("/ws");
+            bool IsWsRequest = httpContext.Request.Path.StartsWithSegments("/nws", StringComparison.OrdinalIgnoreCase) || 
+                               httpContext.Request.Path.StartsWithSegments("/ws", StringComparison.OrdinalIgnoreCase);
 
             #region stats
             if (AppInit.conf.openstat.enable && !IsWsRequest)
@@ -106,7 +107,7 @@ namespace Lampac.Engine.Middlewares
                 #endregion
             }
             // запрос с cloudflare, запрос не в админку
-            else if (httpContext.Request.Headers.ContainsKey("CF-Connecting-IP") && !httpContext.Request.Path.Value.StartsWith("/admin"))
+            else if (httpContext.Request.Headers.ContainsKey("CF-Connecting-IP") && !httpContext.Request.Path.Value.StartsWith("/admin", StringComparison.OrdinalIgnoreCase))
             {
                 // если не указан frontend и это не первоначальная установка, тогда выводим ошибку
                 if (string.IsNullOrEmpty(AppInit.conf.listen.frontend) && File.Exists("module/manifest.json"))

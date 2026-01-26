@@ -78,21 +78,21 @@ namespace Lampac.Engine.Middlewares
             var requestInfo = httpContext.Features.Get<RequestModel>();
             var hybridCache = IHybridCache.Get(requestInfo);
 
-            if (httpContext.Request.Path.Value.StartsWith("/tmdb/api/"))
+            if (httpContext.Request.Path.Value.StartsWith("/tmdb/api/", StringComparison.OrdinalIgnoreCase))
                 return API(httpContext, hybridCache, requestInfo);
 
-            if (httpContext.Request.Path.Value.StartsWith("/tmdb/img/"))
+            if (httpContext.Request.Path.Value.StartsWith("/tmdb/img/", StringComparison.OrdinalIgnoreCase))
                 return IMG(httpContext, requestInfo);
 
-            string path = Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/https?://", "").Replace("/tmdb/", "");
-            string uri = Regex.Match(path, "^[^/]+/(.*)").Groups[1].Value + httpContext.Request.QueryString.Value;
+            string path = Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/https?://", "", RegexOptions.IgnoreCase).Replace("/tmdb/", "");
+            string uri = Regex.Match(path, "^[^/]+/(.*)", RegexOptions.IgnoreCase).Groups[1].Value + httpContext.Request.QueryString.Value;
 
-            if (path.Contains("api.themoviedb.org"))
+            if (path.Contains("api.themoviedb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Request.Path = $"/tmdb/api/{uri}";
                 return API(httpContext, hybridCache, requestInfo);
             }
-            else if (path.Contains("image.tmdb.org"))
+            else if (path.Contains("image.tmdb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Request.Path = $"/tmdb/img/{uri}";
                 return IMG(httpContext, requestInfo);
@@ -119,9 +119,9 @@ namespace Lampac.Engine.Middlewares
                     return;
                 }
 
-                string path = httpContex.Request.Path.Value.Replace("/tmdb/api", "");
-                path = Regex.Replace(path, "^/https?://api.themoviedb.org", "");
-                path = Regex.Replace(path, "/$", "");
+                string path = httpContex.Request.Path.Value.Replace("/tmdb/api", "", StringComparison.OrdinalIgnoreCase);
+                path = Regex.Replace(path, "^/https?://api.themoviedb.org", "", RegexOptions.IgnoreCase);
+                path = Regex.Replace(path, "/$", "", RegexOptions.IgnoreCase);
 
                 string query = Regex.Replace(httpContex.Request.QueryString.Value, "(&|\\?)(account_email|email|uid|token)=[^&]+", "");
                 string uri = "https://api.themoviedb.org" + path + query;
@@ -242,8 +242,8 @@ namespace Lampac.Engine.Middlewares
                     return;
                 }
 
-                string path = httpContex.Request.Path.Value.Replace("/tmdb/img", "");
-                path = Regex.Replace(path, "^/https?://image.tmdb.org", "");
+                string path = httpContex.Request.Path.Value.Replace("/tmdb/img", "", StringComparison.OrdinalIgnoreCase);
+                path = Regex.Replace(path, "^/https?://image.tmdb.org", "", RegexOptions.IgnoreCase);
 
                 string query = Regex.Replace(httpContex.Request.QueryString.Value, "(&|\\?)(account_email|email|uid|token)=[^&]+", "");
                 string uri = "https://image.tmdb.org" + path + query;
@@ -253,7 +253,9 @@ namespace Lampac.Engine.Middlewares
 
                 bool cacheimg = init.cache_img > 0 && AppInit.conf.mikrotik == false;
 
-                httpContex.Response.ContentType = path.Contains(".png") ? "image/png" : path.Contains(".svg") ? "image/svg+xml" : "image/jpeg";
+                httpContex.Response.ContentType = path.Contains(".png", StringComparison.OrdinalIgnoreCase) 
+                    ? "image/png" 
+                    : path.Contains(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : "image/jpeg";
 
                 #region cacheFiles
                 if (cacheimg)

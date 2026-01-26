@@ -17,6 +17,50 @@ namespace Lampac.Controllers
 {
     public class AdminController : BaseController
     {
+        #region TryAuthorizeAdmin
+        bool TryAuthorizeAdmin(string passwd, out ActionResult result)
+        {
+            result = null;
+
+            if (AppInit.rootPasswd == "termux")
+            {
+                HttpContext.Response.Cookies.Append("passwd", "termux");
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(passwd))
+                HttpContext.Request.Cookies.TryGetValue("passwd", out passwd);
+
+            if (string.IsNullOrWhiteSpace(passwd))
+            {
+                result = Redirect("/admin/auth");
+                return false;
+            }
+
+            string ipKey = $"Accsdb:auth:IP:{requestInfo.IP}";
+            if (!memoryCache.TryGetValue(ipKey, out ConcurrentDictionary<string, byte> passwds))
+            {
+                passwds = new ConcurrentDictionary<string, byte>();
+                memoryCache.Set(ipKey, passwds, DateTime.Today.AddDays(1));
+            }
+
+            passwds.TryAdd(passwd, 0);
+
+            if (passwds.Count > 10)
+            {
+                result = Content("Too many attempts, try again tomorrow.");
+                return false;
+            }
+
+            if (AppInit.rootPasswd == passwd)
+                return true;
+
+            HttpContext.Response.Cookies.Delete("passwd");
+            result = Redirect("/admin/auth");
+            return false;
+        }
+        #endregion
+
         #region admin / auth
         [HttpGet]
         [HttpPost]
@@ -24,21 +68,12 @@ namespace Lampac.Controllers
         [Route("/admin/auth")]
         public ActionResult Authorization([FromForm]string parol)
         {
-			if (AppInit.rootPasswd == "termux")
-			{
-                HttpContext.Response.Cookies.Append("passwd", "termux");
-                return renderAdmin();
-            }
+            string passwd = parol?.Trim();
 
-            HttpContext.Request.Cookies.TryGetValue("passwd", out string passwd);
+            if (string.IsNullOrWhiteSpace(passwd)) 
+                HttpContext.Request.Cookies.TryGetValue("passwd", out passwd);
 
-            if (!string.IsNullOrEmpty(parol))
-            {
-                passwd = parol.Trim();
-                HttpContext.Response.Cookies.Append("passwd", passwd);
-            }
-
-            if (string.IsNullOrEmpty(passwd))
+            if (string.IsNullOrWhiteSpace(passwd))
             {
                 string html = @"
 <!DOCTYPE html>
@@ -96,24 +131,14 @@ namespace Lampac.Controllers
 
                 return Content(html, "text/html; charset=utf-8");
             }
-
-            string ipKey = $"Accsdb:auth:IP:{requestInfo.IP}";
-            if (!memoryCache.TryGetValue(ipKey, out ConcurrentDictionary<string, byte> passwds))
+            else
             {
-                passwds = new ConcurrentDictionary<string, byte>();
-                memoryCache.Set(ipKey, passwds, DateTime.Today.AddDays(1));
-            }
+                if (!TryAuthorizeAdmin(passwd, out ActionResult badresult))
+                    return badresult;
 
-            passwds.TryAdd(passwd, 0);
-
-            if (passwds.Count > 10)
-                return Content("Too many attempts, try again tomorrow.");
-
-            if (AppInit.rootPasswd == passwd)
+                HttpContext.Response.Cookies.Append("passwd", passwd);
                 return renderAdmin();
-
-            HttpContext.Response.Cookies.Delete("passwd");
-            return Content("Incorrect password");
+            }
         }
 
         ActionResult renderAdmin()
@@ -129,7 +154,10 @@ namespace Lampac.Controllers
         [Route("/admin/init/save")]
         public ActionResult InitSave([FromForm]string json)
         {
-			try
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
+            try
             {
                 JsonConvert.DeserializeObject<AppInit>(json);
             }
@@ -160,7 +188,10 @@ namespace Lampac.Controllers
         [Route("/admin/init/custom")]
         public ActionResult InitCustom()
         {
-			string json = IO.File.Exists("init.conf") ? IO.File.ReadAllText("init.conf") : null;
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
+            string json = IO.File.Exists("init.conf") ? IO.File.ReadAllText("init.conf") : null;
 			if (json != null && !json.Trim().StartsWith("{"))
 				json = "{" + json + "}";
 
@@ -172,6 +203,9 @@ namespace Lampac.Controllers
         [Route("/admin/init/current")]
         public ActionResult InitCurrent()
         {
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
             return Content(JsonConvert.SerializeObject(AppInit.conf), contentType: "application/json; charset=utf-8");
         }
 
@@ -179,6 +213,9 @@ namespace Lampac.Controllers
         [Route("/admin/init/default")]
         public ActionResult InitDefault()
         {
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
             return Content(JsonConvert.SerializeObject(new AppInit()), contentType: "application/json; charset=utf-8");
         }
 
@@ -186,6 +223,9 @@ namespace Lampac.Controllers
         [Route("/admin/init/example")]
         public ActionResult InitExample()
         {
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
             return Content(IO.File.Exists("example.conf") ? IO.File.ReadAllText("example.conf") : string.Empty);
         }
         #endregion
@@ -195,6 +235,9 @@ namespace Lampac.Controllers
         [Route("/admin/sync/init")]
         public ActionResult Synchtml()
         {
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
             string html = @"
 <!DOCTYPE html>
 <html>
@@ -295,6 +338,9 @@ namespace Lampac.Controllers
         [Route("/admin/sync/init/save")]
         public ActionResult SyncSave([FromForm] string json)
         {
+            if (!TryAuthorizeAdmin(null, out ActionResult badresult))
+                return badresult;
+
             try
             {
                 string testjson = json.Trim();
@@ -317,6 +363,12 @@ namespace Lampac.Controllers
         [Route("/admin/manifest/install")]
         public Task ManifestInstallHtml(string online, string sisi, string jac, string dlna, string tracks, string ts, string catalog, string merch, string eng)
         {
+            if (IO.File.Exists("module/manifest.json") && !TryAuthorizeAdmin(null, out ActionResult badresult))
+            {
+                HttpContext.Response.Redirect("/admin/auth");
+                return Task.CompletedTask;
+            }
+
             HttpContext.Response.ContentType = "text/html; charset=utf-8";
 
             if (AppInit.rootPasswd == "termux")

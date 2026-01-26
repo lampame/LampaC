@@ -50,10 +50,10 @@ else
         fi
     }
 
-    if check_ping "http://noah.lampac.sh"; then
-        BASE_URL="http://noah.lampac.sh"
-    elif check_ping "http://vultr.lampac.sh"; then
+    if check_ping "http://vultr.lampac.sh"; then
         BASE_URL="http://vultr.lampac.sh"
+    elif check_ping "http://noah.lampac.sh"; then
+        BASE_URL="http://noah.lampac.sh"
     elif check_ping "https://lampac.sh"; then
         BASE_URL="https://lampac.sh"
     else

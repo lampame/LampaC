@@ -43,7 +43,7 @@ namespace Lampac.Engine.Middlewares
             {
                 if (!File.Exists("module/manifest.json"))
                 {
-                    if (httpContext.Request.Path.Value.StartsWith("/admin/manifest/install"))
+                    if (httpContext.Request.Path.Value.StartsWith("/admin/manifest/install", StringComparison.OrdinalIgnoreCase))
                         return _next(httpContext);
 
                     httpContext.Response.Redirect("/admin/manifest/install");
@@ -54,7 +54,7 @@ namespace Lampac.Engine.Middlewares
             #endregion
 
             #region admin
-            if (httpContext.Request.Path.Value.StartsWith("/admin"))
+            if (httpContext.Request.Path.Value.StartsWith("/admin", StringComparison.OrdinalIgnoreCase))
             {
                 if (httpContext.Request.Cookies.TryGetValue("passwd", out string passwd))
                 {
@@ -74,7 +74,7 @@ namespace Lampac.Engine.Middlewares
                         return _next(httpContext);
                 }
 
-                if (httpContext.Request.Path.Value.StartsWith("/admin/auth"))
+                if (httpContext.Request.Path.Value.StartsWith("/admin/auth", StringComparison.OrdinalIgnoreCase))
                     return _next(httpContext);
 
                 httpContext.Response.Redirect("/admin/auth");
@@ -102,7 +102,7 @@ namespace Lampac.Engine.Middlewares
             {
                 var accsdb = AppInit.conf.accsdb;
 
-                if (httpContext.Request.Path.Value.StartsWith("/testaccsdb") && accsdb.shared_passwd != null && requestInfo.user_uid == accsdb.shared_passwd)
+                if (httpContext.Request.Path.Value.StartsWith("/testaccsdb", StringComparison.OrdinalIgnoreCase) && accsdb.shared_passwd != null && requestInfo.user_uid == accsdb.shared_passwd)
                 {
                     requestInfo.IsLocalRequest = true;
                     return _next(httpContext);
@@ -131,14 +131,16 @@ namespace Lampac.Engine.Middlewares
                     || user.ban 
                     || DateTime.UtcNow > user.expires)
                 {
-                    if (httpContext.Request.Path.Value.StartsWith("/proxy/") || httpContext.Request.Path.Value.StartsWith("/proxyimg"))
+                    if (httpContext.Request.Path.Value.StartsWith("/proxy/", StringComparison.OrdinalIgnoreCase) || 
+                        httpContext.Request.Path.Value.StartsWith("/proxyimg", StringComparison.OrdinalIgnoreCase))
                     {
                         string hash = rexProxyPath.Replace(httpContext.Request.Path.Value, "");
                         if (AppInit.conf.serverproxy.encrypt || ProxyLink.Decrypt(hash, requestInfo.IP)?.uri != null)
                             return _next(httpContext);
                     }
 
-                    if (uri.StartsWith("/tmdb/api.themoviedb.org/") || uri.StartsWith("/tmdb/api/"))
+                    if (uri.StartsWith("/tmdb/api.themoviedb.org/", StringComparison.OrdinalIgnoreCase) || 
+                        uri.StartsWith("/tmdb/api/", StringComparison.OrdinalIgnoreCase))
                     {
                         httpContext.Response.Redirect("https://api.themoviedb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                         return Task.CompletedTask;
@@ -146,7 +148,8 @@ namespace Lampac.Engine.Middlewares
 
                     if (rexStaticAssets.IsMatch(httpContext.Request.Path.Value))
                     {
-                        if (uri.StartsWith("/tmdb/image.tmdb.org/") || uri.StartsWith("/tmdb/img/"))
+                        if (uri.StartsWith("/tmdb/image.tmdb.org/", StringComparison.OrdinalIgnoreCase) || 
+                            uri.StartsWith("/tmdb/img/", StringComparison.OrdinalIgnoreCase))
                         {
                             httpContext.Response.Redirect("https://image.tmdb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                             return Task.CompletedTask;

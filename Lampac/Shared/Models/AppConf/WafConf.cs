@@ -49,6 +49,10 @@ namespace Shared.Models.AppConf
         public int limit { get; set; }
 
         public int second { get; set; }
+
+        public bool pathId { get; set; }
+
+        public string[] queryIds { get; set; }
     }
 
     public class WafAsnRange

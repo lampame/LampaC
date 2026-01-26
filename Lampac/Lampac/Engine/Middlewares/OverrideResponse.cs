@@ -6,7 +6,6 @@ using Shared.Models;
 using Shared.Models.CSharpGlobals;
 using System;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -32,8 +31,11 @@ namespace Lampac.Engine.Middlewares
 
                 string url = httpContext.Request.Path.Value + httpContext.Request.QueryString.Value;
 
-                foreach (var over in AppInit.conf.overrideResponse.Where(i => i.firstEndpoint == first))
+                foreach (var over in AppInit.conf.overrideResponse)
                 {
+                    if (over.firstEndpoint != first)
+                        continue;
+
                     if (Regex.IsMatch(url, over.pattern, RegexOptions.IgnoreCase))
                     {
                         switch (over.action)

@@ -446,9 +446,12 @@ namespace Shared
             bruteForceProtection = true,
             limit_map = new Dictionary<string, WafLimitMap>()
             {
-                ["^/(tmdb|cub|dlna|transcoding|ts|proxy)"] = new WafLimitMap() { limit = 50, second = 1 },
-                ["^/nexthub"] = new WafLimitMap() { limit = 20, second = 1 },
-                [".*"] = new WafLimitMap() { limit = 10, second = 1 }
+                ["^/(proxy|tmdb|cub|transcoding|dlna|ts)"] = new WafLimitMap() { limit = 50, second = 1 },
+                ["^/nexthub"] = new WafLimitMap() { limit = 3, second = 1, queryIds = ["plugin"] },
+                ["^/(sisi|bgs|chu|runetki|elo|epr|hqr|phub|ptx|sbg|tizam|xmr|xnx|xds)"] = new WafLimitMap() { limit = 3, second = 1, pathId = true },
+                ["^/lite/"] = new WafLimitMap() { limit = 5, second = 1 },
+                ["^/(rch|timecode|storage|bookmark)/"] = new WafLimitMap() { limit = 4, second = 1, pathId = true },
+                [".*"] = new WafLimitMap() { limit = 5, second = 1 }
             }
         };
 

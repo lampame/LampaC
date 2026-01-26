@@ -65,16 +65,16 @@ namespace Lampac.Engine.Middlewares
             var init = AppInit.conf.serverproxy;
             var requestInfo = httpContext.Features.Get<RequestModel>();
 
-            string servPath = httpContext.Request.Path.Value.Replace("/proxy/", "").Replace("/proxy-dash/", "");
+            string servPath = httpContext.Request.Path.Value.Replace("/proxy/", "", StringComparison.OrdinalIgnoreCase).Replace("/proxy-dash/", "", StringComparison.OrdinalIgnoreCase);
             string servUri = servPath + httpContext.Request.QueryString.Value;
 
             #region tmdb proxy
-            if (servUri.Contains(".themoviedb.org"))
+            if (servUri.Contains(".themoviedb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Response.Redirect($"/tmdb/api/{Regex.Match(servUri.Replace("://", ":/_/").Replace("//", "/").Replace(":/_/", "://"), "https?://[^/]+/(.*)").Groups[1].Value}");
                 return;
             }
-            else if (servUri.Contains(".tmdb.org"))
+            else if (servUri.Contains(".tmdb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Response.Redirect($"/tmdb/img/{Regex.Match(servUri.Replace("://", ":/_/").Replace("//", "/").Replace(":/_/", "://"), "https?://[^/]+/(.*)").Groups[1].Value}");
                 return;
@@ -82,9 +82,9 @@ namespace Lampac.Engine.Middlewares
             #endregion
 
             #region decryptLink
-            var decryptLink = ProxyLink.Decrypt(httpContext.Request.Path.Value.StartsWith("/proxy-dash/") ? servPath.Split("/")[0] : servPath, requestInfo.IP);
+            var decryptLink = ProxyLink.Decrypt(httpContext.Request.Path.Value.StartsWith("/proxy-dash/", StringComparison.OrdinalIgnoreCase) ? servPath.Split("/")[0] : servPath, requestInfo.IP);
 
-            if (init.encrypt || decryptLink?.uri != null || httpContext.Request.Path.Value.StartsWith("/proxy-dash/"))
+            if (init.encrypt || decryptLink?.uri != null || httpContext.Request.Path.Value.StartsWith("/proxy-dash/", StringComparison.OrdinalIgnoreCase))
             {
                 servUri = decryptLink?.uri;
             }
@@ -191,10 +191,10 @@ namespace Lampac.Engine.Middlewares
             }
             #endregion
 
-            if (httpContext.Request.Path.Value.StartsWith("/proxy-dash/"))
+            if (httpContext.Request.Path.Value.StartsWith("/proxy-dash/", StringComparison.OrdinalIgnoreCase))
             {
                 #region DASH
-                var uri = new Uri($"{servUri}{Regex.Replace(httpContext.Request.Path.Value, "^/[^/]+/[^/]+/", "")}{httpContext.Request.QueryString.Value}");
+                var uri = new Uri($"{servUri}{Regex.Replace(httpContext.Request.Path.Value, "^/[^/]+/[^/]+/", "", RegexOptions.IgnoreCase)}{httpContext.Request.QueryString.Value}");
 
                 var client = FrendlyHttp.MessageClient("proxy", proxyHandler ?? baseHandler);
 
@@ -297,9 +297,9 @@ namespace Lampac.Engine.Middlewares
 
                             string contentType = _contentType?.FirstOrDefault()?.ToLower();
 
-                            bool ists = httpContext.Request.Path.Value.EndsWith(".ts") || httpContext.Request.Path.Value.EndsWith(".m4s");
+                            bool ists = httpContext.Request.Path.Value.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) || httpContext.Request.Path.Value.EndsWith(".m4s", StringComparison.OrdinalIgnoreCase);
 
-                            if (!ists && (httpContext.Request.Path.Value.Contains(".m3u") || (contentType != null && contentType is "application/x-mpegurl" or "application/vnd.apple.mpegurl" or "text/plain")))
+                            if (!ists && (httpContext.Request.Path.Value.Contains(".m3u", StringComparison.OrdinalIgnoreCase) || (contentType != null && contentType is "application/x-mpegurl" or "application/vnd.apple.mpegurl" or "text/plain")))
                             {
                                 #region m3u8/txt
                                 using (HttpContent content = response.Content)
@@ -364,7 +364,7 @@ namespace Lampac.Engine.Middlewares
                                 }
                                 #endregion
                             }
-                            else if (httpContext.Request.Path.Value.Contains(".mpd") || (contentType != null && contentType == "application/dash+xml"))
+                            else if (httpContext.Request.Path.Value.Contains(".mpd", StringComparison.OrdinalIgnoreCase) || (contentType != null && contentType == "application/dash+xml"))
                             {
                                 #region dash
                                 using (HttpContent content = response.Content)

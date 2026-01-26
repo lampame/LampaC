@@ -81,9 +81,9 @@ namespace Lampac.Engine.Middlewares
 
                 var init = AppInit.conf.cub;
                 string domain = init.domain;
-                string path = httpContext.Request.Path.Value.Replace("/cub/", "");
+                string path = httpContext.Request.Path.Value.Replace("/cub/", "", StringComparison.OrdinalIgnoreCase);
                 string query = httpContext.Request.QueryString.Value;
-                string uri = Regex.Match(path, "^[^/]+/(.*)").Groups[1].Value + query;
+                string uri = Regex.Match(path, "^[^/]+/(.*)", RegexOptions.IgnoreCase).Groups[1].Value + query;
 
                 if (!init.enable || domain == "ws")
                 {
@@ -94,7 +94,7 @@ namespace Lampac.Engine.Middlewares
                 if (path.Split(".")[0] is "geo" or "tmdb" or "tmapi" or "apitmdb" or "imagetmdb" or "cdn" or "ad" or "ws")
                     domain = $"{path.Split(".")[0]}.{domain}";
 
-                if (domain.StartsWith("geo"))
+                if (domain.StartsWith("geo", StringComparison.OrdinalIgnoreCase))
                 {
                     string country = requestInfo.Country;
                     if (string.IsNullOrEmpty(country))
@@ -109,7 +109,7 @@ namespace Lampac.Engine.Middlewares
                 }
 
                 #region checker
-                if (path.StartsWith("api/checker") || uri.StartsWith("api/checker"))
+                if (path.StartsWith("api/checker", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("api/checker", StringComparison.OrdinalIgnoreCase))
                 {
                     if (HttpMethods.IsPost(httpContext.Request.Method))
                     {
@@ -137,7 +137,7 @@ namespace Lampac.Engine.Middlewares
                 #endregion
 
                 #region blacklist
-                if (uri.StartsWith("api/plugins/blacklist"))
+                if (uri.StartsWith("api/plugins/blacklist", StringComparison.OrdinalIgnoreCase))
                 {
                     httpContext.Response.ContentType = "application/json; charset=utf-8";
                     await httpContext.Response.WriteAsync("[]", ctsHttp.Token);
@@ -146,13 +146,13 @@ namespace Lampac.Engine.Middlewares
                 #endregion
 
                 #region ads/log/metric
-                if (uri.StartsWith("api/metric/") || uri.StartsWith("api/ad/stat"))
+                if (uri.StartsWith("api/metric/", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("api/ad/stat", StringComparison.OrdinalIgnoreCase))
                 {
                     await httpContext.Response.WriteAsJsonAsync(new { secuses = true });
                     return;
                 }
 
-                if (uri.StartsWith("api/ad/vast"))
+                if (uri.StartsWith("api/ad/vast", StringComparison.OrdinalIgnoreCase))
                 {
                     await httpContext.Response.WriteAsJsonAsync(new 
                     { 
@@ -169,7 +169,7 @@ namespace Lampac.Engine.Middlewares
                 var proxyManager = new ProxyManager("cub_api", init);
                 var proxy = proxyManager.Get();
 
-                bool isMedia = Regex.IsMatch(uri, "\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)");
+                bool isMedia = Regex.IsMatch(uri, "\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)", RegexOptions.IgnoreCase);
 
                 if (0 >= init.cache_api || !HttpMethods.IsGet(httpContext.Request.Method) || isMedia ||
                     (path.Split(".")[0] is "imagetmdb" or "cdn" or "ad") ||
