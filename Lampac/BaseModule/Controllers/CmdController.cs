@@ -34,11 +34,23 @@ namespace Lampac.Controllers
             }
             else
             {
-                Process.Start(new ProcessStartInfo()
+                if (cmd.arguments.Length == 0)
+                    return;
+
+                var _info = new ProcessStartInfo()
                 {
-                    FileName = cmd.path,
-                    Arguments = cmd.arguments.Replace("{value}", comand + HttpContext.Request.QueryString.Value)
-                });
+                    FileName = cmd.path
+                };
+
+                foreach (string a in cmd.arguments)
+                {
+                    _info.ArgumentList.Add(a.Contains("{value}")
+                        ? a.Replace("{value}", comand + HttpContext.Request.QueryString.Value)
+                        : a
+                    );
+                }
+
+                Process.Start(_info);
             }
         }
     }

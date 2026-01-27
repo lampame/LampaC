@@ -235,9 +235,11 @@ namespace Shared.Engine.Online
                     var rx = Rx.Split("user-network-issues", html);
                     if (rx.Count > 0)
                     {
-                        var row = Rx.Split("b-translators__list", rx[0].Span);
+                        var row = Rx.Split("b-post__lastepisodeout", rx[0].Span);
                         if (row.Count > 1)
                             result.content = row[1].ToString(); // сериал
+                        else if (!IsTrailer)
+                            result.content = rx[0].Span.ToString(); // что то пошло не так
                     }
                 }
             });

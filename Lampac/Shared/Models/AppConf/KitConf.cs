@@ -8,6 +8,8 @@ namespace Shared.Models.AppConf
 
         public bool absolute { get; set; }
 
+        public bool AesGcm { get; set; }
+
         public string path { get; set; }
 
         public string eval_path { get; set; }

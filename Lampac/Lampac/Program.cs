@@ -41,6 +41,7 @@ namespace Lampac
         public static List<PortableExecutableReference> assemblieReferences { get; private set; }
 
         static IHost _host;
+        public static bool _reload { get; private set; } = true;
 
         public static List<(IPAddress prefix, int prefixLength)> cloudflare_ips = new List<(IPAddress prefix, int prefixLength)>();
 
@@ -421,15 +422,21 @@ namespace Lampac
                 TrackersCron.Run();
 
             LampaCron.Run();
-            appReload = new AppReload(_host);
+
+            appReload = new AppReload();
+            appReload.InkvReload = () => 
+            {
+                _host.StopAsync(); 
+                AppInit.LoadModules();
+            };
 
             _usersTimer = new Timer(UpdateUsersDb, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
             _kitTimer = new Timer(UpdateKitDb, null, TimeSpan.Zero, TimeSpan.FromSeconds(Math.Max(5, AppInit.conf.kit.cacheToSeconds)));
 
-            while (AppReload._reload)
+            while (_reload)
             {
                 _host = CreateHostBuilder(args).Build();
-                AppReload._reload = false;
+                _reload = false;
                 _host.Run();
             }
         }

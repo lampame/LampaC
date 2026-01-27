@@ -242,7 +242,7 @@ namespace Shared.Engine
 
 
         #region Cron
-        static HashSet<string> tempLinks = new(1000);
+        static HashSet<string> tempLinks = new(1000), sqlLinks = new(1000), delete_ids = new(1000);
 
         static int cronRound = 0;
 
@@ -282,8 +282,8 @@ namespace Shared.Engine
                 }
                 else
                 {
-                    var sqlLinks = new HashSet<string>(Math.Min(100, links.Count));
-                    var delete_ids = new HashSet<string>(Math.Min(100, links.Count));
+                    sqlLinks.Clear();
+                    delete_ids.Clear();
 
                     foreach (var link in links)
                     {
@@ -323,7 +323,7 @@ namespace Shared.Engine
 
                             foreach (string linkId in sqlLinks)
                             {
-                                if (links.TryGetValue(linkId, out var link))
+                                if (links.TryRemove(linkId, out var link))
                                 {
                                     if (link.id == null)
                                         link.id = linkId;
@@ -340,10 +340,7 @@ namespace Shared.Engine
                             await sqlDb.SaveChangesAsync();
 
                             foreach (string removeLink in sqlLinks)
-                            {
                                 tempLinks.Add(removeLink);
-                                links.TryRemove(removeLink, out _);
-                            }
                         }
                     }
                 }

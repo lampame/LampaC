@@ -123,6 +123,9 @@ namespace Lampac.Engine.Middlewares
                 UserAgent = httpContext.Request.Headers.UserAgent
             };
 
+            if (httpContext.Request.Headers.TryGetValue("X-Kit-AesGcm", out StringValues aesGcmKey) && aesGcmKey.Count > 0)
+                req.AesGcmKey = aesGcmKey;
+
             #region Weblog Request
             if (!IsLocalRequest && !IsWsRequest && AppInit.conf.weblog.enable)
             {

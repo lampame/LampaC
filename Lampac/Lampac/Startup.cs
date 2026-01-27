@@ -254,6 +254,8 @@ namespace Lampac
             #endregion
 
             ModuleRepository.Configuration(mvcBuilder);
+
+            Shared.Startup.Configure(Program.appReload, new NativeWebSocket(), new soks());
             BaseModControllers(mvcBuilder);
 
             #region compilation modules
@@ -429,7 +431,7 @@ namespace Lampac
                 SyncUserContext.Factory = app.ApplicationServices.GetService<IDbContextFactory<SyncUserContext>>();
             #endregion
 
-            Shared.Startup.Configure(Program.appReload, app, memory, new NativeWebSocket(), new soks());
+            Shared.Startup.Configure(app, memory);
             HybridCache.Configure(memory);
             HybridFileCache.Configure(memory);
             ProxyManager.Configure(memory);
@@ -613,7 +615,7 @@ namespace Lampac
         #region OnShutdown
         void OnShutdown()
         {
-            if (AppReload._reload)
+            if (Program._reload)
                 return;
 
             IsShutdown = true;
@@ -631,6 +633,10 @@ namespace Lampac
         #region BaseModControllers
         public void BaseModControllers(IMvcBuilder mvcBuilder)
         {
+            if (AppInit.conf?.BaseModule?.EnableControllers == null || 
+                AppInit.conf.BaseModule.EnableControllers.Length == 0)
+                return;
+
             var syntaxTree = new List<SyntaxTree>();
 
             string patchcontrol = Path.Combine("basemod", "Controllers");
@@ -640,6 +646,12 @@ namespace Lampac
             foreach (string file in Directory.GetFiles(patchcontrol, "*.cs", SearchOption.AllDirectories))
             {
                 string name = Path.GetFileName(file).Replace("Controller.cs", "");
+
+                if (name.Equals("Cmd", StringComparison.OrdinalIgnoreCase) && AppInit.conf.cmd.Count == 0)
+                    continue;
+
+                if (name.Equals("SyncApi", StringComparison.OrdinalIgnoreCase) && !AppInit.conf.sync.enable)
+                    continue;
 
                 if (AppInit.conf.BaseModule.EnableControllers.Contains(name, StringComparer.OrdinalIgnoreCase))
                     syntaxTree.Add(CSharpSyntaxTree.ParseText(File.ReadAllText(file)));

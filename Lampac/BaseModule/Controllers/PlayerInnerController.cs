@@ -24,11 +24,14 @@ namespace Lampac.Controllers
                 (stream.Scheme != Uri.UriSchemeHttp && stream.Scheme != Uri.UriSchemeHttps))
                 return;
 
-            Process.Start(new ProcessStartInfo()
+            var _info = new ProcessStartInfo()
             {
-                FileName = AppInit.conf.playerInner,
-                Arguments = stream.AbsoluteUri
-            });
+                FileName = AppInit.conf.playerInner
+            };
+
+            _info.ArgumentList.Add(stream.AbsoluteUri);
+
+            Process.Start(_info);
         }
     }
 }

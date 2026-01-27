@@ -35,7 +35,12 @@ namespace Online.Controllers
                 string deviceid = new string(DateTime.Now.ToBinary().ToString().Reverse().ToArray()).Substring(0, 8);
                 string uri = $"{init.corsHost()}/v2/auth?email={HttpUtility.UrlEncode(login)}&passwd={HttpUtility.UrlEncode(pass)}&deviceid={deviceid}";
 
-                var token_request = await Http.Get<JObject>(uri, proxy: proxy, headers: HeadersModel.Init("user-agent", "lampac"));
+                var head = HeadersModel.Init(
+                    ("user-agent", "lampac"),
+                    ("X-Lampac-Version", $"{appversion}.{minorversion}")
+                );
+
+                var token_request = await Http.Get<JObject>(uri, proxy: proxy, headers: head);
 
                 if (token_request == null)
                     return ContentTo($"нет доступа к {init.corsHost()}");

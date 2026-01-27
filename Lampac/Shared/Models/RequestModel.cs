@@ -15,6 +15,8 @@ namespace Shared.Models
 
         public bool IsAnonymousRequest { get; set; }
 
+        public string AesGcmKey { get; set; }
+
         public string IP { get; set; }
 
         public string UserAgent { get; set; }

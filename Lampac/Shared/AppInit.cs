@@ -297,8 +297,6 @@ namespace Shared
             if (modules != null)
                 return;
 
-            modules = null;
-
             if (File.Exists("module/manifest.json"))
             {
                 var jss = new JsonSerializerSettings { Error = (se, ev) => 
@@ -447,11 +445,11 @@ namespace Shared
             limit_map = new Dictionary<string, WafLimitMap>()
             {
                 ["^/(proxy|tmdb|cub|transcoding|dlna|ts)"] = new WafLimitMap() { limit = 50, second = 1 },
-                ["^/nexthub"] = new WafLimitMap() { limit = 3, second = 1, queryIds = ["plugin"] },
-                ["^/(sisi|bgs|chu|runetki|elo|epr|hqr|phub|ptx|sbg|tizam|xmr|xnx|xds)"] = new WafLimitMap() { limit = 3, second = 1, pathId = true },
-                ["^/lite/"] = new WafLimitMap() { limit = 5, second = 1 },
-                ["^/(rch|timecode|storage|bookmark)/"] = new WafLimitMap() { limit = 4, second = 1, pathId = true },
-                [".*"] = new WafLimitMap() { limit = 5, second = 1 }
+                ["^/nexthub"] = new WafLimitMap() { limit = 5, second = 1, queryIds = ["plugin"] },
+                ["^/(sisi|bgs|chu|runetki|elo|epr|hqr|phub|ptx|sbg|tizam|xmr|xnx|xds)"] = new WafLimitMap() { limit = 5, second = 1, pathId = true },
+                ["^/lite/"] = new WafLimitMap() { limit = 10, second = 1 },
+                ["^/(rch|timecode|storage|bookmark)/"] = new WafLimitMap() { limit = 10, second = 1, pathId = true },
+                [".*"] = new WafLimitMap() { limit = 10, second = 1 }
             }
         };
 

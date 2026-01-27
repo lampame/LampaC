@@ -155,10 +155,12 @@ namespace Online.Controllers
                 () => oninvk.Embed(href, search_uri)
             );
 
-            if (cache.Value.IsEmpty)
+            if (cache.Value?.IsEmpty == true)
                 return ShowError(cache.Value.content);
 
-            return await ContentTpl(cache, () => oninvk.Tpl(cache.Value, accsArgs(string.Empty), title, original_title, s, href, true, rjson));
+            return await ContentTpl(cache, 
+                () => oninvk.Tpl(cache.Value, accsArgs(string.Empty), title, original_title, s, href, true, rjson)
+            );
         }
 
 

@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Primitives;
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -77,20 +76,13 @@ namespace Lampac.Engine.Middlewares
             {
                 if (
                     ch == '/' || ch == '-' || ch == '.' || ch == '_' ||
+                    ch == ':' || ch == '+' || ch == '=' ||
                     (ch >= 'A' && ch <= 'Z') ||
                     (ch >= 'a' && ch <= 'z') ||
                     (ch >= '0' && ch <= '9')
                 )
                 {
                     continue;
-                }
-
-                if (path.StartsWith("/proxy/") ||
-                    path.StartsWith("/proxyimg") ||
-                    path.StartsWith("/lite/videoseed/video/"))
-                {
-                    if (ch == ':' || ch == '+' || ch == '=')
-                        continue;
                 }
 
                 return false;
@@ -152,7 +144,7 @@ namespace Lampac.Engine.Middlewares
                     continue;
                 }
 
-                if (name is "title" or "original_title" or "t")
+                if (name is "search" or "query" or "title" or "original_title" or "t")
                 {
                     if (
                         char.IsDigit(ch) || // ← символ цифрой Unicode

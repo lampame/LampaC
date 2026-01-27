@@ -26,7 +26,7 @@ namespace Shared
     {
         public static string appversion => "154";
 
-        public static string minorversion => "1";
+        public static string minorversion => "3";
 
 
         protected static readonly ConcurrentDictionary<string, SemaphoreSlim> _semaphoreLocks = new();
@@ -732,11 +732,11 @@ namespace Shared
 
         JObject loadFileKitConf()
         {
-            var init = AppInit.conf.kit;
+            var kit = AppInit.conf.kit;
 
-            if (init.IsAllUsersPath)
+            if (kit.IsAllUsersPath)
             {
-                if (init.allUsers != null && init.allUsers.TryGetValue(requestInfo.user_uid, out JObject userInit))
+                if (kit.allUsers != null && kit.allUsers.TryGetValue(requestInfo.user_uid, out JObject userInit))
                     return userInit;
 
                 return null;
@@ -757,18 +757,18 @@ namespace Shared
                         lastWriteTimeUtc = IO.File.GetLastWriteTimeUtc(_cache.infile);
                         if (_cache.lastWriteTimeUtc == lastWriteTimeUtc)
                         {
-                            _cache.lockTime = DateTime.Now.AddSeconds(Math.Max(5, init.configCheckIntervalSeconds));
+                            _cache.lockTime = DateTime.Now.AddSeconds(Math.Max(5, kit.configCheckIntervalSeconds));
                             return _cache.init;
                         }
                     }
 
                     _cache = new KitCacheEntry();
-                    var lockTime = DateTime.Now.AddSeconds(Math.Max(5, init.configCheckIntervalSeconds));
+                    var lockTime = DateTime.Now.AddSeconds(Math.Max(5, kit.configCheckIntervalSeconds));
 
-                    _cache.infile = $"{init.path}/{CrypTo.md5(requestInfo.user_uid)}";
+                    _cache.infile = $"{kit.path}/{CrypTo.md5(requestInfo.user_uid)}";
 
-                    if (init.eval_path != null)
-                        _cache.infile = CSharpEval.Execute<string>(init.eval_path, new KitConfEvalPath(init.path, requestInfo.user_uid));
+                    if (kit.eval_path != null)
+                        _cache.infile = CSharpEval.Execute<string>(kit.eval_path, new KitConfEvalPath(kit.path, requestInfo.user_uid));
 
                     if (!IO.File.Exists(_cache.infile))
                     {
@@ -777,7 +777,20 @@ namespace Shared
                         return null;
                     }
 
-                    string json = IO.File.ReadAllText(_cache.infile);
+                    string json = null;
+
+                    if (kit.AesGcm)
+                    {
+                        if (string.IsNullOrEmpty(requestInfo.AesGcmKey))
+                            return null;
+
+                        json = CryptoKit.Read(requestInfo.AesGcmKey, _cache.infile);
+                    }
+                    else
+                    {
+                        json = IO.File.ReadAllText(_cache.infile);
+                    }
+
                     if (string.IsNullOrWhiteSpace(json))
                     {
                         _cache.lockTime = lockTime;
@@ -802,7 +815,7 @@ namespace Shared
 
                     _cache.init = JsonConvert.DeserializeObject<JObject>(json);
 
-                    memoryCache.Set(memKey, _cache, DateTime.Now.AddSeconds(Math.Max(5, init.cacheToSeconds)));
+                    memoryCache.Set(memKey, _cache, DateTime.Now.AddSeconds(Math.Max(5, kit.cacheToSeconds)));
 
                     return _cache.init;
                 }
@@ -815,18 +828,24 @@ namespace Shared
 
         async Task<JObject> loadHttpKitConf()
         {
-            var init = AppInit.conf.kit;
+            var kit = AppInit.conf.kit;
 
             string memKey = $"loadHttpKit:{requestInfo.user_uid}";
             if (!memoryCache.TryGetValue(memKey, out JObject appinit))
             {
                 try
                 {
-                    string uri = init.path.Replace("{uid}", HttpUtility.UrlEncode(requestInfo.user_uid));
+                    if (kit.AesGcm && string.IsNullOrEmpty(requestInfo.AesGcmKey))
+                        return null;
+
+                    string uri = kit.path.Replace("{uid}", HttpUtility.UrlEncode(requestInfo.user_uid));
                     string json = await Http.Get(uri, timeoutSeconds: 5);
 
                     if (json == null)
                         return null;
+
+                    if (kit.AesGcm)
+                        json = CryptoKit.Read(requestInfo.AesGcmKey, Encoding.UTF8.GetBytes(json));
 
                     if (!json.TrimStart().StartsWith("{"))
                         json = "{" + json + "}";
@@ -835,7 +854,7 @@ namespace Shared
                 }
                 catch { return null; }
 
-                memoryCache.Set(memKey, appinit, DateTime.Now.AddSeconds(Math.Max(5, init.cacheToSeconds)));
+                memoryCache.Set(memKey, appinit, DateTime.Now.AddSeconds(Math.Max(5, kit.cacheToSeconds)));
             }
 
             return appinit;

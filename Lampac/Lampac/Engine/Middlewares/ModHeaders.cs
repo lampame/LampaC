@@ -50,11 +50,11 @@ namespace Lampac.Engine.Middlewares
         }
 
 
-        static readonly string stringAllowHeaders = "Authorization, Token, Profile, Content-Type, X-Signalr-User-Agent, X-Requested-With";
+        static readonly string stringAllowHeaders = "Authorization, Token, Profile, X-Kit-AesGcm, Content-Type, X-Signalr-User-Agent, X-Requested-With";
 
         static readonly HashSet<string> hashAllowHeaders = new HashSet<string>(
         [
-            "Authorization", "Token", "Profile",
+            "Authorization", "Token", "Profile", "X-Kit-AesGcm",
             "Content-Type", "X-Signalr-User-Agent", "X-Requested-With"
         ], StringComparer.OrdinalIgnoreCase);
 
