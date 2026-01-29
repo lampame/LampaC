@@ -842,6 +842,7 @@ namespace Shared
 
         public OnlinesSettings Ashdi { get; set; } = new OnlinesSettings("Ashdi", "kwwsv=22edvh1dvkgl1yls", rch_access: "apk,cors", stream_access: "apk,cors") 
         {
+            enable = false,
             rchstreamproxy = "web",
             geo_hide = ["RU", "BY"] 
         };

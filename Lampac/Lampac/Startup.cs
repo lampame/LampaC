@@ -631,11 +631,15 @@ namespace Lampac
         #endregion
 
         #region BaseModControllers
+        public static bool WebLogEnableController { get; private set; }
+
         public void BaseModControllers(IMvcBuilder mvcBuilder)
         {
             if (AppInit.conf?.BaseModule?.EnableControllers == null || 
                 AppInit.conf.BaseModule.EnableControllers.Length == 0)
                 return;
+
+            WebLogEnableController = AppInit.conf.BaseModule.EnableControllers.Contains("WebLogController.cs");
 
             var syntaxTree = new List<SyntaxTree>();
 

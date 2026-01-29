@@ -37,10 +37,11 @@ namespace Online.Controllers
                 string country = init.forceua ? "UA" : requestInfo.Country;
 
                 var headers = httpHeaders(init);
-                var cookie = await getCookie();
+                var cookie = init.rhub ? null : await getCookie();
+                string cookieRhub = init.rhub ? getRhubCookie() : null;
 
-                if (rch?.enable == true && cookie != null)
-                    headers.Add(new HeadersModel("Cookie", rhubCookie));
+                if (rch?.enable == true && cookieRhub != null)
+                    headers.Add(new HeadersModel("Cookie", cookieRhub));
 
                 if (init.xapp)
                     headers.Add(new HeadersModel("X-App-Hdrezka-App", "1"));
@@ -53,7 +54,7 @@ namespace Online.Controllers
                     host,
                     "lite/rezka",
                     init, 
-                    cookie != null,
+                    cookie != null || cookieRhub != null,
                     headers,
                     httpHydra,
                     streamfile => HostStreamProxy(RezkaInvoke.fixcdn(country, init.uacdn, streamfile), headers: RezkaInvoke.StreamProxyHeaders(init)),
@@ -114,14 +115,21 @@ namespace Online.Controllers
                 var search = await InvokeCacheResult<SearchModel>($"rezka:search:{title}:{original_title}:{clarification}:{year}", 40, async e =>
                 {
                     var content = await oninvk.Search(title, original_title, clarification, year);
-                    if (content == null || (content.IsEmpty && content.content != null))
-                        return e.Fail(content.content ?? "content");
+
+                    if (content.IsError)
+                        return e.Fail(string.Empty, refresh_proxy: true);
+
+                    if (content.IsEmpty)
+                    {
+                        if (rch.enable || content.content != null)
+                            return e.Fail(content.content ?? "content");
+                    }
 
                     return e.Success(content);
                 });
 
-                if (search.ErrorMsg != null && search.ErrorMsg.Contains("Ошибка доступа"))
-                    return ShowError(search.ErrorMsg);
+                if (search.ErrorMsg != null)
+                    return ShowError(string.IsNullOrEmpty(search.ErrorMsg) ? "поиск не дал результатов" : search.ErrorMsg);
 
                 if (similar || string.IsNullOrEmpty(search.Value?.href))
                 {
@@ -257,20 +265,21 @@ namespace Online.Controllers
 
 
         #region getCookie
-        static string rhubCookie = string.Empty;
-        static CookieContainer cookieContainer = null;
+        static ConcurrentDictionary<string, CookieContainer> cookieContainer = new ();
 
         async ValueTask<CookieContainer> getCookie()
         {
-            if (cookieContainer != null)
-                return cookieContainer;
+            string keyCookie = $"{init.cookie}:{init.login}";
+
+            if (cookieContainer.TryGetValue(keyCookie, out CookieContainer _container))
+                return _container;
 
             string domain = Regex.Match(init.host, "https?://([^/]+)").Groups[1].Value;
 
             #region setCookieContainer
             void setCookieContainer(string coks)
             {
-                cookieContainer = new CookieContainer();
+                var container = new CookieContainer();
 
                 if (coks != string.Empty && !coks.Contains("hdmbbs"))
                     coks = $"hdmbbs=1; {coks}";
@@ -293,12 +302,9 @@ namespace Online.Controllers
                     if (name.StartsWith("_ym_"))
                         continue;
 
-                    if (name != "PHPSESSID")
-                        rhubCookie += $"{name}={value}; ";
-
                     if (name == "hdmbbs")
                     {
-                        cookieContainer.Add(new Cookie()
+                        container.Add(new Cookie()
                         {
                             Path = "/",
                             Expires = DateTime.Today.AddYears(1),
@@ -309,7 +315,7 @@ namespace Online.Controllers
                     }
                     else
                     {
-                        cookieContainer.Add(new Cookie()
+                        container.Add(new Cookie()
                         {
                             Path = "/",
                             Expires = name == "PHPSESSID" ? default : DateTime.Today.AddYears(1),
@@ -321,20 +327,20 @@ namespace Online.Controllers
                     }
                 }
 
-                rhubCookie = Regex.Replace(rhubCookie.Trim(), ";$", "");
+                cookieContainer[keyCookie] = container;
             }
             #endregion
 
             if (!string.IsNullOrEmpty(init.cookie))
             {
                 setCookieContainer(init.cookie.Trim());
-                return cookieContainer;
+                return cookieContainer[keyCookie];
             }
 
             if (string.IsNullOrEmpty(init.login) || string.IsNullOrEmpty(init.passwd))
             {
                 setCookieContainer(string.Empty);
-                return cookieContainer;
+                return cookieContainer[keyCookie];
             }
 
             if (memoryCache.TryGetValue("rezka:login", out _))
@@ -398,7 +404,7 @@ namespace Online.Controllers
                                     if (cookie.Contains("dle_user_id") && cookie.Contains("dle_password"))
                                     {
                                         setCookieContainer(cookie.Trim());
-                                        return cookieContainer;
+                                        return cookieContainer[keyCookie];
                                     }
                                 }
                             }
@@ -409,6 +415,47 @@ namespace Online.Controllers
             catch { }
 
             return null;
+        }
+        #endregion
+
+        #region getRhubCookie
+        static ConcurrentDictionary<string, string> rhubCookies = new();
+
+        string getRhubCookie()
+        {
+            if (string.IsNullOrWhiteSpace(init.cookie))
+                return null;
+
+            if (rhubCookies.TryGetValue(init.cookie, out string _cook))
+                return _cook;
+
+            string rhubCookie = string.Empty;
+            string domain = Regex.Match(init.host, "https?://([^/]+)").Groups[1].Value;
+
+            foreach (string line in init.cookie.Split(";"))
+            {
+                if (string.IsNullOrEmpty(line) || !line.Contains("="))
+                    continue;
+
+                var g = Regex.Match(line.Trim(), "^([^=]+)=([^\n\r]+)").Groups;
+                string name = g[1].Value.Trim();
+                string value = g[2].Value.Trim();
+
+                if (name is "CLID" or "MUID" or "_clck" or "_clsk")
+                    continue;
+
+                if (name.StartsWith("_ym_"))
+                    continue;
+
+                if (name != "PHPSESSID")
+                    rhubCookie += $"{name}={value}; ";
+
+            }
+
+            rhubCookie = Regex.Replace(rhubCookie.Trim(), ";$", "");
+            rhubCookies[init.cookie] = rhubCookie;
+
+            return rhubCookie;
         }
         #endregion
     }

@@ -790,7 +790,7 @@ namespace Shared
 
                     if (kit.AesGcm)
                     {
-                        json = CryptoKit.Read(requestInfo.AesGcmKey, _cache.infile);
+                        json = CryptoKit.ReadFile(requestInfo.AesGcmKey, _cache.infile);
                     }
                     else
                     {
@@ -851,7 +851,7 @@ namespace Shared
                         return null;
 
                     if (kit.AesGcm)
-                        json = CryptoKit.Read(requestInfo.AesGcmKey, Encoding.UTF8.GetBytes(json));
+                        json = CryptoKit.Read(requestInfo.AesGcmKey, json);
 
                     if (!json.TrimStart().StartsWith("{"))
                         json = "{" + json + "}";
@@ -918,18 +918,13 @@ namespace Shared
                 InvkEvent.LoadKitInit(new EventLoadKit(defaultinit, init, appinit, requestInfo, hybridCache));
 
             if (!init.kit || appinit == null || string.IsNullOrEmpty(init.plugin) || !appinit.ContainsKey(init.plugin))
-            {
-                if (InvkEvent.IsLoadKit())
-                    InvkEvent.LoadKit(new EventLoadKit(defaultinit, init, appinit, requestInfo, hybridCache));
-
                 return init;
-            }
 
-            var conf = appinit.Value<JObject>(init.plugin);
+            var userconf = appinit.Value<JObject>(init.plugin);
 
             if (AppInit.conf.kit.absolute)
             {
-                foreach (var prop in conf.Properties())
+                foreach (var prop in userconf.Properties())
                 {
                     try
                     {
@@ -947,12 +942,12 @@ namespace Shared
             {
                 void update<T2>(string key, Action<T2> updateAction)
                 {
-                    if (conf.ContainsKey(key))
-                        updateAction(conf.Value<T2>(key));
+                    if (userconf.ContainsKey(key))
+                        updateAction(userconf.Value<T2>(key));
                 }
 
                 update<bool>("enable", v => init.enable = v);
-                if (conf.ContainsKey("enable") && init.enable)
+                if (userconf.ContainsKey("enable") && init.enable)
                     init.geo_hide = null;
 
                 update<string>("displayname", v => init.displayname = v);
@@ -969,25 +964,25 @@ namespace Shared
 
                 update<string>("overridehost", v => init.overridehost = v);
                 update<string>("overridepasswd", v => init.overridepasswd = v);
-                if (conf.ContainsKey("overridehosts"))
-                    init.overridehosts = conf["overridehosts"].ToObject<string[]>();
+                if (userconf.ContainsKey("overridehosts"))
+                    init.overridehosts = userconf["overridehosts"].ToObject<string[]>();
 
-                if (conf.ContainsKey("headers"))
-                    init.headers = conf["headers"].ToObject<Dictionary<string, string>>();
+                if (userconf.ContainsKey("headers"))
+                    init.headers = userconf["headers"].ToObject<Dictionary<string, string>>();
 
                 init.apnstream = true;
-                if (conf.ContainsKey("apn"))
-                    init.apn = conf["apn"].ToObject<ApnConf>();
+                if (userconf.ContainsKey("apn"))
+                    init.apn = userconf["apn"].ToObject<ApnConf>();
 
                 init.useproxystream = false;
                 update<bool>("streamproxy", v => init.streamproxy = v);
                 update<bool>("qualitys_proxy", v => init.qualitys_proxy = v);
-                if (conf.ContainsKey("geostreamproxy"))
-                    init.geostreamproxy = conf["geostreamproxy"].ToObject<string[]>();
+                if (userconf.ContainsKey("geostreamproxy"))
+                    init.geostreamproxy = userconf["geostreamproxy"].ToObject<string[]>();
 
-                if (conf.ContainsKey("proxy"))
+                if (userconf.ContainsKey("proxy"))
                 {
-                    init.proxy = conf["proxy"].ToObject<ProxySettings>();
+                    init.proxy = userconf["proxy"].ToObject<ProxySettings>();
                     if (init?.proxy?.list != null && init.proxy.list.Length > 0)
                         update<bool>("useproxy", v => init.useproxy = v);
                 }
@@ -1005,7 +1000,7 @@ namespace Shared
                 else
                 {
                     init.rhub = true;
-                    init.rhub_fallback = true;
+                    init.rhub_fallback = false;
                 }
 
                 if (init.rhub)
@@ -1016,10 +1011,10 @@ namespace Shared
             init.IsKitConf = true;
 
             if (InvkEvent.IsLoadKit())
-                InvkEvent.LoadKit(new EventLoadKit(defaultinit, init, conf, requestInfo, hybridCache));
+                InvkEvent.LoadKit(new EventLoadKit(defaultinit, init, userconf, requestInfo, hybridCache));
 
             if (func != null)
-                return func.Invoke(conf, init, conf.ToObject<T>());
+                return func.Invoke(userconf, init, userconf.ToObject<T>());
 
             return init;
         }

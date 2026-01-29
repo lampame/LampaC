@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Shared.Engine
@@ -7,9 +8,15 @@ namespace Shared.Engine
     {
         public static string RandomKey()
         {
-            byte[] key = new byte[32]; // 256-bit
+            Span<byte> key = stackalloc byte[32]; // 256-bit
             RandomNumberGenerator.Fill(key);
-            return Convert.ToBase64String(key);
+
+            int base64Length = ((key.Length + 2) / 3) * 4;
+
+            return string.Create(base64Length, key, static (span, key) =>
+            {
+                Convert.TryToBase64Chars(key, span, out _);
+            });
         }
 
         public static bool TestKey(string keyBase64)
@@ -18,20 +25,23 @@ namespace Shared.Engine
             {
                 byte[] key = Convert.FromBase64String(keyBase64);
 
-                byte[] nonce = RandomBytes(12);
-                byte[] plaintext = Encoding.UTF8.GetBytes("test");
+                Span<byte> nonce = stackalloc byte[12];
+                RandomNumberGenerator.Fill(nonce);
 
-                byte[] ciphertext = new byte[plaintext.Length];
-                byte[] tag = new byte[16];
+                Span<byte> plaintext = stackalloc byte[4];
+                Encoding.UTF8.GetBytes("test", plaintext);
+
+                Span<byte> ciphertext = stackalloc byte[plaintext.Length];
+                Span<byte> tag = stackalloc byte[16];
 
                 using (var aes = new AesGcm(key, 16))
                 {
                     aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-                    byte[] decrypted = new byte[ciphertext.Length];
+                    Span<byte> decrypted = stackalloc byte[ciphertext.Length];
                     aes.Decrypt(nonce, ciphertext, tag, decrypted);
 
-                    return Encoding.UTF8.GetString(decrypted) == "test";
+                    return decrypted.SequenceEqual("test"u8);
                 }
             }
             catch
@@ -40,84 +50,168 @@ namespace Shared.Engine
             }
         }
 
-        public static bool Write(string keyBase64, string json, string filePath)
+        public static unsafe bool Write(string keyBase64, ReadOnlySpan<char> json, string filePath)
         {
+            byte* pPlain = null;
+            byte* pCipher = null;
+
             try
             {
                 byte[] key = Convert.FromBase64String(keyBase64);
 
-                byte[] nonce = RandomBytes(12);
-                byte[] plaintext = Encoding.UTF8.GetBytes(json);
+                Span<byte> nonce = stackalloc byte[12];
+                RandomNumberGenerator.Fill(nonce);
 
-                byte[] ciphertext = new byte[plaintext.Length];
-                byte[] tag = new byte[16];
+                Span<byte> tag = stackalloc byte[16];
+
+                int plainLen = Encoding.UTF8.GetByteCount(json);
+                pPlain = (byte*)NativeMemory.Alloc((nuint)plainLen);
+                pCipher = (byte*)NativeMemory.Alloc((nuint)plainLen);
+
+                var plaintext = new Span<byte>(pPlain, plainLen);
+                var ciphertext = new Span<byte>(pCipher, plainLen);
+
+                int written = Encoding.UTF8.GetBytes(json, plaintext);
+                if (written != plainLen)
+                    return false; // на всякий случай
 
                 using (var aes = new AesGcm(key, 16))
-                {
                     aes.Encrypt(nonce, plaintext, ciphertext, tag);
-                }
 
-                using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    fs.Write(nonce, 0, nonce.Length);
-                    fs.Write(tag, 0, tag.Length);
-                    fs.Write(ciphertext, 0, ciphertext.Length);
+                    fs.Write(nonce);
+                    fs.Write(tag);
+                    fs.Write(ciphertext);
                 }
 
                 return true;
             }
-            catch 
+            catch
             {
                 return false;
             }
+            finally
+            {
+                if (pPlain != null) NativeMemory.Free(pPlain);
+                if (pCipher != null) NativeMemory.Free(pCipher);
+            }
         }
 
-        public static string Read(string keyBase64, string filePath)
+        public static unsafe string ReadFile(string keyBase64, string filePath)
         {
+            byte* pData = null;
+
             try
             {
-                return Read(keyBase64, File.ReadAllBytes(filePath));
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: PoolInvk.rentChunk, options: FileOptions.SequentialScan))
+                {
+                    long len64 = fs.Length;
+
+                    if (len64 < 28)
+                        return null;
+
+                    if (len64 > int.MaxValue)
+                        return null;
+
+                    int len = (int)len64;
+
+                    pData = (byte*)NativeMemory.Alloc((nuint)len);
+                    var data = new Span<byte>(pData, len);
+
+                    int total = 0;
+                    while (total < len)
+                    {
+                        int n = fs.Read(data.Slice(total));
+                        if (n <= 0)
+                            return null;
+
+                        total += n;
+                    }
+
+                    return Read(keyBase64, data);
+                }
             }
             catch
             {
                 return null;
+            }
+            finally
+            {
+                if (pData != null)
+                    NativeMemory.Free(pData);
+            }
+        }
+
+        public static unsafe string Read(string keyBase64, ReadOnlySpan<char> data)
+        {
+            int maxLen = (data.Length / 4) * 3 + 3;
+
+            byte* pData = null;
+
+            try
+            {
+                pData = (byte*)NativeMemory.Alloc((nuint)maxLen);
+                var decoded = new Span<byte>(pData, maxLen);
+
+                if (!Convert.TryFromBase64Chars(data, decoded, out int written))
+                    return null;
+
+                return Read(keyBase64, decoded.Slice(0, written));
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                if (pData != null)
+                    NativeMemory.Free(pData);
             }
         }
 
         public static string Read(string keyBase64, byte[] data)
         {
+            return Read(keyBase64, data.AsSpan());
+        }
+
+        public static unsafe string Read(string keyBase64, ReadOnlySpan<byte> data)
+        {
+            byte* pPlain = null;
+
             try
             {
                 byte[] key = Convert.FromBase64String(keyBase64);
 
-                byte[] nonce = new byte[12];
-                byte[] tag = new byte[16];
-                byte[] ciphertext = new byte[data.Length - 28];
+                ReadOnlySpan<byte> nonce = data.Slice(0, 12);
+                ReadOnlySpan<byte> tag = data.Slice(12, 16);
+                ReadOnlySpan<byte> ciphertext = data.Slice(28);
 
-                Buffer.BlockCopy(data, 0, nonce, 0, 12);
-                Buffer.BlockCopy(data, 12, tag, 0, 16);
-                Buffer.BlockCopy(data, 28, ciphertext, 0, ciphertext.Length);
+                int plainLen = ciphertext.Length;
 
-                byte[] plaintext = new byte[ciphertext.Length];
+                pPlain = (byte*)NativeMemory.Alloc((nuint)plainLen);
+                var plaintext = new Span<byte>(pPlain, plainLen);
 
                 using (var aes = new AesGcm(key, 16))
-                {
                     aes.Decrypt(nonce, ciphertext, tag, plaintext);
-                }
 
-                return Encoding.UTF8.GetString(plaintext);
+                int charCount = Encoding.UTF8.GetCharCount(plaintext);
+
+                return string.Create(charCount, (Ptr: (IntPtr)pPlain, Len: plainLen), static (dest, state) =>
+                {
+                    var bytes = new ReadOnlySpan<byte>((byte*)state.Ptr, state.Len);
+                    Encoding.UTF8.GetChars(bytes, dest);
+                });
             }
-            catch 
+            catch
             {
                 return null;
             }
-        }
-
-        static byte[] RandomBytes(int len)
-        {
-            byte[] b = new byte[len];
-            RandomNumberGenerator.Fill(b);
-            return b;
+            finally
+            {
+                if (pPlain != null)
+                    NativeMemory.Free(pPlain);
+            }
         }
     }
 }

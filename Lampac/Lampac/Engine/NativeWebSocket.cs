@@ -289,7 +289,7 @@ namespace Lampac.Engine
                     break;
 
                 case "registryweblog":
-                    if (AppInit.conf.weblog.enable)
+                    if (AppInit.conf.weblog.enable && Startup.WebLogEnableController)
                     {
                         string token = GetStringArg(args, 0);
                         if (string.IsNullOrEmpty(AppInit.conf.weblog.token) || AppInit.conf.weblog.token == token)
@@ -430,7 +430,7 @@ namespace Lampac.Engine
             if (!AppInit.conf.weblog.enable || string.IsNullOrEmpty(message) || string.IsNullOrEmpty(plugin) || message.Length > 4_000000)
                 return;
 
-            if (weblog_clients.IsEmpty)
+            if (weblog_clients.IsEmpty || !Startup.WebLogEnableController)
                 return;
 
             foreach (string connectionId in weblog_clients.Keys)

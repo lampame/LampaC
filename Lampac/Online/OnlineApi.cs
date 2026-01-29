@@ -643,7 +643,7 @@ namespace Online.Controllers
 
             if (OnlineModuleEntry.onlineModulesCache != null && OnlineModuleEntry.onlineModulesCache.Count > 0)
             {
-                var args = new OnlineEventsModel(id, imdb_id, kinopoisk_id, title, original_title, original_language, year, source, rchtype, serial, life, islite, account_email, uid, token, nws_id);
+                var args = new OnlineEventsModel(id, imdb_id, kinopoisk_id, title, original_title, original_language, year, source, rchtype, serial, life, islite, account_email, uid, token, nws_id, kitconf);
 
                 foreach (var entry in OnlineModuleEntry.onlineModulesCache)
                 {
