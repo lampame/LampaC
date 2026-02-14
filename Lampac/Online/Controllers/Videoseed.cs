@@ -7,60 +7,33 @@ namespace Online.Controllers
 {
     public class Videoseed : BaseOnlineController
     {
+        public Videoseed() : base(AppInit.conf.Videoseed) { }
+
         [HttpGet]
         [Route("lite/videoseed")]
-        async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int s = -1, bool rjson = false, int serial = -1)
+        async public Task<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int s = -1, bool rjson = false, int serial = -1)
         {
-            var init = await loadKit(AppInit.conf.Videoseed);
-            if (await IsBadInitialization(init, rch: false))
+            if (PlaywrightBrowser.Status == PlaywrightStatus.disabled)
+                return OnError();
+
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.token))
                 return OnError();
 
-            if (PlaywrightBrowser.Status == PlaywrightStatus.disabled)
-                return OnError();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
-
-            string memKey = $"videoseed:view:{kinopoisk_id}:{imdb_id}:{original_title}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"videoseed:view:{kinopoisk_id}:{imdb_id}:{original_title}", async key =>
             {
                 #region search
-                if (!hybridCache.TryGetValue(memKey, out (Dictionary<string, JObject> seasons, string iframe) cache))
+                if (!hybridCache.TryGetValue(key, out (Dictionary<string, JObject> seasons, string iframe) cache))
                 {
-                    #region goSearch
-                    async ValueTask<JToken> goSearch(bool isOk, string arg)
-                    {
-                        if (!isOk)
-                            return null;
-
-                        string uri = $"{init.host}/apiv2.php?item={(serial == 1 ? "serial" : "movie")}&token={init.token}" + arg;
-                        var root = await Http.Get<JObject>(uri, timeoutSeconds: 8, headers: httpHeaders(init), proxy: proxy.proxy);
-
-                        if (root == null || !root.ContainsKey("data") || root.Value<string>("status") == "error")
-                        {
-                            proxyManager.Refresh();
-                            return null;
-                        }
-
-                        return root["data"]?.First;
-                    }
-                    #endregion
-
-                    var data = await goSearch(kinopoisk_id > 0, $"&kp={kinopoisk_id}") ??
-                               await goSearch(!string.IsNullOrEmpty(imdb_id), $"&tmdb={imdb_id}") ??
-                               await goSearch(!string.IsNullOrEmpty(original_title), $"&q={HttpUtility.UrlEncode(original_title)}&release_year_from={year - 1}&release_year_to={year + 1}");
+                    var data = await goSearch(serial, kinopoisk_id > 0, $"&kp={kinopoisk_id}") 
+                        ?? await goSearch(serial, !string.IsNullOrEmpty(imdb_id), $"&tmdb={imdb_id}") 
+                        ?? await goSearch(serial, !string.IsNullOrEmpty(original_title), $"&q={HttpUtility.UrlEncode(original_title)}&release_year_from={year - 1}&release_year_to={year + 1}");
 
                     if (data == null)
                     {
-                        proxyManager.Refresh();
+                        proxyManager?.Refresh();
                         return OnError();
                     }
 
@@ -71,12 +44,12 @@ namespace Online.Controllers
 
                     if (cache.seasons == null && string.IsNullOrEmpty(cache.iframe))
                     {
-                        proxyManager.Refresh();
+                        proxyManager?.Refresh();
                         return OnError();
                     }
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, cache, cacheTime(40, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, cache, cacheTime(40));
                 }
                 #endregion
 
@@ -86,7 +59,7 @@ namespace Online.Controllers
                     var mtpl = new MovieTpl(title, original_title, 1);
                     mtpl.Append("По-умолчанию", accsArgs($"{host}/lite/videoseed/video/{AesTo.Encrypt(cache.iframe)}") + "#.m3u8", "call", vast: init.vast);
 
-                    return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                    return await ContentTpl(mtpl);
                     #endregion
                 }
                 else
@@ -105,7 +78,7 @@ namespace Online.Controllers
                             tpl.Append($"{season.Key} сезон", link, season.Key);
                         }
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return await ContentTpl(tpl);
                     }
                     else
                     {
@@ -120,47 +93,42 @@ namespace Online.Controllers
                             etpl.Append($"{video.Key} серия", title ?? original_title, sArhc, video.Key, accsArgs($"{host}/lite/videoseed/video/{AesTo.Encrypt(iframe)}"), "call", vast: init.vast);
                         }
 
-                        return ContentTo(rjson ? etpl.ToJson() : etpl.ToHtml());
+                        return await ContentTpl(etpl);
                     }
                     #endregion
                 }
             });
         }
 
-
         #region Video
         [HttpGet]
         [Route("lite/videoseed/video/{*iframe}")]
         async public ValueTask<ActionResult> Video(string iframe)
         {
-            var init = await loadKit(AppInit.conf.Videoseed);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
 
             iframe = AesTo.Decrypt(iframe);
             if (string.IsNullOrEmpty(iframe))
                 return OnError();
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
+            iframe = Regex.Replace(iframe, "token=[a-z0-9]{32}", "token=00000000000000000000000000000000");
+            iframe = Regex.Replace(iframe, "tv-[0-9]", "tv-2");
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
-
-            string memKey = $"videoseed:video:{iframe}:{proxyManager.CurrentProxyIp}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"videoseed:video:{iframe}:{proxyManager?.CurrentProxyIp}", async key =>
             {
-                if (!hybridCache.TryGetValue(memKey, out string location))
+                if (!hybridCache.TryGetValue(key, out string location))
                 {
-                    var headers = httpHeaders(init);
+                    var headers = httpHeaders(init, HeadersModel.Init
+                    (
+                        ("referer", "encrypt:kwwsv=22ylghrvhhg1wy2")
+                    ));
 
                     try
                     {
                         using (var browser = new PlaywrightBrowser(init.priorityBrowser))
                         {
-                            var page = await browser.NewPageAsync(init.plugin, proxy: proxy.data, headers: headers?.ToDictionary()).ConfigureAwait(false);
+                            var page = await browser.NewPageAsync(init.plugin, proxy: proxy_data, headers: headers?.ToDictionary()).ConfigureAwait(false);
                             if (page == null)
                                 return null;
 
@@ -202,12 +170,12 @@ namespace Online.Controllers
                                     location = null;
                             }
 
-                            PlaywrightBase.WebLog("SET", iframe, location, proxy.data);
+                            PlaywrightBase.WebLog("SET", iframe, location, proxy_data);
                         }
 
                         if (string.IsNullOrEmpty(location))
                         {
-                            proxyManager.Refresh();
+                            proxyManager?.Refresh();
                             return OnError();
                         }
                     }
@@ -216,13 +184,34 @@ namespace Online.Controllers
                         return OnError();
                     }
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, location, cacheTime(20));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, location, cacheTime(20));
                 }
 
-                string link = HostStreamProxy(init, location, proxy: proxy.proxy, headers: HeadersModel.Init("referer", iframe));
+                string referer = Regex.Match(iframe, "(^https?://[^/]+)").Groups[1].Value;
+                var headers_stream = httpHeaders(init.corsHost(), HeadersModel.Join(HeadersModel.Init("referer", referer), init.headers_stream));
+
+                string link = HostStreamProxy(location, headers: headers_stream);
                 return ContentTo(VideoTpl.ToJson("play", link, "auto", vast: init.vast));
             });
+        }
+        #endregion
+
+        #region goSearch
+        async Task<JToken> goSearch(int serial, bool isOk, string arg)
+        {
+            if (!isOk)
+                return null;
+
+            var root = await httpHydra.Get<JObject>($"{init.corsHost()}/apiv2.php?item={(serial == 1 ? "serial" : "movie")}&token={init.token}" + arg, safety: true);
+
+            if (root == null || !root.ContainsKey("data") || root.Value<string>("status") == "error")
+            {
+                proxyManager?.Refresh();
+                return null;
+            }
+
+            return root["data"]?.First;
         }
         #endregion
     }

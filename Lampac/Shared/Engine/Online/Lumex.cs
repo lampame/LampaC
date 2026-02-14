@@ -1,8 +1,8 @@
-﻿using Shared.Models.Base;
+﻿using Shared.Models;
+using Shared.Models.Base;
 using Shared.Models.Online.Lumex;
 using Shared.Models.Online.Settings;
 using Shared.Models.Templates;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 
@@ -15,9 +15,8 @@ namespace Shared.Engine.Online
         bool hls;
         string apihost;
         string token;
-        Func<string, string, ValueTask<string>> onget;
+        HttpHydra http;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
         public string onstream(string stream)
@@ -28,22 +27,21 @@ namespace Shared.Engine.Online
             return onstreamfile.Invoke(stream);
         }
 
-        public LumexInvoke(LumexSettings init, Func<string, string, ValueTask<string>> onget, Func<string, string> onstreamfile, string host = null, Func<string, string> onlog = null, Action requesterror = null)
+        public LumexInvoke(string host, LumexSettings init, HttpHydra httpHydra, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.scheme = init.scheme ?? "http";
             this.hls = init.hls;
             this.apihost = init.cors(init.apihost);
             this.token = init!.token;
-            this.onget = onget;
+            this.http = httpHydra;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Search
-        public async ValueTask<SimilarTpl> Search(string title, string original_title, int serial, int clarification, IEnumerable<DatumDB> database = null)
+        public async Task<SimilarTpl> Search(string title, string original_title, int serial, int clarification, IEnumerable<DatumDB> database = null)
         {
             if (string.IsNullOrWhiteSpace(title ?? original_title))
                 return default;
@@ -56,22 +54,12 @@ namespace Shared.Engine.Online
                 #region api/short
                 string uri = $"{apihost}/api/short?api_token={token}&title={HttpUtility.UrlEncode(clarification == 1 ? title : (original_title ?? title))}";
 
-                string json = await onget.Invoke(uri, apihost);
-                if (json == null)
+                var root = await http.Get<SearchRoot>(uri, addheaders: HeadersModel.Init("referer", apihost), safety: true);
+                if (root?.data == null || root.data.Length == 0)
                 {
                     requesterror?.Invoke();
                     return default;
                 }
-
-                SearchRoot root = null;
-
-                try
-                {
-                    root = JsonSerializer.Deserialize<SearchRoot>(json);
-                    if (root?.data == null || root.data.Length == 0)
-                        return default;
-                }
-                catch { return default; }
 
                 var stpl = new SimilarTpl(root.data.Length);
 
@@ -95,7 +83,7 @@ namespace Shared.Engine.Online
                     string year = item.add?.Split("-")?[0] ?? string.Empty;
                     string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.orig_title) ? $"{item.title} / {item.orig_title}" : (item.title ?? item.orig_title);
 
-                    string details = $"imdb: {item.imdb_id} {stpl.OnlineSplit} kinopoisk: {item.kp_id}";
+                    string details = $"imdb: {item.imdb_id} {SimilarTpl.OnlineSplit} kinopoisk: {item.kp_id}";
 
                     string img = PosterApi.Find(item.kp_id, item.imdb_id);
                     stpl.Append(name, year, details, host + $"lite/lumex?title={enc_title}&original_title={enc_original_title}&content_type={item.content_type}&content_id={item.id}&clarification={clarification}", img);
@@ -157,7 +145,7 @@ namespace Shared.Engine.Online
                     string year = item.year?.Split("-")?[0] ?? string.Empty;
                     string name = !string.IsNullOrEmpty(item.ru_title) && !string.IsNullOrEmpty(item.orig_title) ? $"{item.ru_title} / {item.orig_title}" : (item.ru_title ?? item.orig_title);
 
-                    string details = $"imdb: {item.imdb_id} {stpl.OnlineSplit} kinopoisk: {item.kinopoisk_id}";
+                    string details = $"imdb: {item.imdb_id} {SimilarTpl.OnlineSplit} kinopoisk: {item.kinopoisk_id}";
 
                     string img = PosterApi.Find(item.kinopoisk_id, item.imdb_id);
                     stpl.Append(name, year, details, host + $"lite/lumex?title={enc_title}&original_title={enc_original_title}&content_type={item.content_type}&content_id={item.id}&clarification={clarification}", img);
@@ -171,11 +159,11 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, string args, long content_id, string content_type, string imdb_id, long kinopoisk_id, string title, string original_title, int clarification, string t, int s, bool rjson = false, bool bwa = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, string args, long content_id, string content_type, string imdb_id, long kinopoisk_id, string title, string original_title, int clarification, string t, int s, bool rjson = false, bool bwa = false)
         {
             if (result?.media == null || result.media.Length == 0)
-                return string.Empty;
+                return default;
 
             if (!string.IsNullOrEmpty(args))
                 args = $"&{args.Remove(0, 1)}";
@@ -209,7 +197,7 @@ namespace Shared.Engine.Online
                     }
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -231,13 +219,13 @@ namespace Shared.Engine.Online
                             tpl.Append($"{media.season_id} сезон", link, media.season_id);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
                         #region Перевод
                         var vtpl = new VoiceTpl();
-                        var tmpVoice = new HashSet<int>();
+                        var tmpVoice = new HashSet<int>(20);
 
                         foreach (var media in result.media)
                         {
@@ -265,7 +253,7 @@ namespace Shared.Engine.Online
                         if (string.IsNullOrEmpty(t))
                             t = "0";
 
-                        var etpl = new EpisodeTpl();
+                        var etpl = new EpisodeTpl(vtpl);
                         string sArhc = s.ToString();
 
                         foreach (var media in result.media)
@@ -304,15 +292,12 @@ namespace Shared.Engine.Online
                             }
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

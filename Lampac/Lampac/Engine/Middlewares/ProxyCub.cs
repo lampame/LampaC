@@ -25,7 +25,9 @@ namespace Lampac.Engine.Middlewares
         #region ProxyCub
         static FileSystemWatcher fileWatcher;
 
-        static ConcurrentDictionary<string, int> cacheFiles = new ();
+        static readonly ConcurrentDictionary<string, int> cacheFiles = new ();
+
+        public static int Stat_ContCacheFiles => cacheFiles.IsEmpty ? 0 : cacheFiles.Count;
 
         static Timer cleanupTimer;
 
@@ -33,8 +35,11 @@ namespace Lampac.Engine.Middlewares
         {
             Directory.CreateDirectory("cache/cub");
 
-            foreach (var item in Directory.EnumerateFiles("cache/cub", "*"))
-                cacheFiles.TryAdd(Path.GetFileName(item), (int)new FileInfo(item).Length);
+            foreach (string path in Directory.EnumerateFiles("cache/cub", "*"))
+            {
+                using (var handle = File.OpenHandle(path))
+                    cacheFiles.TryAdd(Path.GetFileName(path), (int)RandomAccess.GetLength(handle));
+            }
 
             fileWatcher = new FileSystemWatcher
             {
@@ -46,18 +51,16 @@ namespace Lampac.Engine.Middlewares
             //fileWatcher.Created += (s, e) => { cacheFiles.TryAdd(e.Name, 0); };
             fileWatcher.Deleted += (s, e) => { cacheFiles.TryRemove(e.Name, out _); };
 
-            cleanupTimer = new Timer(cleanup, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
+            cleanupTimer = new Timer(cleanup, null, TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(20));
         }
 
         static void cleanup(object state)
         {
             try
             {
-                var files = Directory.GetFiles("cache/cub", "*").Select(f => Path.GetFileName(f)).ToHashSet();
-
-                foreach (string md5fileName in cacheFiles.Keys.ToArray())
+                foreach (string md5fileName in cacheFiles.Keys)
                 {
-                    if (!files.Contains(md5fileName))
+                    if (!File.Exists(Path.Combine("cache", "cub", md5fileName)))
                         cacheFiles.TryRemove(md5fileName, out _);
                 }
             }
@@ -73,14 +76,14 @@ namespace Lampac.Engine.Middlewares
             {
                 ctsHttp.CancelAfter(TimeSpan.FromSeconds(30));
 
-                var hybridCache = new HybridCache();
                 var requestInfo = httpContext.Features.Get<RequestModel>();
+                var hybridCache = IHybridCache.Get(requestInfo);
 
                 var init = AppInit.conf.cub;
                 string domain = init.domain;
-                string path = httpContext.Request.Path.Value.Replace("/cub/", "");
+                string path = httpContext.Request.Path.Value.Replace("/cub/", "", StringComparison.OrdinalIgnoreCase);
                 string query = httpContext.Request.QueryString.Value;
-                string uri = Regex.Match(path, "^[^/]+/(.*)").Groups[1].Value + query;
+                string uri = Regex.Match(path, "^[^/]+/(.*)", RegexOptions.IgnoreCase).Groups[1].Value + query;
 
                 if (!init.enable || domain == "ws")
                 {
@@ -91,7 +94,7 @@ namespace Lampac.Engine.Middlewares
                 if (path.Split(".")[0] is "geo" or "tmdb" or "tmapi" or "apitmdb" or "imagetmdb" or "cdn" or "ad" or "ws")
                     domain = $"{path.Split(".")[0]}.{domain}";
 
-                if (domain.StartsWith("geo"))
+                if (domain.StartsWith("geo", StringComparison.OrdinalIgnoreCase))
                 {
                     string country = requestInfo.Country;
                     if (string.IsNullOrEmpty(country))
@@ -106,14 +109,14 @@ namespace Lampac.Engine.Middlewares
                 }
 
                 #region checker
-                if (path.StartsWith("api/checker") || uri.StartsWith("api/checker"))
+                if (path.StartsWith("api/checker", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("api/checker", StringComparison.OrdinalIgnoreCase))
                 {
                     if (HttpMethods.IsPost(httpContext.Request.Method))
                     {
                         if (httpContext.Request.ContentType != null &&
                             httpContext.Request.ContentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
                         {
-                            using (var reader = new StreamReader(httpContext.Request.Body, leaveOpen: true))
+                            using (var reader = new StreamReader(httpContext.Request.Body, leaveOpen: true, bufferSize: PoolInvk.bufferSize))
                             {
                                 string form = await reader.ReadToEndAsync();
 
@@ -134,7 +137,7 @@ namespace Lampac.Engine.Middlewares
                 #endregion
 
                 #region blacklist
-                if (uri.StartsWith("api/plugins/blacklist"))
+                if (uri.StartsWith("api/plugins/blacklist", StringComparison.OrdinalIgnoreCase))
                 {
                     httpContext.Response.ContentType = "application/json; charset=utf-8";
                     await httpContext.Response.WriteAsync("[]", ctsHttp.Token);
@@ -143,13 +146,13 @@ namespace Lampac.Engine.Middlewares
                 #endregion
 
                 #region ads/log/metric
-                if (uri.StartsWith("api/metric/") || uri.StartsWith("api/ad/stat"))
+                if (uri.StartsWith("api/metric/", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("api/ad/stat", StringComparison.OrdinalIgnoreCase))
                 {
                     await httpContext.Response.WriteAsJsonAsync(new { secuses = true });
                     return;
                 }
 
-                if (uri.StartsWith("api/ad/vast"))
+                if (uri.StartsWith("api/ad/vast", StringComparison.OrdinalIgnoreCase))
                 {
                     await httpContext.Response.WriteAsJsonAsync(new 
                     { 
@@ -166,7 +169,7 @@ namespace Lampac.Engine.Middlewares
                 var proxyManager = new ProxyManager("cub_api", init);
                 var proxy = proxyManager.Get();
 
-                bool isMedia = Regex.IsMatch(uri, "\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)");
+                bool isMedia = Regex.IsMatch(uri, "\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)", RegexOptions.IgnoreCase);
 
                 if (0 >= init.cache_api || !HttpMethods.IsGet(httpContext.Request.Method) || isMedia ||
                     (path.Split(".")[0] is "imagetmdb" or "cdn" or "ad") ||
@@ -203,7 +206,7 @@ namespace Lampac.Engine.Middlewares
                     }
                     else { handler.UseProxy = false; }
 
-                    var client = FrendlyHttp.HttpMessageClient("proxyRedirect", handler);
+                    var client = FrendlyHttp.MessageClient("proxyRedirect", handler);
                     var request = CreateProxyHttpRequest(httpContext, new Uri($"{init.scheme}://{domain}/{uri}"), requestInfo, init.viewru && path.Split(".")[0] == "tmdb");
 
                     using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ctsHttp.Token).ConfigureAwait(false))
@@ -226,17 +229,13 @@ namespace Lampac.Engine.Middlewares
                             {
                                 await semaphore.WaitAsync().ConfigureAwait(false);
 
-                                byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+                                byte[] buffer = ArrayPool<byte>.Shared.Rent(PoolInvk.rentChunk);
 
                                 try
                                 {
                                     int cacheLength = 0;
 
-                                    int bufferSize = response.Content.Headers.ContentLength.HasValue 
-                                        ? (int)response.Content.Headers.ContentLength.Value 
-                                        : 50_000; // 50kB
-
-                                    using (var cacheStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize))
+                                    using (var cacheStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, PoolInvk.bufferSize))
                                     {
                                         using (var responseStream = await response.Content.ReadAsStreamAsync(ctsHttp.Token).ConfigureAwait(false))
                                         {
@@ -319,7 +318,7 @@ namespace Lampac.Engine.Middlewares
                                 }
                             }
 
-                            var result = await Http.BaseGetAsync($"{init.scheme}://{domain}/{uri}", timeoutSeconds: 10, proxy: proxy, headers: headers, statusCodeOK: false, useDefaultHeaders: false).ConfigureAwait(false);
+                            var result = await Http.BaseGet($"{init.scheme}://{domain}/{uri}", timeoutSeconds: 10, proxy: proxy, headers: headers, statusCodeOK: false, useDefaultHeaders: false).ConfigureAwait(false);
                             if (string.IsNullOrEmpty(result.content))
                             {
                                 proxyManager.Refresh();
@@ -418,13 +417,19 @@ namespace Lampac.Engine.Middlewares
             #region Headers
             foreach (var header in request.Headers)
             {
-                if (header.Key.ToLower() is "host" or "origin" or "referer" or "content-disposition" or "accept-encoding")
+                string key = header.Key;
+
+                if (key.Equals("host", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("origin", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("referer", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("accept-encoding", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (viewru && header.Key.ToLower() == "cookie")
+                if (viewru && key.Equals("cookie", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (header.Key.ToLower().StartsWith("x-"))
+                if (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray()))
@@ -469,20 +474,37 @@ namespace Lampac.Engine.Middlewares
             {
                 foreach (var header in headers)
                 {
-                    if (header.Key.ToLower() is "transfer-encoding" or "etag" or "connection" or "content-security-policy" or "content-disposition" or "content-length")
+                    string key = header.Key;
+
+                    if (key.Equals("server", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("etag", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("connection", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase) ||
+                        key.Equals("content-length", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (header.Key.ToLower().StartsWith("x-"))
+                    if (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase) ||
+                        key.StartsWith("alt-", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (header.Key.ToLower().Contains("access-control"))
+                    if (key.StartsWith("access-control", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    string value = string.Empty;
-                    foreach (var val in header.Value)
-                        value += $"; {val}";
+                    var values = header.Value;
 
-                    response.Headers[header.Key] = Regex.Replace(value, "^; ", "");
+                    using (var e = values.GetEnumerator())
+                    {
+                        if (!e.MoveNext())
+                            continue;
+
+                        var first = e.Current;
+
+                        response.Headers[key] = e.MoveNext()
+                            ? string.Join("; ", values)
+                            : first;
+                    }
                 }
             }
             #endregion
@@ -507,7 +529,7 @@ namespace Lampac.Engine.Middlewares
                 if (!response.Body.CanWrite)
                     throw new NotSupportedException("NotSupported_UnwritableStream");
 
-                byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(PoolInvk.rentChunk);
 
                 try
                 {

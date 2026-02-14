@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Shared;
 using Shared.Engine;
+using Shared.Engine.Pools;
 using Shared.Models.AppConf;
 using Shared.PlaywrightCore;
 using System;
@@ -30,6 +31,7 @@ namespace Lampac.Controllers
         }
 
         #region browser/context
+        [HttpGet]
         [AllowAnonymous]
         [Route("/stats/browser/context")]
         public ActionResult BrowserContext()
@@ -62,6 +64,7 @@ namespace Lampac.Controllers
         #endregion
 
         #region request
+        [HttpGet]
         [AllowAnonymous]
         [Route("/stats/request")]
         public ActionResult Requests()
@@ -69,13 +72,18 @@ namespace Lampac.Controllers
             if (IsDeny(out string ermsg))
                 return Content(ermsg, "text/plain; charset=utf-8");
 
-            long req_min = memoryCache.Get<long>($"stats:request:{DateTime.Now.AddMinutes(-1).Minute}");
+            var now = DateTime.UtcNow;
+
+            long req_min = 0;
+            if (memoryCache.TryGetValue($"stats:request:{now.Hour}:{now.AddMinutes(-1).Minute}", out CounterRequestInfo _counter))
+                req_min = _counter.Value;
 
             long req_hour = req_min;
-            for (int i = 1; i < 58; i++)
+            for (int i = 1; i < 60; i++)
             {
-                if (memoryCache.TryGetValue($"stats:request:{DateTime.Now.AddMinutes(-i).Minute}", out long _r))
-                    req_hour += _r;
+                var cutoff = now.AddMinutes(-i);
+                if (memoryCache.TryGetValue($"stats:request:{cutoff.Hour}:{cutoff.Minute}", out CounterRequestInfo _r))
+                    req_hour += _r.Value;
             }
 
             var responseStats = RequestStatisticsTracker.GetResponseTimeStatsLastMinute();
@@ -93,7 +101,7 @@ namespace Lampac.Controllers
                 req_min,
                 req_hour,
                 tcpConnections = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections().Length,
-                nws_online = nws.ConnectionCount,
+                nws_online = NativeWebSocket.CountConnection,
                 soks_online = soks.connections,
                 http_active = RequestStatisticsTracker.ActiveHttpRequests,
                 http_response_ms = httpResponseMs
@@ -102,6 +110,7 @@ namespace Lampac.Controllers
         #endregion
 
         #region rch
+        [HttpGet]
         [AllowAnonymous]
         [Route("/stats/rch")]
         public ActionResult Rhc()
@@ -109,7 +118,78 @@ namespace Lampac.Controllers
             if (IsDeny(out string ermsg))
                 return Content(ermsg, "text/plain; charset=utf-8");
 
-            return Json(new { clients = RchClient.clients.Count, rchIds = RchClient.rchIds.Count });
+            var now = DateTime.UtcNow;
+
+            int receive = 0, send = 0;
+
+            if (memoryCache.TryGetValue("stats:nws", out CounterNws _c))
+            {
+                receive = _c.receive;
+                send = _c.send;
+            }
+
+            return Json(new 
+            { 
+                clients = RchClient.clients.Count,
+                counter = new 
+                {
+                    receive,
+                    send
+                },
+                rchIds = RchClient.rchIds.Count
+            });
+        }
+        #endregion
+
+        #region TempDb
+        [HttpGet]
+        [AllowAnonymous]
+        [Route("/stats/tempdb")]
+        public ActionResult TempDb()
+        {
+            if (IsDeny(out string ermsg))
+                return Content(ermsg, "text/plain; charset=utf-8");
+
+            return Json(new 
+            {
+                HybridCache = HybridCache.Stat_ContTempDb,
+                HybridFileCache = HybridFileCache.Stat_ContTempDb,
+                ProxyLink = ProxyLink.Stat_ContLinks,
+                ProxyAPI = ProxyAPI.Stat_ContCacheFiles,
+                ProxyTmdb = ProxyTmdb.Stat_ContCacheFiles,
+                ProxyImg = ProxyImg.Stat_ContCacheFiles,
+                ProxyCub = ProxyCub.Stat_ContCacheFiles,
+                SemaphorManager = SemaphorManager.Stat_ContSemaphoreLocks,
+                rch = new
+                {
+                    clients = RchClient.clients.Count,
+                    Ids = RchClient.rchIds.Count
+                },
+                pool = new
+                {
+                    msm = new
+                    {
+                        PoolInvk.msm.SmallPoolInUseSize,
+                        PoolInvk.msm.LargePoolInUseSize,
+                        PoolInvk.msm.SmallBlocksFree,
+                        PoolInvk.msm.SmallPoolFreeSize,
+                        PoolInvk.msm.LargeBuffersFree,
+                        PoolInvk.msm.LargePoolFreeSize
+                    },
+                    StringBuilder = new
+                    {
+                        Rent = StringBuilderPool.RentNew,
+                        Free = StringBuilderPool.FreeCont,
+                        StringBuilderPool.GC
+                    },
+                    MemoryStream = MemoryStreamPool.Count == 0 ? null : new
+                    {
+                        MemoryStreamPool.Count,
+                        MemoryStreamPool.GC
+                    }
+                },
+                memoryCache = memoryCache.GetCurrentStatistics()
+            });
         }
         #endregion
     }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Shared.Engine.Utilities;
 using Shared.PlaywrightCore;
 using System.Net.Http;
 
@@ -18,12 +19,12 @@ namespace Catalog.Controllers
             if (rch.IsNotConnected())
                 rch.Disabled();
 
-            var proxyManager = new ProxyManager(init);
+            var proxyManager = new ProxyManager(init, rch);
             var proxy = proxyManager.BaseGet();
 
             string memKey = $"catalog:card:{plugin}:{uri}";
 
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore(memKey, rch, async () =>
             {
                 if (!hybridCache.TryGetValue(memKey, out JObject jo, inmemory: false))
                 {
@@ -50,14 +51,14 @@ namespace Catalog.Controllers
 
                         html = rch.enable
                             ? await rch.Post(url, init.card_parse.postData, headers, useDefaultHeaders: init.useDefaultHeaders)
-                            : await Http.Post(url, httpdata, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, useDefaultHeaders: init.useDefaultHeaders);
+                            : await Http.Post(url, httpdata, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, httpversion: init.httpversion, useDefaultHeaders: init.useDefaultHeaders);
                     }
                     else
                     {
                         html = rch.enable
                             ? await rch.Get(url, headers, useDefaultHeaders: init.useDefaultHeaders)
                             : init.priorityBrowser == "playwright" ? await PlaywrightBrowser.Get(init, url, headers, proxy.data, cookies: init.cookies)
-                            : await Http.Get(url, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, useDefaultHeaders: init.useDefaultHeaders);
+                            : await Http.Get(url, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, httpversion: init.httpversion, useDefaultHeaders: init.useDefaultHeaders);
                     }
 
                     if (html == null)
@@ -65,14 +66,12 @@ namespace Catalog.Controllers
                         if (ModInit.IsRhubFallback(init))
                             goto reset;
 
-                        if (!rch.enable)
-                            proxyManager.Refresh();
+                        proxyManager.Refresh();
 
                         return BadRequest("html");
                     }
 
-                    if (!rch.enable)
-                        proxyManager.Success();
+                    proxyManager.Success();
 
                     var parse = init.card_parse;
                     bool? jsonPath = parse.jsonPath;
@@ -205,10 +204,10 @@ namespace Catalog.Controllers
                     if (!jo.ContainsKey("tagline") && !string.IsNullOrEmpty(original_name))
                         jo["tagline"] = original_name;
 
-                    hybridCache.Set(memKey, jo, cacheTime(init.cache_time, init: init), inmemory: false);
+                    hybridCache.Set(memKey, jo, cacheTimeBase(init.cache_time, init: init), inmemory: false);
                 }
 
-                return ContentTo(JsonConvert.SerializeObject(jo));
+                return ContentTo(JsonConvertPool.SerializeObject(jo));
             });
         }
 

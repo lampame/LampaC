@@ -1,96 +1,111 @@
-﻿using HtmlAgilityPack;
+﻿using Shared.Engine.RxEnumerate;
 using Shared.Models.SISI.Base;
 using Shared.Models.SISI.OnResult;
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Web;
 
 namespace Shared.Engine.SISI
 {
     public static class EpornerTo
     {
-        public static ValueTask<string> InvokeHtml(string host, string search, string sort, string c, int pg, Func<string, ValueTask<string>> onresult)
+        static readonly ThreadLocal<StringBuilder> sbUri = new(() => new StringBuilder(PoolInvk.rentChunk));
+        static readonly ThreadLocal<StringBuilder> sbHash = new(() => new StringBuilder(64));
+
+        #region Uri
+        public static string Uri(string host, string search, string sort, string c, int pg)
         {
-            string url = $"{host}/";
+            var url = sbUri.Value;
+            url.Clear();
+
+            url.Append(host);
+            url.Append("/");
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                url += $"search/{HttpUtility.UrlEncode(search)}/";
+                url.Append($"search/{HttpUtility.UrlEncode(search)}/");
 
                 if (pg > 1)
-                    url += $"{pg}/";
+                    url.Append($"{pg}/");
 
                 if (!string.IsNullOrEmpty(sort))
-                    url += $"{sort}/";
+                    url.Append($"{sort}/");
             }
             else
             {
                 if (!string.IsNullOrEmpty(c)) 
                 {
-                    url += $"cat/{c}/";
+                    url.Append($"cat/{c}/");
 
                     if (pg > 1)
-                        url += $"{pg}/";
+                        url.Append($"{pg}/");
                 }
                 else
                 {
                     if (pg > 1)
-                        url += $"{pg}/";
+                        url.Append($"{pg}/");
 
                     if (!string.IsNullOrEmpty(sort))
-                        url += $"{sort}/";
+                        url.Append($"{sort}/");
                 }
             }
 
-            return onresult.Invoke(url);
+            return url.ToString();
         }
+        #endregion
 
-        public static List<PlaylistItem> Playlist(string uri, string html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
+        #region Playlist
+        public static List<PlaylistItem> Playlist(string route, ReadOnlySpan<char> html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
         {
-            if (string.IsNullOrEmpty(html))
-                return new List<PlaylistItem>();
+            if (html.IsEmpty)
+                return null;
 
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
+            var single = ReadOnlySpan<char>.Empty;
 
-            string single = doc.DocumentNode.SelectSingleNode("//*[@id='relateddiv' or @id='vidresults']")?.InnerHtml;
-            if (single != null)
-                html = single;
-            else
+            if (html.Contains("id=\"relateddiv\"", StringComparison.Ordinal))
+                single = HtmlSpan.Node(html, "*", "id", "relateddiv", HtmlSpanTargetType.Exact);
+
+            else if (html.Contains("id=\"vidresults\"", StringComparison.Ordinal))
+                single = HtmlSpan.Node(html, "*", "id", "vidresults", HtmlSpanTargetType.Exact);
+
+            else if (html.Contains("class=\"toptopbelinset\"", StringComparison.Ordinal))
+                single = Rx.Split("class=\"toptopbelinset\"", html)[1].Span;
+
+            else if (html.Contains("class=\"relatedtext\"", StringComparison.Ordinal))
+                single = Rx.Split("class=\"relatedtext\"", html)[1].Span;
+
+            if (single.IsEmpty)
+                return null;
+
+            var rx = Rx.Split("<div class=\"mb( hdy)?\"", single, 1);
+            if (rx.Count == 0)
+                return null;
+
+            var playlists = new List<PlaylistItem>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
-                if (html.Contains("class=\"toptopbelinset\""))
-                    html = html.Split("class=\"toptopbelinset\"")[1];
-
-                if (html.Contains("class=\"relatedtext\""))
-                    html = html.Split("class=\"relatedtext\"")[1];
-            }
-
-            var rows = Regex.Split(html, "<div class=\"mb( hdy)?\"");
-            var playlists = new List<PlaylistItem>(rows.Length);
-
-            foreach (string row in rows.Skip(1))
-            {
-                var g = Regex.Match(row, "<p class=\"mbtit\"><a href=\"/([^\"]+)\">([^<]+)</a>").Groups;
-                string quality = Regex.Match(row, "<div class=\"mvhdico\"([^>]+)?><span>([^\"<]+)").Groups[2].Value;
+                var g = row.Groups("<p class=\"mbtit\"><a href=\"/([^\"]+)\">([^<]+)</a>");
 
                 if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value))
                 {
-                    string img = Regex.Match(row, " data-src=\"([^\"]+)\"").Groups[1].Value;
-                    if (string.IsNullOrWhiteSpace(img))
-                        img = Regex.Match(row, "<img src=\"([^\"]+)\"").Groups[1].Value;
+                    string img = row.Match(" data-src=\"([^\"]+)\"");
+                    if (img == null)
+                        img = row.Match("<img src=\"([^\"]+)\"");
 
-                    string dataid = Regex.Match(row, "data-id=\"([^\"]+)\"").Groups[1].Value;
-                    string preview = Regex.Replace(img, "/[^/]+$", "") + $"/{dataid}-preview.webm";
-
-                    string duration = Regex.Match(row, "<span class=\"mbtim\"([^>]+)?>([^<]+)</span>").Groups[2].Value.Trim();
+                    if (img == null)
+                        img = string.Empty;
 
                     var pl = new PlaylistItem()
                     {
                         name = g[2].Value,
-                        video = $"{uri}?uri={g[1].Value}",
+                        video = $"{route}?uri={g[1].Value}",
                         picture = img,
-                        preview = preview,
-                        quality = quality,
-                        time = duration,
+                        preview = Regex.Replace(img, "/[^/]+$", "") + $"/{row.Match("data-id=\"([^\"]+)\"")}-preview.webm",
+                        quality = row.Match("<div class=\"mvhdico\"([^>]+)?><span>([^\"<]+)", 2),
+                        time = row.Match("<span class=\"mbtim\"([^>]+)?>([^<]+)</span>", 2, trim: true),
                         json = true,
                         related = true,
                         bookmark = new Bookmark()
@@ -110,7 +125,9 @@ namespace Shared.Engine.SISI
 
             return playlists;
         }
+        #endregion
 
+        #region Menu
         public static List<MenuItem> Menu(string host, string search, string sort, string c)
         {
             host = string.IsNullOrWhiteSpace(host) ? string.Empty : $"{host}/";
@@ -564,69 +581,100 @@ namespace Shared.Engine.SISI
 
             return menu;
         }
+        #endregion
 
-        async public static ValueTask<StreamItem> StreamLinks(string uri, string host, string url, Func<string, ValueTask<string>> onresult, Func<string, ValueTask<string>> onjson, Func<string, string> onlog = null)
+        #region StreamLinks
+        async public static Task<StreamItem> StreamLinks(HttpHydra http, string route, string host, string url, Func<string, string> onlog = null)
         {
             if (string.IsNullOrEmpty(url))
                 return null;
 
-            string html = await onresult.Invoke($"{host}/{url}");
-            if (html == null)
-                return null;
+            string vid = null, hash = null;
+            List<PlaylistItem> recomends = null;
 
-            string vid = Regex.Match(html, "vid ?= ?'([^']+)'").Groups[1].Value;
-            string hash = Regex.Match(html, "hash ?= ?'([^']+)'").Groups[1].Value;
-            if (string.IsNullOrWhiteSpace(vid) || string.IsNullOrWhiteSpace(hash))
-                return null;
-
-            string json = await onjson.Invoke($"{host}/xhr/video/{vid}?hash={convertHash(hash)}&domain={Regex.Replace(host, "^https?://", "")}&fallback=false&embed=false&supportedFormats=dash,mp4&_={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
-            if (json == null)
-                return null;
-
-            onlog?.Invoke("json: " + json);
-
-            var stream_links = new Dictionary<string, string>();
-            var match = new Regex("\"src\":( +)?\"(https?://[^/]+/[^\"]+-([0-9]+p).mp4)\",").Match(json);
-            while (match.Success)
+            await http.GetSpan($"{host}/{url}", html =>
             {
-                onlog?.Invoke($"{match.Groups[3].Value} /  {match.Groups[2].Value}");
-                stream_links.TryAdd(match.Groups[3].Value, match.Groups[2].Value);
-                match = match.NextMatch();
-            }
+                vid = Rx.Match(html, "vid ?= ?'([^']+)'");
+                hash = Rx.Match(html, "hash ?= ?'([^']+)'");
+
+                if (vid != null && hash != null)
+                    recomends = Playlist(route, html);
+            });
+
+            if (vid == null || hash == null)
+                return null;
+
+            var stream_links = new Dictionary<string, string>(5);
+
+            await http.GetSpan($"{host}/xhr/video/{vid}?hash={convertHash(hash)}&domain={Regex.Replace(host, "^https?://", "")}&fallback=false&embed=false&supportedFormats=dash,mp4&_={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}", json =>
+            {
+                foreach (var row in Rx.Matches("\"src\":( +)?\"(https?://[^/]+/[^\"]+-([0-9]+p).mp4)\",", json).Rows())
+                {
+                    var g = row.Groups("\"src\":( +)?\"(https?://[^/]+/[^\"]+-([0-9]+p).mp4)\",");
+
+                    if (!string.IsNullOrEmpty(g[3].Value))
+                        stream_links.TryAdd(g[3].Value, g[2].Value);
+                }
+            });
 
             onlog?.Invoke("stream_links: " + stream_links.Count);
 
             return new StreamItem()
             {
                 qualitys = stream_links,
-                recomends = Playlist(uri, html)
+                recomends = recomends
             };
         }
+        #endregion
 
 
         #region convertHash
-        static string convertHash(in string h)
+        static string convertHash(string h)
         {
-            return Base36(h.Substring(0, 8)) + Base36(h.Substring(8, 8)) + Base36(h.Substring(16, 8)) + Base36(h.Substring(24, 8));
+            StringBuilder builder = sbHash.Value;
+            builder.Clear();
+
+            Base36(h.AsSpan(0, 8), builder);
+            Base36(h.AsSpan(8, 8), builder);
+            Base36(h.AsSpan(16, 8), builder);
+            Base36(h.AsSpan(24, 8), builder);
+
+            return builder.ToString();
         }
         #endregion
 
         #region Base36
-        static string Base36(in string val)
+        static void Base36(ReadOnlySpan<char> hex, StringBuilder builder)
         {
-            string result = "";
-            ulong value = Convert.ToUInt64(val, 16);
+            // Парсинг 8 hex-символов без Substring и без аллокаций
+            ulong value = ulong.Parse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
 
             const int Base = 36;
-            const string Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+            int start = builder.Length;
+
+            if (value == 0)
+            {
+                builder.Append('0');
+                return;
+            }
 
             while (value > 0)
             {
-                result = Chars[(int)(value % Base)] + result; // use StringBuilder for better performance
+                builder.Append(Chars[(int)(value % Base)]);
                 value /= Base;
             }
 
-            return result.ToLower();
+            // Разворот добавленного участка (т.к. цифры добавлялись в обратном порядке)
+            int i = start;
+            int j = builder.Length - 1;
+            while (i < j)
+            {
+                (builder[i], builder[j]) = (builder[j], builder[i]);
+                i++;
+                j--;
+            }
         }
         #endregion
     }

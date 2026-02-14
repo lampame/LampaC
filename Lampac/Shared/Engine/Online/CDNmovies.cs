@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using Shared.Models.Online.CDNmovies;
+using Shared.Engine.RxEnumerate;
 
 namespace Shared.Engine.Online
 {
@@ -12,59 +13,51 @@ namespace Shared.Engine.Online
         #region CDNmoviesInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
+        HttpHydra httpHydra;
         Func<string, string> onstreamfile;
         Action requesterror;
 
-        public CDNmoviesInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string> onstreamfile, Action requesterror = null)
+        public CDNmoviesInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
-            this.onget = onget;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Embed
-        public async ValueTask<Voice[]> Embed(long kinopoisk_id)
+        public async Task<Voice[]> Embed(long kinopoisk_id)
         {
-            string html = await onget.Invoke($"{apihost}/serial/kinopoisk/{kinopoisk_id}");
-            if (html == null)
+            Voice[] content = null;
+
+            await httpHydra.GetSpan($"{apihost}/serial/kinopoisk/{kinopoisk_id}", html => 
+            {
+                string file = Rx.Match(html, "file:'([^\n\r]+)'");
+                content = JsonSerializer.Deserialize<Voice[]>(file);
+            });
+
+            if (content == null || content.Length == 0)
             {
                 requesterror?.Invoke();
                 return null;
             }
 
-            string file = Regex.Match(html, "file:'([^\n\r]+)'").Groups[1].Value;
-            if (string.IsNullOrEmpty(file))
-                return null;
-
-            Voice[] content;
-
-            try
-            {
-                content = JsonSerializer.Deserialize<Voice[]>(file);
-            }
-            catch { return null; }
-
-            if (content == null || content.Length == 0)
-                return null;
-
             return content;
         }
         #endregion
 
-        #region Html
-        public string Html(Voice[] voices, long kinopoisk_id, string title, string original_title, int t, int s, int sid, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(Voice[] voices, long kinopoisk_id, string title, string original_title, int t, int s, int sid, VastConf vast = null, bool rjson = false)
         {
             if (voices == null || voices.Length == 0)
-                return string.Empty;
+                return default;
 
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
 
-            #region Перевод html
+            #region Перевод
             var vtpl = new VoiceTpl(voices.Length);
 
             for (int i = 0; i < voices.Length; i++)
@@ -77,7 +70,7 @@ namespace Shared.Engine.Online
             if (s == -1)
             {
                 #region Сезоны
-                var tpl = new SeasonTpl(voices[t].folder.Length);
+                var tpl = new SeasonTpl(vtpl, voices[t].folder.Length);
 
                 for (int i = 0; i < voices[t].folder.Length; i++)
                 {
@@ -89,13 +82,13 @@ namespace Shared.Engine.Online
                     tpl.Append($"{season} сезон", link, season);
                 }
 
-                return rjson ? tpl.ToJson(vtpl) : (vtpl.ToHtml() + tpl.ToHtml());
+                return tpl;
                 #endregion
             }
             else
             {
                 #region Серии
-                var etpl = new EpisodeTpl();
+                var etpl = new EpisodeTpl(vtpl);
                 string sArhc = s.ToString();
 
                 foreach (var item in voices[t].folder[sid].folder)
@@ -115,10 +108,7 @@ namespace Shared.Engine.Online
                     etpl.Append($"{episode} cерия", title ?? original_title, sArhc, episode, streamquality.Firts().link, streamquality: streamquality, vast: vast);
                 }
 
-                if (rjson)
-                    return etpl.ToJson(vtpl);
-
-                return vtpl.ToHtml() + etpl.ToHtml();
+                return etpl;
                 #endregion
             }
         }

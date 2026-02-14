@@ -1,15 +1,16 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
-using IO = System.IO.File;
-using System.IO;
 using Microsoft.Extensions.Caching.Memory;
-using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Shared;
 using Shared.Engine;
 using Shared.Models;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using IO = System.IO.File;
 
 namespace Merchant.Controllers
 {
@@ -22,6 +23,7 @@ namespace Merchant.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("cryptocloud/invoice/create")]
         async public Task<ActionResult> Index(string email)
         {
@@ -59,6 +61,7 @@ namespace Merchant.Controllers
 
 
         [HttpPost]
+        [AllowAnonymous]
         [Route("cryptocloud/callback")]
         async public Task<ActionResult> Callback(string invoice_id)
         {

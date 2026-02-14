@@ -1,4 +1,5 @@
-﻿using Shared.Models;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models;
 using Shared.Models.Base;
 using Shared.Models.Online.Collaps;
 using Shared.Models.Templates;
@@ -11,62 +12,75 @@ namespace Shared.Engine.Online
     public struct CollapsInvoke
     {
         #region CollapsInvoke
-        string host;
+        string host, route;
         string apihost;
         bool dash;
-        Func<string, ValueTask<string>> onget;
         Func<string, string> onstreamfile;
         Action requesterror;
+        HttpHydra httpHydra;
 
-        public CollapsInvoke(string host, string apihost, bool dash, Func<string, ValueTask<string>> onget, Func<string, string> onstreamfile, Action requesterror = null)
+        public CollapsInvoke(string host, string route, HttpHydra httpHydra, string apihost, bool dash, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
+            this.route = route;
             this.apihost = apihost;
             this.dash = dash;
-            this.onget = onget;
             this.onstreamfile = onstreamfile;
             this.requesterror = requesterror;
+            this.httpHydra = httpHydra;
         }
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel?> Embed(string imdb_id, long kinopoisk_id, long orid)
+        async public Task<EmbedModel> Embed(string imdb_id, long kinopoisk_id, long orid)
         {
-            string uri = $"{apihost}/embed/imdb/{imdb_id}";
+            string url = $"{apihost}/embed/imdb/{imdb_id}";
+
             if (kinopoisk_id > 0)
-                uri = $"{apihost}/embed/kp/{kinopoisk_id}";
+                url = $"{apihost}/embed/kp/{kinopoisk_id}";
+
             if (orid > 0)
-                uri = $"{apihost}/embed/movie/{orid}";
+                url = $"{apihost}/embed/movie/{orid}";
 
-            string content = await onget.Invoke(uri);
-            if (string.IsNullOrEmpty(content))
+            EmbedModel embed = null;
+
+            await httpHydra.GetSpan(url, content =>
             {
+                if (!content.Contains("seasons:", StringComparison.Ordinal))
+                {
+                    var rx = Rx.Split("makePlayer\\(\\{", content);
+                    if (1 > rx.Count)
+                        return;
+
+                    embed = new EmbedModel()
+                    {
+                        content = rx[1].ToString()
+                    };
+                }
+                else
+                {
+                    try
+                    {
+                        var root = JsonSerializer.Deserialize<RootObject[]>(Rx.Match(content, "seasons:([^\n\r]+)"));
+                        if (root != null && root.Length > 0)
+                            embed = new EmbedModel() { serial = root };
+                    }
+                    catch { }
+                }
+            });
+
+            if (embed == null)
                 requesterror?.Invoke();
-                return null;
-            }
 
-            if (!content.Contains("seasons:"))
-                return new EmbedModel() { content = content };
-
-            RootObject[] root = null;
-
-            try
-            {
-                root = JsonSerializer.Deserialize<RootObject[]>(Regex.Match(content, "seasons:([^\n\r]+)").Groups[1].Value);
-                if (root == null || root.Length == 0)
-                    return null;
-            }
-            catch { return null; }
-
-            return new EmbedModel() { serial = root };
+            return embed;
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel md, string imdb_id, long kinopoisk_id, long orid, string title, string original_title, int s, bool rjson = false, List<HeadersModel> headers = null, VastConf vast = null)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel md, string imdb_id, long kinopoisk_id, long orid, string title, string original_title, int s, bool rjson = false, List<HeadersModel> headers = null, VastConf vast = null)
         {
             if (md == null)
-                return string.Empty;
+                return default;
 
             if (md.content != null)
             {
@@ -81,7 +95,7 @@ namespace Shared.Engine.Online
                 }
 
                 if (string.IsNullOrEmpty(stream))
-                    return string.Empty;
+                    return default;
 
                 var mtpl = new MovieTpl(title, original_title, 1);
 
@@ -114,7 +128,7 @@ namespace Shared.Engine.Online
 
                 mtpl.Append(name, onstreamfile.Invoke(stream.Replace("\u0026", "&")), subtitles: subtitles, voice_name: voicename, headers: headers, vast: vast);
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -131,17 +145,17 @@ namespace Shared.Engine.Online
 
                         foreach (var season in md.serial.OrderBy(i => i.season))
                         {
-                            string link = host + $"lite/collaps?rjson={rjson}&kinopoisk_id={kinopoisk_id}&imdb_id={imdb_id}&orid={orid}&title={enc_title}&original_title={enc_original_title}&s={season.season}";
+                            string link = host + $"{route}?rjson={rjson}&kinopoisk_id={kinopoisk_id}&imdb_id={imdb_id}&orid={orid}&title={enc_title}&original_title={enc_original_title}&s={season.season}";
                             tpl.Append($"{season.season} сезон", link, season.season);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
                         var episodes = md.serial.FirstOrDefault(i => i.season == s).episodes;
                         if (episodes == null)
-                            return string.Empty;
+                            return default;
 
                         var etpl = new EpisodeTpl(episodes.Length);
                         string sArch = s.ToString();
@@ -179,12 +193,12 @@ namespace Shared.Engine.Online
                             etpl.Append($"{episode.episode} серия", title ?? original_title, sArch, episode.episode, file, subtitles: subtitles, voice_name: voicename, headers: headers, vast: vast);
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

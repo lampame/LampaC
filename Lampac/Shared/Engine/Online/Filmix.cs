@@ -1,6 +1,5 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Shared.Models;
 using Shared.Models.Base;
 using Shared.Models.Online.Filmix;
 using Shared.Models.Online.Settings;
@@ -15,34 +14,35 @@ namespace Shared.Engine.Online
     {
         static ConcurrentDictionary<string, string> user_dev_ids = new ConcurrentDictionary<string, string>();
 
+        static readonly JsonSerializerSettings jsonSettings = new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } };
+
         #region FilmixInvoke
         FilmixSettings init;
 
         public bool disableSphinxSearch, reserve;
 
         public string token;
-        string host, args;
+        string host, args, route;
         string apihost;
-        Func<string, ValueTask<string>> onget;
-        Func<string, string, List<HeadersModel>, ValueTask<string>> onpost;
         Func<string, string> onstreamfile;
         Func<string, string> onlog;
         Action requesterror;
         bool rjson;
+        HttpHydra httpHydra;
 
-        public FilmixInvoke(FilmixSettings init, string host, string token, Func<string, ValueTask<string>> onget, Func<string, string, List<HeadersModel>, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null, bool rjson = false)
+        public FilmixInvoke(FilmixSettings init, string host, string token, string route, HttpHydra httpHydra, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null, bool rjson = false)
         {
             this.init = init;
             apihost = init.corsHost();
             reserve = init.reserve;
             this.token = token;
+            this.route = route;
             this.host = host != null ? $"{host}/" : null;
-            this.onget = onget;
-            this.onpost = onpost;
             this.onstreamfile = onstreamfile;
             this.onlog = onlog;
             this.requesterror = requesterror;
             this.rjson = rjson;
+            this.httpHydra = httpHydra;
 
             string user_dev_id = user_dev_ids.GetOrAdd(token ?? string.Empty, (k) => UnicTo.Code(16));
 
@@ -59,17 +59,7 @@ namespace Shared.Engine.Online
             string uri = $"{apihost}/api/v2/search?story={HttpUtility.UrlEncode(clarification == 1 ? title : (original_title ?? title))}&{args}";
             onlog?.Invoke(uri);
             
-            string json = await onget.Invoke(uri);
-            if (json == null)
-                return await Search2(title, original_title, clarification, year);
-
-            List<SearchModel> root = null;
-
-            try
-            {
-                root = JsonConvert.DeserializeObject<List<SearchModel>>(json);
-            }
-            catch { }
+            var root = await httpHydra.Get<List<SearchModel>>(uri, useDefaultHeaders: false, safety: !string.IsNullOrEmpty(token));
 
             if (root == null || root.Count == 0)
                 return await Search2(title, original_title, clarification, year);
@@ -90,7 +80,7 @@ namespace Shared.Engine.Online
 
                 string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_title) ? $"{item.title} / {item.original_title}"  : (item.title ?? item.original_title);
 
-                stpl.Append(name, item.year.ToString(), string.Empty, host + $"lite/filmix?postid={item.id}&title={enc_title}&original_title={enc_original_title}", PosterApi.Size(item.poster)); 
+                stpl.Append(name, item.year.ToString(), string.Empty, host + $"{route}?postid={item.id}&title={enc_title}&original_title={enc_original_title}", PosterApi.Size(item.poster)); 
 
                 if ((!string.IsNullOrEmpty(stitle) && StringConvert.SearchName(item.title) == stitle) ||
                     (!string.IsNullOrEmpty(sorigtitle) && StringConvert.SearchName(item.original_title) == sorigtitle))
@@ -120,22 +110,19 @@ namespace Shared.Engine.Online
                 string uri = $"https://api.filmix.tv/api-fx/list?search={HttpUtility.UrlEncode(story)}&limit=48";
                 onlog?.Invoke(uri);
 
-                string json = await onget.Invoke(uri);
-                if (string.IsNullOrEmpty(json) || !json.Contains("\"status\":\"ok\""))
-                    return null;
-
-                List<SearchModel> root = null;
+                List<SearchModel> items = null;
 
                 try
                 {
-                    root = JObject.Parse(json)?["items"]?.ToObject<List<SearchModel>>();
+                    var root = await httpHydra.Get<JObject>(uri, useDefaultHeaders: false, safety: !string.IsNullOrEmpty(token));
+                    items = root["items"]?.ToObject<List<SearchModel>>();
                 }
                 catch { }
 
-                if (root == null || root.Count == 0)
+                if (items == null || items.Count == 0)
                     return null;
 
-                return root;
+                return items;
             }
 
             var result = await gosearch(clarification == 1 ? original_title : title);
@@ -161,7 +148,7 @@ namespace Shared.Engine.Online
 
                 string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_name) ? $"{item.title} / {item.original_name}" : (item.title ?? item.original_name);
 
-                stpl.Append(name, item.year.ToString(), string.Empty, host + $"lite/filmix?postid={item.id}&title={enc_title}&original_title={enc_original_title}");
+                stpl.Append(name, item.year.ToString(), string.Empty, host + $"{route}?postid={item.id}&title={enc_title}&original_title={enc_original_title}");
 
                 if ((!string.IsNullOrEmpty(stitle) && StringConvert.SearchName(item.title) == stitle) ||
                     (!string.IsNullOrEmpty(sorigtitle) && StringConvert.SearchName(item.original_name) == sorigtitle))
@@ -185,69 +172,69 @@ namespace Shared.Engine.Online
         {
             return null;
 
-            if (disableSphinxSearch)
-            {
-                requesterror?.Invoke();
-                return null;
-            }
+            //if (disableSphinxSearch)
+            //{
+            //    requesterror?.Invoke();
+            //    return null;
+            //}
 
-            onlog?.Invoke("Search3");
+            //onlog?.Invoke("Search3");
 
-            string html = await onpost.Invoke("https://filmix.my/engine/ajax/sphinx_search.php", $"scf=fx&story={HttpUtility.UrlEncode(clarification == 1 ? title : (original_title ?? title))}&search_start=0&do=search&subaction=search&years_ot=1902&years_do={DateTime.Today.Year}&kpi_ot=1&kpi_do=10&imdb_ot=1&imdb_do=10&sort_name=&undefined=asc&sort_date=&sort_favorite=&simple=1", HeadersModel.Init( 
-                ("Origin", "https://filmix.my"),
-                ("Referer", "https://filmix.my/search/"),
-                ("X-Requested-With", "XMLHttpRequest"),
-                ("Sec-Fetch-Site", "same-origin"),
-                ("Sec-Fetch-Mode", "cors"),
-                ("Sec-Fetch-Dest", "empty"),
-                ("Cookie", "x-a-key=sinatra; FILMIXNET=2g5orcue70hmbkugbr7vi431l0; _ga_GYLWSWSZ3C=GS1.1.1703578122.1.0.1703578122.0.0.0; _ga=GA1.1.1855910641.1703578123")
-            ));
+            //string html = await onpost.Invoke("https://filmix.my/engine/ajax/sphinx_search.php", $"scf=fx&story={HttpUtility.UrlEncode(clarification == 1 ? title : (original_title ?? title))}&search_start=0&do=search&subaction=search&years_ot=1902&years_do={DateTime.Today.Year}&kpi_ot=1&kpi_do=10&imdb_ot=1&imdb_do=10&sort_name=&undefined=asc&sort_date=&sort_favorite=&simple=1", HeadersModel.Init( 
+            //    ("Origin", "https://filmix.my"),
+            //    ("Referer", "https://filmix.my/search/"),
+            //    ("X-Requested-With", "XMLHttpRequest"),
+            //    ("Sec-Fetch-Site", "same-origin"),
+            //    ("Sec-Fetch-Mode", "cors"),
+            //    ("Sec-Fetch-Dest", "empty"),
+            //    ("Cookie", "x-a-key=sinatra; FILMIXNET=2g5orcue70hmbkugbr7vi431l0; _ga_GYLWSWSZ3C=GS1.1.1703578122.1.0.1703578122.0.0.0; _ga=GA1.1.1855910641.1703578123")
+            //));
 
-            if (html == null)
-            {
-                requesterror?.Invoke();
-                return null;
-            }
+            //if (html == null)
+            //{
+            //    requesterror?.Invoke();
+            //    return null;
+            //}
 
-            var rows = html.Split("</article>");
+            //var rows = html.Split("</article>");
 
-            var ids = new List<int>(rows.Length);
-            var stpl = new SimilarTpl(rows.Length);
+            //var ids = new List<int>(rows.Length);
+            //var stpl = new SimilarTpl(rows.Length);
 
-            string enc_title = HttpUtility.UrlEncode(title);
-            string enc_original_title = HttpUtility.UrlEncode(original_title);
+            //string enc_title = HttpUtility.UrlEncode(title);
+            //string enc_original_title = HttpUtility.UrlEncode(original_title);
 
-            string stitle = title?.ToLower();
-            string sorigtitle = original_title?.ToLower();
+            //string stitle = title?.ToLower();
+            //string sorigtitle = original_title?.ToLower();
 
-            foreach (string row in rows)
-            {
-                string ftitle = Regex.Match(row, "itemprop=\"name\" content=\"([^\"]+)\"").Groups[1].Value;
-                string ftitle_orig = Regex.Match(row, "itemprop=\"alternativeHeadline\" content=\"([^\"]+)\"").Groups[1].Value;
-                string fyear = Regex.Match(row, "itemprop=\"copyrightYear\"[^>]+>([0-9]{4})").Groups[1].Value;
-                string fid = Regex.Match(row, "data-id=\"([0-9]+)\"").Groups[1].Value;
+            //foreach (string row in rows)
+            //{
+            //    string ftitle = Regex.Match(row, "itemprop=\"name\" content=\"([^\"]+)\"").Groups[1].Value;
+            //    string ftitle_orig = Regex.Match(row, "itemprop=\"alternativeHeadline\" content=\"([^\"]+)\"").Groups[1].Value;
+            //    string fyear = Regex.Match(row, "itemprop=\"copyrightYear\"[^>]+>([0-9]{4})").Groups[1].Value;
+            //    string fid = Regex.Match(row, "data-id=\"([0-9]+)\"").Groups[1].Value;
 
-                if (int.TryParse(fid, out int id) && id > 0)
-                {
-                    string name = !string.IsNullOrEmpty(ftitle) && !string.IsNullOrEmpty(ftitle_orig) ? $"{ftitle} / {ftitle_orig}" : (ftitle ?? ftitle_orig);
+            //    if (int.TryParse(fid, out int id) && id > 0)
+            //    {
+            //        string name = !string.IsNullOrEmpty(ftitle) && !string.IsNullOrEmpty(ftitle_orig) ? $"{ftitle} / {ftitle_orig}" : (ftitle ?? ftitle_orig);
 
-                    stpl.Append(name, fyear, string.Empty, host + $"lite/filmix?postid={id}&title={enc_title}&original_title={enc_original_title}");
+            //        stpl.Append(name, fyear, string.Empty, host + $"{route}?postid={id}&title={enc_title}&original_title={enc_original_title}");
 
-                    if ((!string.IsNullOrEmpty(stitle) && ftitle.ToLower() == stitle) ||
-                        (!string.IsNullOrEmpty(sorigtitle) && ftitle_orig.ToLower() == sorigtitle))
-                    {
-                        if (fyear == year.ToString())
-                            ids.Add(id);
-                    }
-                }
-            }
+            //        if ((!string.IsNullOrEmpty(stitle) && ftitle.ToLower() == stitle) ||
+            //            (!string.IsNullOrEmpty(sorigtitle) && ftitle_orig.ToLower() == sorigtitle))
+            //        {
+            //            if (fyear == year.ToString())
+            //                ids.Add(id);
+            //        }
+            //    }
+            //}
 
-            onlog?.Invoke("ids: " + ids.Count);
+            //onlog?.Invoke("ids: " + ids.Count);
 
-            if (ids.Count == 1)
-                return new SearchResult() { id = ids[0] };
+            //if (ids.Count == 1)
+            //    return new SearchResult() { id = ids[0] };
 
-            return new SearchResult() { similars = stpl };
+            //return new SearchResult() { similars = stpl };
         }
         #endregion
 
@@ -257,7 +244,7 @@ namespace Shared.Engine.Online
             string uri = $"{apihost}/api/v2/post/{postid}?{args}";
             onlog?.Invoke(uri);
 
-            string json = await onget.Invoke(uri);
+            string json = await httpHydra.Get(uri, useDefaultHeaders: false, safety: !string.IsNullOrEmpty(token));
             if (json == null)
             {
                 requesterror?.Invoke();
@@ -266,7 +253,11 @@ namespace Shared.Engine.Online
 
             try
             {
-                var root = JsonConvert.DeserializeObject<RootObject>(json.Replace("\"playlist\":[],", "\"playlist\":null,"), new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } });
+                string jsonFix = json.Contains("\"playlist\":[],") 
+                    ? json.Replace("\"playlist\":[],", "\"playlist\":null,")
+                    : json;
+
+                var root = JsonConvert.DeserializeObject<RootObject>(jsonFix, jsonSettings);
 
                 if (root?.player_links == null)
                     return null;
@@ -278,11 +269,11 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Html
-        public string Html(RootObject root, bool pro, int postid, string title, string original_title, int t, int? s, VastConf vast = null)
+        public ITplResult Tpl(RootObject root, bool pro, int postid, string title, string original_title, int t, int? s, VastConf vast = null)
         {
             var player_links = root.player_links;
             if (player_links.movie == null && player_links.playlist == null)
-                return string.Empty;
+                return default;
 
             int filmixservtime = DateTime.UtcNow.AddHours(2).Hour;
             bool hidefree720 = string.IsNullOrEmpty(token) /*&& filmixservtime >= 19 && filmixservtime <= 23*/;
@@ -291,7 +282,7 @@ namespace Shared.Engine.Online
             {
                 #region Фильм
                 if (player_links.movie.Length == 1 && player_links.movie[0].translation.ToLower().StartsWith("заблокировано "))
-                    return string.Empty;
+                    return default;
 
                 var cdns = reserve ? player_links.movie
                         .Select(e => Regex.Match(e.link, "^(https?://[^/]+)").Groups[1].Value)
@@ -344,14 +335,14 @@ namespace Shared.Engine.Online
                     mtpl.Append(v.translation, streamquality.Firts().link, streamquality: streamquality, vast: vast);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
             {
                 #region Сериал
                 if (player_links.playlist == null || player_links.playlist.Count == 0)
-                    return string.Empty;
+                    return default;
 
                 string enc_title = HttpUtility.UrlEncode(title);
                 string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -363,11 +354,11 @@ namespace Shared.Engine.Online
 
                     foreach (var season in player_links.playlist)
                     {
-                        string link = host + $"lite/filmix?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={season.Key}";
+                        string link = host + $"{route}?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={season.Key}";
                         tpl.Append($"{season.Key.Replace("-1", "1")} сезон", link, season.Key);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                     #endregion
                 }
                 else
@@ -375,7 +366,7 @@ namespace Shared.Engine.Online
                     string sArch = s?.ToString();
 
                     if (sArch == null)
-                        return string.Empty;
+                        return default;
 
                     #region Перевод
                     var voices = player_links.playlist[sArch];
@@ -385,7 +376,7 @@ namespace Shared.Engine.Online
 
                     foreach (var translation in voices)
                     {
-                        string link = host + $"lite/filmix?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={s}&t={indexTranslate}";
+                        string link = host + $"{route}?rjson={rjson}&postid={postid}&title={enc_title}&original_title={enc_original_title}&s={s}&t={indexTranslate}";
                         bool active = t == indexTranslate;
 
                         indexTranslate++;
@@ -417,7 +408,7 @@ namespace Shared.Engine.Online
                     }
 
                     if (episodes == null || episodes.Count == 0)
-                        return string.Empty;
+                        return default;
                     #endregion
 
                     var cdns = reserve ? episodes
@@ -425,7 +416,7 @@ namespace Shared.Engine.Online
                         .ToHashSet() : null;
 
                     #region Серии
-                    var etpl = new EpisodeTpl(episodes.Count);
+                    var etpl = new EpisodeTpl(vtpl, episodes.Count);
 
                     foreach (var episode in episodes)
                     {
@@ -472,10 +463,7 @@ namespace Shared.Engine.Online
                     }
                     #endregion
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
-
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                 }
                 #endregion
             }

@@ -1,8 +1,8 @@
-﻿using HtmlAgilityPack;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models;
 using Shared.Models.Base;
 using Shared.Models.Online.iRemux;
 using Shared.Models.Templates;
-using System.Text.RegularExpressions;
 using System.Web;
 
 namespace Shared.Engine.Online
@@ -10,57 +10,63 @@ namespace Shared.Engine.Online
     public struct iRemuxInvoke
     {
         #region iRemuxInvoke
-        string host;
-        string apihost;
-        Func<string, ValueTask<string>> onget;
-        Func<string, string, ValueTask<string>> onpost;
+        string host, cookie, apihost;
+        HttpHydra httpHydra;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
-        public iRemuxInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public iRemuxInvoke(string host, string apihost, string cookie, HttpHydra httpHydra, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
-            this.onget = onget;
+            this.cookie = cookie;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
-            this.onpost = onpost;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Embed
-        async public ValueTask<EmbedModel> Embed(string title, string original_title, int year, string link)
+        async public Task<EmbedModel> Embed(string title, string original_title, int year, string link)
         {
             var result = new EmbedModel();
 
             if (string.IsNullOrEmpty(link))
             {
-                string search = await onget($"{apihost}/index.php?do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title ?? original_title)}");
-                if (search == null)
+                bool reqOk = false;
+
+                string uri = $"{apihost}/index.php?do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title ?? original_title)}";
+
+                await httpHydra.GetSpan(uri, addheaders: HeadersModel.Init("cookie", cookie), spanAction: search => 
                 {
-                    requesterror?.Invoke();
-                    return null;
-                }
+                    reqOk = search.Contains(">Поиск по сайту<", StringComparison.OrdinalIgnoreCase);
 
-                string stitle = title?.ToLower();
-                string sorigtitle = original_title?.ToLower();
+                    string stitle = StringConvert.SearchName(title);
+                    string sorigtitle = StringConvert.SearchName(original_title);
 
-                foreach (string row in search.Split("item--announce").Skip(1))
-                {
-                    var g = Regex.Match(row, "class=\"item__title( [^\"]+)?\"><a href=\"(?<link>https?://[^\"]+)\">(?<name>[^<]+)</a>").Groups;
+                    var rx = Rx.Split("item--announce", search, 1);
 
-                    string name = g["name"].Value.ToLower();
-                    if (name.Contains("сезон") || name.Contains("серии") || name.Contains("серия"))
-                        continue;
-
-                    if ((!string.IsNullOrEmpty(stitle) && name.Contains(stitle)) || (!string.IsNullOrEmpty(sorigtitle) && name.Contains(sorigtitle)))
+                    foreach (var row in rx.Rows())
                     {
+                        var g = row.Groups("class=\"item__title( [^\"]+)?\"><a href=\"(?<link>https?://[^\"]+)\">(?<name>[^<]+)</a>");
+
+                        string name = g["name"].Value.ToLower();
+                        if (string.IsNullOrWhiteSpace(name) || name.Contains("сезон") || name.Contains("серии") || name.Contains("серия"))
+                            continue;
+
                         if (string.IsNullOrEmpty(g["link"].Value))
                             continue;
 
-                        if (name.Contains($"({year}/"))
+                        bool find = false;
+                        string _sname = StringConvert.SearchName(name);
+
+                        if (!string.IsNullOrEmpty(stitle))
+                            find = _sname.Contains(stitle);
+
+                        if (!find && !string.IsNullOrEmpty(sorigtitle))
+                            find = _sname.Contains(sorigtitle);
+
+                        if (find && name.Contains($"({year}/"))
                         {
                             result.similars.Add(new Similar()
                             {
@@ -70,13 +76,14 @@ namespace Shared.Engine.Online
                             });
                         }
                     }
-                }
+                });
 
                 if (result.similars.Count == 0)
                 {
-                    if (search.Contains(">Поиск по сайту<"))
+                    if (reqOk)
                         return new EmbedModel() { IsEmpty = true };
 
+                    requesterror?.Invoke();
                     return null;
                 }
 
@@ -86,31 +93,27 @@ namespace Shared.Engine.Online
                 link = result.similars[0].href;
             }
 
-            string news = await onget(link);
-            if (news == null)
+
+            await httpHydra.GetSpan(link, addheaders: HeadersModel.Init("cookie", cookie), spanAction: news =>
+            {
+                result.content = HtmlSpan.Node(news, "div", "class", "page__desc", HtmlSpanTargetType.Exact).ToString();
+            });
+
+            if (string.IsNullOrEmpty(result.content) || !result.content.Contains("cloud.mail.ru/public/"))
             {
                 requesterror?.Invoke();
                 return null;
             }
 
-            var doc = new HtmlDocument();
-            doc.LoadHtml(news);
-
-            var pageDescNode = doc.DocumentNode.SelectSingleNode("//div[@class='page__desc']");
-
-            if (pageDescNode == null || !pageDescNode.InnerHtml.Contains("cloud.mail.ru/public/"))
-                return null;
-
-            result.content = pageDescNode.InnerHtml;
             return result;
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, string title, string original_title, int year, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, string title, string original_title, int year)
         {
             if (result == null || result.IsEmpty)
-                return string.Empty;
+                return default;
 
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -129,10 +132,10 @@ namespace Shared.Engine.Online
                         stpl.Append(similar.title, similar.year, string.Empty, link);
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
+                    return stpl;
                 }
 
-                return string.Empty;
+                return default;
             }
             #endregion
 
@@ -161,35 +164,37 @@ namespace Shared.Engine.Online
                     mtpl.Append("480p", host + $"lite/remux/movie?linkid={linkid}&quality=480p&title={enc_title}&original_title={enc_original_title}", "call");
             }
 
-            return rjson ? mtpl.ToJson(reverse: true) : mtpl.ToHtml(reverse: true);
+            mtpl.Reverse();
+
+            return mtpl;
         }
         #endregion
 
 
         #region Weblink
-        async public ValueTask<string> Weblink(string linkid)
+        async public Task<string> Weblink(string linkid)
         {
-            string html = await onget($"https://cloud.mail.ru/public/{linkid}");
-            if (html == null)
+            string location = null;
+
+            await httpHydra.GetSpan($"https://cloud.mail.ru/public/{linkid}", html => 
+            {
+                var rx = Rx.Split("\"weblink_get\":", html, 1);
+                if (rx.Count > 0)
+                    location = rx[0].Match("\"url\": ?\"(https?://[^/]+)");
+            });
+
+            if (string.IsNullOrEmpty(location))
             {
                 requesterror?.Invoke();
                 return null;
             }
-
-            string weblinkRow = StringConvert.FindLastText(html, "\"weblink_get\"", "}");
-            if (weblinkRow == null)
-                return null;
-
-            string location = Regex.Match(weblinkRow, "\"url\": ?\"(https?://[^/]+)").Groups[1].Value;
-            if (string.IsNullOrEmpty(location))
-                return null;
 
             return $"{location}/weblink/view/{linkid}";
         }
         #endregion
 
         #region Movie
-        public string Movie(in string weblink, in string quality, in string title, in string original_title, VastConf vast = null)
+        public string Movie(string weblink, string quality, string title, string original_title, VastConf vast = null)
         {
             return VideoTpl.ToJson("play", onstreamfile?.Invoke(weblink), (title ?? original_title), quality: quality, vast: vast);
         }

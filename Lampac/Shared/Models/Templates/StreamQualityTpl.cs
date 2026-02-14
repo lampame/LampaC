@@ -1,11 +1,13 @@
 using Shared.Models.Events;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Shared.Models.Templates
 {
     public struct StreamQualityTpl
     {
-        public List<(string link, string quality)> data { get; set; } = new List<(string, string)>(8);
+        public List<StreamQualityDto> data { get; private set; } = new List<StreamQualityDto>(8);
+
 
         public StreamQualityTpl() { }
 
@@ -18,48 +20,65 @@ namespace Shared.Models.Templates
             }
         }
 
+        public StreamQualityTpl(IReadOnlyList<StreamQualityDto> streams)
+        {
+            if (streams != null)
+            {
+                foreach (var item in streams)
+                    Append(item.link, item.quality);
+            }
+        }
+
+
         public bool Any() => data.Any();
 
         public void Append(string link, string quality)
         {
-            if (string.IsNullOrEmpty(quality))
+            if (string.IsNullOrEmpty(link) || string.IsNullOrEmpty(quality))
                 return;
 
-            var eventResult = InvkEvent.StreamQuality(new EventStreamQuality(link, quality, prepend: false));
-            if (eventResult.next.HasValue && !eventResult.next.Value)
-                return;
+            if (InvkEvent.IsStreamQuality())
+            {
+                var eventResult = InvkEvent.StreamQuality(new EventStreamQuality(link, quality, prepend: false));
+                if (eventResult.next.HasValue && !eventResult.next.Value)
+                    return;
 
-            link = eventResult.link ?? link;
+                link = eventResult.link ?? link;
+            }
 
             if (!string.IsNullOrEmpty(link))
-                data.Add((link, quality));
+                data.Add(new StreamQualityDto(link, quality));
         }
 
         public void Insert(string link, string quality)
         {
-            if (string.IsNullOrEmpty(quality))
+            if (string.IsNullOrEmpty(link) || string.IsNullOrEmpty(quality))
                 return;
 
-            var eventResult = InvkEvent.StreamQuality(new EventStreamQuality(link, quality, prepend: true));
-            if (eventResult.next.HasValue && !eventResult.next.Value)
-                return;
+            if (InvkEvent.IsStreamQuality())
+            {
+                var eventResult = InvkEvent.StreamQuality(new EventStreamQuality(link, quality, prepend: true));
+                if (eventResult.next.HasValue && !eventResult.next.Value)
+                    return;
 
-            link = eventResult.link ?? link;
+                link = eventResult.link ?? link;
+            }
 
             if (!string.IsNullOrEmpty(link))
-                data.Insert(0, (link, quality));
+                data.Insert(0, new StreamQualityDto(link, quality));
         }
 
-        public string ToJson() => JsonSerializer.Serialize(ToObject());
+        public string ToJson() => JsonSerializer.Serialize(ToObject(), StreamQualityJsonContext.Default.DictionaryStringString);
 
         public Dictionary<string, string> ToObject(bool emptyToNull = false)
         {
-            var result = new Dictionary<string, string>();
+            if (emptyToNull && data.Count == 0)
+                return null;
+
+            var result = new Dictionary<string, string>(data.Count);
+
             foreach (var item in data)
                 result.TryAdd(item.quality, item.link);
-
-            if (emptyToNull && result.Count == 0)
-                return null;
 
             return result;
         }
@@ -72,14 +91,39 @@ namespace Shared.Models.Templates
             return data[0].quality;
         }
 
-        public (string link, string quality) Firts()
+        public StreamQualityDto Firts()
         {
             if (data.Count == 0)
                 return default;
 
-            var eventResult = InvkEvent.StreamQualityFirts(new EventStreamQualityFirts(data));
+            if (InvkEvent.IsStreamQualityFirts())
+            {
+                var eventResult = InvkEvent.StreamQualityFirts(new EventStreamQualityFirts(data));
+                return eventResult ?? data[0];
+            }
 
-            return eventResult ?? data[0];
+            return data[0];
+        }
+    }
+
+
+    [JsonSourceGenerationOptions(
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault
+    )]
+    [JsonSerializable(typeof(Dictionary<string, string>))]
+    public partial class StreamQualityJsonContext : JsonSerializerContext
+    {
+    }
+
+    public readonly struct StreamQualityDto
+    {
+        public string link { get; }
+        public string quality { get; }
+
+        public StreamQualityDto(string link, string quality)
+        {
+            this.link = link;
+            this.quality = quality;
         }
     }
 }

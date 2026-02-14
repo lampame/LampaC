@@ -1,19 +1,18 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Playwright;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.Utilities;
 using Shared.Models.Online.Alloha;
 using Shared.Models.Online.Settings;
 using Shared.PlaywrightCore;
 
 namespace Online.Controllers
 {
-    public class Alloha : BaseOnlineController
+    public class Alloha : BaseOnlineController<AllohaSettings>
     {
-        #region Initialization
-        ValueTask<AllohaSettings> Initialization()
+        public Alloha() : base(AppInit.conf.Alloha) 
         {
-            return loadKit(AppInit.conf.Alloha, (j, i, c) =>
+            loadKitInitialization = (j, i, c) =>
             {
                 if (j.ContainsKey("m4s"))
                     i.m4s = c.m4s;
@@ -27,36 +26,28 @@ namespace Online.Controllers
                 i.secret_token = c.secret_token;
                 i.token = c.token;
                 return i;
-            });
+            };
         }
-        #endregion
 
         [HttpGet]
         [Route("lite/alloha")]
-        async public ValueTask<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, int serial, string original_language, int year, string t, int s = -1, bool origsource = false, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, int serial, string original_language, int year, string t, int s = -1, bool origsource = false, bool rjson = false, bool similar = false)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: false))
+            if (similar)
+                return await RouteToSpiderSearch(title, rjson);
+
+            if (await IsRequestBlocked(rch: !string.IsNullOrEmpty(init.secret_token)))
                 return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (similar)
-                return await SpiderSearch(title, origsource, rjson);
-
-            var proxyManager = new ProxyManager(init);
-
-            var result = await search(proxyManager, init, orid, imdb_id, kinopoisk_id, title, serial, original_language, year);
+            var result = await search(orid, imdb_id, kinopoisk_id, title, serial, original_language, year);
             if (result.category_id == 0)
-                return OnError("data", proxyManager, result.refresh_proxy);
+                return OnError("data", refresh_proxy: result.refresh_proxy);
 
             if (result.data == null)
                 return Ok();
 
             if (origsource)
-                return ContentTo(JsonConvert.SerializeObject(result.data));
+                return ContentTo(JsonConvertPool.SerializeObject(result.data));
 
             JToken data = result.data;
 
@@ -83,7 +74,7 @@ namespace Online.Controllers
                     mtpl.Append(translation.Value["name"].ToString(), link, "call", streamlink, voice_name: uhd ? "2160p" : translation.Value["quality"].ToString(), quality: uhd ? "2160p" : "");
                 }
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return await ContentTpl(mtpl);
                 #endregion
             }
             else
@@ -96,7 +87,7 @@ namespace Online.Controllers
                     foreach (var season in data.Value<JObject>("seasons").ToObject<Dictionary<string, object>>().Reverse())
                         tpl.Append($"{season.Key} сезон", $"{host}/lite/alloha?rjson={rjson}&s={season.Key}{defaultargs}", season.Key);
 
-                    return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                    return await ContentTpl(tpl);
                 }
                 else
                 {
@@ -123,7 +114,7 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl();
+                    var etpl = new EpisodeTpl(vtpl);
                     string sArhc = s.ToString();
 
                     foreach (var episode in data.Value<JObject>("seasons").GetValue(sArhc).Value<JObject>("episodes").ToObject<Dictionary<string, Episode>>().Reverse())
@@ -137,10 +128,7 @@ namespace Online.Controllers
                         etpl.Append($"{episode.Key} серия", title ?? original_title, sArhc, episode.Key, link, "call", streamlink: streamlink);
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return await ContentTpl(etpl);
                 }
                 #endregion
             }
@@ -153,18 +141,10 @@ namespace Online.Controllers
         [Route("lite/alloha/video.m3u8")]
         async public ValueTask<ActionResult> Video(string token_movie, string title, string original_title, string t, int s, int e, bool play, bool directors_cut)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: !string.IsNullOrEmpty(init.secret_token), rch_check: !play))
                 return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
-
-            return await InvkSemaphore(init, $"alloha:view:stream:{init.secret_token}:{token_movie}:{t}:{s}:{e}:{init.m4s}:{directors_cut}", async () =>
+            return await InvkSemaphore($"alloha:view:stream:{init.secret_token}:{token_movie}:{t}:{s}:{e}:{init.m4s}:{directors_cut}", async key =>
             {
                 if (!string.IsNullOrEmpty(init.secret_token))
                 {
@@ -174,11 +154,10 @@ namespace Online.Controllers
                     {
                         userIp = await mylocalip();
                         if (userIp == null)
-                            return OnError("userIp");
+                            return OnError("userIp", gbcache: false);
                     }
 
-                    string memKey = $"alloha:view:stream:{init.secret_token}:{token_movie}:{t}:{s}:{e}:{userIp}:{init.m4s}:{directors_cut}";
-                    if (!hybridCache.TryGetValue(memKey, out JToken data))
+                    if (!hybridCache.TryGetValue(key, out JToken data))
                     {
                         #region url запроса
                         string uri = $"{init.linkhost}/direct?secret_token={init.secret_token}&token_movie={token_movie}";
@@ -198,17 +177,17 @@ namespace Online.Controllers
                             uri += "&directors_cut";
                         #endregion
 
-                        var root = await Http.Get<JObject>(uri, timeoutSeconds: 8, proxy: proxy.proxy, headers: httpHeaders(init));
+                        var root = await httpHydra.Get<JObject>(uri, safety: true);
                         if (root == null)
-                            return OnError("json", proxyManager);
+                            return OnError("json", refresh_proxy: true);
 
                         if (!root.ContainsKey("data"))
                             return OnError("data");
 
-                        proxyManager.Success();
+                        proxyManager?.Success();
 
                         data = root["data"];
-                        hybridCache.Set(memKey, data, cacheTime(10, init: init));
+                        hybridCache.Set(key, data, cacheTime(10));
                     }
 
                     #region subtitle
@@ -222,14 +201,14 @@ namespace Online.Controllers
                     catch { }
                     #endregion
 
-                    List<(string link, string quality)> streams = null;
+                    List<StreamQualityDto> streams = null;
 
                     foreach (var hlsSource in data["file"]["hlsSource"])
                     {
                         // first or default
                         if (streams == null || hlsSource.Value<bool>("default"))
                         {
-                            streams = new List<(string link, string quality)>(6);
+                            streams = new List<StreamQualityDto>(6);
 
                             foreach (var q in hlsSource["quality"].ToObject<Dictionary<string, string>>())
                             {
@@ -237,7 +216,7 @@ namespace Online.Controllers
                                 if (init.reserve)
                                     file += " or " + hlsSource["reserve"][q.Key].ToString();
 
-                                streams.Add((HostStreamProxy(init, file, proxy: proxy.proxy), $"{q.Key}p"));
+                                streams.Add(new StreamQualityDto(HostStreamProxy(file), $"{q.Key}p"));
                             }
                         }
                     }
@@ -292,7 +271,7 @@ namespace Online.Controllers
                     #region Playwright
                     init.streamproxy = true; // force streamproxy
 
-                    string memKey = $"alloha:black_magic:{proxy.data.ip}:{token_movie}:{t}:{s}:{e}";
+                    string memKey = $"alloha:black_magic:{proxy_data.ip}:{token_movie}:{t}:{s}:{e}";
                     if (!hybridCache.TryGetValue(memKey, out (string hls, List<HeadersModel> headers) cache))
                     {
                         if (PlaywrightBrowser.Status == PlaywrightStatus.disabled)
@@ -306,7 +285,7 @@ namespace Online.Controllers
                             if (s > 0)
                                 targetUrl += $"&season={s}&episode={e}";
 
-                            var page = await browser.NewPageAsync(init.plugin, proxy: proxy.data, headers: Http.defaultFullHeaders).ConfigureAwait(false);
+                            var page = await browser.NewPageAsync(init.plugin, proxy: proxy_data, headers: Http.defaultFullHeaders).ConfigureAwait(false);
                             if (page == null)
                                 return null;
 
@@ -319,7 +298,7 @@ namespace Online.Controllers
                                 {
                                     if (browser.IsCompleted || route.Request.Url.Contains("blank.mp4") || route.Request.Url.Contains("googleapis.com"))
                                     {
-                                        PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                        PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                         await route.AbortAsync();
                                         return;
                                     }
@@ -333,35 +312,58 @@ namespace Online.Controllers
                                     }
                                     else
                                     {
-                                        if (route.Request.Url.Contains("/m/"))
+                                        //if (route.Request.Url.Contains("/m/"))
+                                        //{
+                                        //    await route.ContinueAsync();
+
+                                        //    var response = await page.WaitForResponseAsync(route.Request.Url);
+                                        //    if (response != null && response.Headers.ContainsKey("location"))
+                                        //    {
+                                        //        response = await page.WaitForResponseAsync(response.Headers["location"]);
+                                        //        if (response != null)
+                                        //        {
+                                        //            cache.headers = HeadersModel.Init(Http.defaultFullHeaders,
+                                        //                ("sec-fetch-dest", "empty"),
+                                        //                ("sec-fetch-mode", "cors"),
+                                        //                ("sec-fetch-site", "cross-site")
+                                        //            );
+
+                                        //            foreach (var item in response.Request.Headers)
+                                        //            {
+                                        //                if (item.Key.ToLower() is "host" or "accept-encoding" or "connection" or "range")
+                                        //                    continue;
+
+                                        //                if (!Http.defaultFullHeaders.ContainsKey(item.Key.ToLower()))
+                                        //                    cache.headers.Add(new HeadersModel(item.Key, item.Value.ToString()));
+                                        //            }
+
+                                        //            PlaywrightBase.ConsoleLog(() => ($"Playwright: SET {response.Request.Url}", cache.headers));
+                                        //            browser.SetPageResult(response.Request.Url);
+                                        //        }
+                                        //    }
+                                        //}
+
+                                        if (route.Request.Url.Contains("/master.m3u8"))
                                         {
-                                            await route.ContinueAsync();
+                                            await route.AbortAsync();
 
-                                            var response = await page.WaitForResponseAsync(route.Request.Url);
-                                            if (response != null && response.Headers.ContainsKey("location"))
+                                            cache.headers = HeadersModel.Init(Http.defaultFullHeaders,
+                                                ("sec-fetch-dest", "empty"),
+                                                ("sec-fetch-mode", "cors"),
+                                                ("sec-fetch-site", "cross-site")
+                                            );
+
+                                            foreach (var item in route.Request.Headers)
                                             {
-                                                response = await page.WaitForResponseAsync(response.Headers["location"]);
-                                                if (response != null)
-                                                {
-                                                    cache.headers = HeadersModel.Init(Http.defaultFullHeaders,
-                                                        ("sec-fetch-dest", "empty"),
-                                                        ("sec-fetch-mode", "cors"),
-                                                        ("sec-fetch-site", "cross-site")
-                                                    );
+                                                if (item.Key.ToLower() is "host" or "accept-encoding" or "connection" or "range")
+                                                    continue;
 
-                                                    foreach (var item in response.Request.Headers)
-                                                    {
-                                                        if (item.Key.ToLower() is "host" or "accept-encoding" or "connection" or "range")
-                                                            continue;
-
-                                                        if (!Http.defaultFullHeaders.ContainsKey(item.Key.ToLower()))
-                                                            cache.headers.Add(new HeadersModel(item.Key, item.Value.ToString()));
-                                                    }
-
-                                                    PlaywrightBase.ConsoleLog($"Playwright: SET {response.Request.Url}", cache.headers);
-                                                    browser.SetPageResult(response.Request.Url);
-                                                }
+                                                if (!Http.defaultFullHeaders.ContainsKey(item.Key.ToLower()))
+                                                    cache.headers.Add(new HeadersModel(item.Key, item.Value.ToString()));
                                             }
+
+                                            PlaywrightBase.ConsoleLog(() => ($"Playwright: SET {route.Request.Url}", cache.headers));
+                                            browser.SetPageResult(route.Request.Url);
                                         }
                                         else
                                         {
@@ -382,11 +384,11 @@ namespace Online.Controllers
                         if (string.IsNullOrEmpty(cache.hls))
                             return OnError();
 
-                        hybridCache.Set(memKey, cache, cacheTime(20, init: init));
+                        hybridCache.Set(memKey, cache, cacheTime(20));
                     }
 
                     var streamquality = new StreamQualityTpl();
-                    streamquality.Append(HostStreamProxy(init, cache.hls, headers: cache.headers), "auto");
+                    streamquality.Append(HostStreamProxy(cache.hls, headers: cache.headers), "auto");
 
                     if (play)
                         return RedirectToPlay(streamquality.Firts().link);
@@ -402,31 +404,27 @@ namespace Online.Controllers
         }
         #endregion
 
-        #region SpiderSearch
+        #region RouteToSpiderSearch
         [HttpGet]
         [Route("lite/alloha-search")]
-        async public ValueTask<ActionResult> SpiderSearch(string title, bool origsource = false, bool rjson = false)
+        async public Task<ActionResult> RouteToSpiderSearch(string title, bool rjson = false)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: false))
+            if (string.IsNullOrWhiteSpace(title))
+                return OnError("title", gbcache: false);
+
+            if (await IsRequestBlocked(rch: !string.IsNullOrEmpty(init.token)))
                 return badInitMsg;
 
-            if (string.IsNullOrWhiteSpace(title))
-                return OnError();
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var cache = await InvokeCache<JArray>($"alloha:search:{title}", cacheTime(40, init: init), proxyManager, async res =>
+            var cache = await InvokeCacheResult<JArray>($"alloha:search:{title}", 40, async e =>
             {
-                var root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                var root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list", safety: true);
                 if (root == null || !root.ContainsKey("data"))
-                    return res.Fail("data");
+                    return e.Fail("data", refresh_proxy: true);
 
-                return root["data"].ToObject<JArray>();
+                return e.Success(root["data"].ToObject<JArray>());
             });
 
-            return OnResult(cache, () =>
+            return await ContentTpl(cache, () =>
             {
                 var stpl = new SimilarTpl(cache.Value.Count);
 
@@ -436,15 +434,14 @@ namespace Online.Controllers
                     stpl.Append(j.Value<string>("name") ?? j.Value<string>("original_name"), j.Value<int>("year").ToString(), string.Empty, uri, PosterApi.Size(j.Value<string>("poster")));
                 }
 
-                return rjson ? stpl.ToJson() : stpl.ToHtml();
-
-            }, origsource: origsource);
+                return stpl;
+            });
         }
         #endregion
 
 
         #region search
-        async ValueTask<(bool refresh_proxy, int category_id, JToken data)> search(ProxyManager proxyManager, AllohaSettings init, string token_movie, string imdb_id, long kinopoisk_id, string title, int serial, string original_language, int year)
+        async ValueTask<(bool refresh_proxy, int category_id, JToken data)> search(string token_movie, string imdb_id, long kinopoisk_id, string title, int serial, string original_language, int year)
         {
             string memKey = $"alloha:view:{kinopoisk_id}:{imdb_id}";
             if (0 >= kinopoisk_id && string.IsNullOrEmpty(imdb_id))
@@ -462,22 +459,22 @@ namespace Online.Controllers
                     if (string.IsNullOrWhiteSpace(title) || year == 0)
                         return default;
 
-                    root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list={(serial == 1 ? "serial" : "movie")}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                    root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&name={HttpUtility.UrlEncode(title)}&list={(serial == 1 ? "serial" : "movie")}", safety: true);
                     if (root == null)
                         return (true, 0, null);
 
                     if (root.ContainsKey("data"))
                     {
-                        string stitle = title.ToLower();
+                        string stitle = title.ToLowerAndTrim();
 
                         foreach (var item in root["data"])
                         {
-                            if (item.Value<string>("name")?.ToLower()?.Trim() == stitle)
+                            if (item.Value<string>("name")?.ToLowerAndTrim() == stitle)
                             {
                                 int y = item.Value<int>("year");
                                 if (y > 0 && (y == year || y == (year - 1) || y == (year + 1)))
                                 {
-                                    if (original_language == "ru" && item.Value<string>("country")?.ToLower() != "россия")
+                                    if (original_language == "ru" && item.Value<string>("country")?.ToLowerAndTrim() != "россия")
                                         continue;
 
                                     res.data = item;
@@ -491,10 +488,10 @@ namespace Online.Controllers
                 else
                 {
                     if (!string.IsNullOrEmpty(imdb_id))
-                        root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&imdb={imdb_id}&token_movie={token_movie}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                        root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&imdb={imdb_id}&token_movie={token_movie}", safety: true);
                     
                     if ((root == null || !root.ContainsKey("data")) && kinopoisk_id > 0)
-                        root = await Http.Get<JObject>($"{init.apihost}/?token={init.token}&kp={kinopoisk_id}&token_movie={token_movie}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                        root = await httpHydra.Get<JObject>($"{init.apihost}/?token={init.token}&kp={kinopoisk_id}&token_movie={token_movie}", safety: true);
 
                     if (root == null)
                         return (true, 0, null);
@@ -507,12 +504,12 @@ namespace Online.Controllers
                 }
 
                 if (res.data != null)
-                    proxyManager.Success();
+                    proxyManager?.Success();
 
                 if (res.data != null || (root.ContainsKey("error_info") && root.Value<string>("error_info") == "not movie"))
-                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(res.category_id is 1 or 3 ? 120 : 40));
                 else
-                    hybridCache.Set(memKey, res, cacheTime(2, init: init));
+                    hybridCache.Set(memKey, res, cacheTime(2));
             }
 
             return (false, res.category_id, res.data);

@@ -6,61 +6,49 @@ namespace Online.Controllers
 {
     public class VkMovie : BaseOnlineController
     {
+        public VkMovie() : base(AppInit.conf.VkMovie) { }
+
         static readonly int client_id = 52461373;
         static string access_token;
         static DateTime token_expires;
 
         [HttpGet]
         [Route("lite/vkmovie")]
-        async public ValueTask<ActionResult> Index(string title, string original_title, int year, int serial, bool rjson = false)
+        async public Task<ActionResult> Index(string title, string original_title, int year, int serial, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.VkMovie);
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
-
             if (serial == 1)
                 return OnError();
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
+            if (await IsRequestBlocked(rch: true))
+                return badInitMsg;
 
             if (!await EnsureAnonymToken(init, proxy))
                 return ShowError("token");
 
             string searchTitle = StringConvert.SearchName(title);
 
-            reset:
-            var cache = await InvokeCache<CatalogVideo[]>(rch.ipkey($"vkmovie:view:{searchTitle}:{year}", proxyManager), cacheTime(20, init: init), rch.enable ? null : proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<CatalogVideo[]>(ipkey($"vkmovie:view:{searchTitle}:{year}"), 20, async e =>
             {
-                string url = $"{init.host}/method/catalog.getVideoSearchWeb2?v=5.264&client_id={client_id}";
+                string url = $"{init.corsHost()}/method/catalog.getVideoSearchWeb2?v=5.264&client_id={client_id}";
                 string data = $"screen_ref=search_video_service&input_method=keyboard_search_button&q={HttpUtility.UrlEncode($"{title} {year}")}&access_token={access_token}";
 
-                var root = rch.enable
-                    ? await rch.Post<JObject>(url, data, httpHeaders(init))
-                    : await Http.Post<JObject>(url, data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Post<JObject>(url, data);
 
                 if (root == null || !root.ContainsKey("response"))
-                    return res.Fail("response");
+                    return e.Fail("response", refresh_proxy: true);
 
                 var videos = root["response"]?["catalog_videos"]?.ToObject<CatalogVideo[]>();
                 if (videos == null)
-                    return res.Fail("catalog_videos");
+                    return e.Fail("catalog_videos");
 
-                return videos;
+                return e.Success(videos);
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
 
-            return OnResult(cache, () =>
+            return await ContentTpl(cache, () =>
             {
                 var mtpl = new MovieTpl(title, original_title, cache.Value.Length);
 
@@ -100,7 +88,7 @@ namespace Online.Controllers
                     void append(string url, string quality)
                     {
                         if (!string.IsNullOrEmpty(url))
-                            streams.Append(HostStreamProxy(init, url, proxy: proxy), quality);
+                            streams.Append(HostStreamProxy(url), quality);
                     }
 
                     //append(video.files.hls, "auto");
@@ -131,19 +119,18 @@ namespace Online.Controllers
                             if (string.IsNullOrEmpty(label))
                                 label = !string.IsNullOrEmpty(subtitle.title) ? subtitle.title : subtitle.lang;
 
-                            subtitleTpl.Append(label, HostStreamProxy(init, subtitle.url, proxy: proxy));
+                            subtitleTpl.Append(label, HostStreamProxy(subtitle.url));
                         }
 
-                        if (!subtitleTpl.IsEmpty())
+                        if (!subtitleTpl.IsEmpty)
                             subtitles = subtitleTpl;
                     }
 
                     mtpl.Append(video.title, streams.Firts().link, streamquality: streams, subtitles: subtitles, headers: HeadersModel.Init(init.headers), vast: init.vast);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
-
-            }, gbcache: !rch.enable);
+                return mtpl;
+            });
         }
 
 
@@ -170,7 +157,7 @@ namespace Online.Controllers
 
                 try
                 {
-                    root = await Http.Post<JObject>(url, postData, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                    root = await httpHydra.Post<JObject>(url, postData);
                 }
                 catch
                 {

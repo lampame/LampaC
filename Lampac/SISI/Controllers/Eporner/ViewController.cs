@@ -4,56 +4,33 @@ namespace SISI.Controllers.Eporner
 {
     public class ViewController : BaseSisiController
     {
+        public ViewController() : base(AppInit.conf.Eporner) { }
+
         [HttpGet]
         [Route("epr/vidosik")]
-        async public ValueTask<ActionResult> Index(string uri, bool related)
+        async public Task<ActionResult> Index(string uri, bool related)
         {
-            var init = await loadKit(AppInit.conf.Eporner);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string semaphoreKey = $"eporner:view:{uri}";
-
-            return await InvkSemaphore(semaphoreKey, async () =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<StreamItem>(ipkey($"eporner:view:{uri}"), 20, async e =>
             {
-                reset:
-                string memKey = rch.ipkey(semaphoreKey, proxyManager);
-                if (!hybridCache.TryGetValue(memKey, out StreamItem stream_links))
-                {
-                    stream_links = await EpornerTo.StreamLinks("epr/vidosik", init.corsHost(), uri,
-                                   htmlurl => rch.enable ? rch.Get(init.cors(htmlurl), httpHeaders(init)) : Http.Get(init.cors(htmlurl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)),
-                                   jsonurl => rch.enable ? rch.Get(init.cors(jsonurl), httpHeaders(init)) : Http.Get(init.cors(jsonurl), timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init)));
+                var stream_links = await EpornerTo.StreamLinks(httpHydra, "epr/vidosik", init.corsHost(), uri);
 
-                    if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)
-                    {
-                        if (IsRhubFallback(init))
-                            goto reset;
+                if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)
+                    return e.Fail("stream_links", refresh_proxy: true);
 
-                        return OnError("stream_links", proxyManager);
-                    }
-
-                    if (!rch.enable)
-                        proxyManager.Success();
-
-                    hybridCache.Set(memKey, stream_links, cacheTime(20, init: init));
-                }
-
-                if (related)
-                    return OnResult(stream_links?.recomends, null, plugin: init.plugin, total_pages: 1);
-
-                return OnResult(stream_links, init, proxy);
+                return e.Success(stream_links);
             });
+
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
+
+            if (related)
+                return await PlaylistResult(cache.Value?.recomends, cache.ISingleCache, null, total_pages: 1);
+
+            return OnResult(cache);
         }
     }
 }

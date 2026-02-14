@@ -1,10 +1,10 @@
 ﻿using DnsClient;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Shared;
 using Shared.Engine;
+using Shared.Engine.Utilities;
 using Shared.Models;
 using System;
 using System.Buffers;
@@ -25,19 +25,24 @@ namespace Lampac.Engine.Middlewares
         #region ProxyTmdb
         static FileSystemWatcher fileWatcher;
 
-        static ConcurrentDictionary<string, int> cacheFiles = new ();
+        static readonly ConcurrentDictionary<string, int> cacheFiles = new ();
+
+        public static int Stat_ContCacheFiles => cacheFiles.IsEmpty ? 0 : cacheFiles.Count;
 
         static Timer cleanupTimer;
 
         static ProxyTmdb()
         {
+            Directory.CreateDirectory("cache/tmdb");
+
             if (AppInit.conf.multiaccess == false)
                 return;
 
-            Directory.CreateDirectory("cache/tmdb");
-
-            foreach (var item in Directory.EnumerateFiles("cache/tmdb", "*"))
-                cacheFiles.TryAdd(Path.GetFileName(item), (int)new FileInfo(item).Length);
+            foreach (string path in Directory.EnumerateFiles("cache/tmdb", "*"))
+            {
+                using (var handle = File.OpenHandle(path))
+                    cacheFiles.TryAdd(Path.GetFileName(path), (int)RandomAccess.GetLength(handle));
+            }
 
             fileWatcher = new FileSystemWatcher
             {
@@ -49,18 +54,16 @@ namespace Lampac.Engine.Middlewares
             //fileWatcher.Created += (s, e) => { cacheFiles.TryAdd(e.Name, 0); };
             fileWatcher.Deleted += (s, e) => { cacheFiles.TryRemove(e.Name, out _); };
 
-            cleanupTimer = new Timer(cleanup, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
+            cleanupTimer = new Timer(cleanup, null, TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(20));
         }
 
         static void cleanup(object state)
         {
             try
             {
-                var files = Directory.GetFiles("cache/tmdb", "*").Select(f => Path.GetFileName(f)).ToHashSet();
-
-                foreach (string md5fileName in cacheFiles.Keys.ToArray())
+                foreach (string md5fileName in cacheFiles.Keys)
                 {
-                    if (!files.Contains(md5fileName))
+                    if (!File.Exists(Path.Combine("cache", "tmdb", md5fileName)))
                         cacheFiles.TryRemove(md5fileName, out _);
                 }
             }
@@ -72,24 +75,24 @@ namespace Lampac.Engine.Middlewares
 
         public Task Invoke(HttpContext httpContext)
         {
-            var hybridCache = new HybridCache();
             var requestInfo = httpContext.Features.Get<RequestModel>();
+            var hybridCache = IHybridCache.Get(requestInfo);
 
-            if (httpContext.Request.Path.Value.StartsWith("/tmdb/api/"))
+            if (httpContext.Request.Path.Value.StartsWith("/tmdb/api/", StringComparison.OrdinalIgnoreCase))
                 return API(httpContext, hybridCache, requestInfo);
 
-            if (httpContext.Request.Path.Value.StartsWith("/tmdb/img/"))
+            if (httpContext.Request.Path.Value.StartsWith("/tmdb/img/", StringComparison.OrdinalIgnoreCase))
                 return IMG(httpContext, requestInfo);
 
-            string path = Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/https?://", "").Replace("/tmdb/", "");
-            string uri = Regex.Match(path, "^[^/]+/(.*)").Groups[1].Value + httpContext.Request.QueryString.Value;
+            string path = Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/https?://", "", RegexOptions.IgnoreCase).Replace("/tmdb/", "");
+            string uri = Regex.Match(path, "^[^/]+/(.*)", RegexOptions.IgnoreCase).Groups[1].Value + httpContext.Request.QueryString.Value;
 
-            if (path.Contains("api.themoviedb.org"))
+            if (path.Contains("api.themoviedb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Request.Path = $"/tmdb/api/{uri}";
                 return API(httpContext, hybridCache, requestInfo);
             }
-            else if (path.Contains("image.tmdb.org"))
+            else if (path.Contains("image.tmdb.org", StringComparison.OrdinalIgnoreCase))
             {
                 httpContext.Request.Path = $"/tmdb/img/{uri}";
                 return IMG(httpContext, requestInfo);
@@ -101,7 +104,7 @@ namespace Lampac.Engine.Middlewares
 
 
         #region API
-        async public Task API(HttpContext httpContex, HybridCache hybridCache, RequestModel requestInfo)
+        async public Task API(HttpContext httpContex, IHybridCache hybridCache, RequestModel requestInfo)
         {
             using (var ctsHttp = CancellationTokenSource.CreateLinkedTokenSource(httpContex.RequestAborted))
             {
@@ -116,9 +119,9 @@ namespace Lampac.Engine.Middlewares
                     return;
                 }
 
-                string path = httpContex.Request.Path.Value.Replace("/tmdb/api", "");
-                path = Regex.Replace(path, "^/https?://api.themoviedb.org", "");
-                path = Regex.Replace(path, "/$", "");
+                string path = httpContex.Request.Path.Value.Replace("/tmdb/api", "", StringComparison.OrdinalIgnoreCase);
+                path = Regex.Replace(path, "^/https?://api.themoviedb.org", "", RegexOptions.IgnoreCase);
+                path = Regex.Replace(path, "/$", "", RegexOptions.IgnoreCase);
 
                 string query = Regex.Replace(httpContex.Request.QueryString.Value, "(&|\\?)(account_email|email|uid|token)=[^&]+", "");
                 string uri = "https://api.themoviedb.org" + path + query;
@@ -173,7 +176,10 @@ namespace Lampac.Engine.Middlewares
                 #endregion
 
                 var headers = new List<HeadersModel>();
-                var proxyManager = new ProxyManager("tmdb_api", init);
+
+                var proxyManager = init.useproxy
+                    ? new ProxyManager("tmdb_api", init)
+                    : null;
 
                 if (!string.IsNullOrEmpty(init.API_Minor))
                 {
@@ -185,10 +191,10 @@ namespace Lampac.Engine.Middlewares
                     uri = uri.Replace("api.themoviedb.org", tmdb_ip);
                 }
 
-                var result = await Http.BaseGetAsync<JObject>(uri, timeoutSeconds: 20, proxy: proxyManager.Get(), httpversion: init.httpversion, headers: headers, statusCodeOK: false);
+                var result = await Http.BaseGetAsync<JObject>(uri, timeoutSeconds: 20, proxy: proxyManager?.Get(), httpversion: init.httpversion, headers: headers, statusCodeOK: false);
                 if (result.content == null)
                 {
-                    proxyManager.Refresh();
+                    proxyManager?.Refresh();
                     httpContex.Response.StatusCode = 401;
                     await httpContex.Response.WriteAsJsonAsync(new { error = true, msg = "json null" }, ctsHttp.Token);
                     return;
@@ -199,8 +205,8 @@ namespace Lampac.Engine.Middlewares
 
                 if (result.content.ContainsKey("status_message") || result.response.StatusCode != HttpStatusCode.OK)
                 {
-                    proxyManager.Refresh();
-                    cache.json = JsonConvert.SerializeObject(result.content);
+                    proxyManager?.Refresh();
+                    cache.json = JsonConvertPool.SerializeObject(result.content);
 
                     if (init.cache_api > 0 && !string.IsNullOrEmpty(cache.json))
                         hybridCache.Set(mkey, cache, DateTime.Now.AddMinutes(1), inmemory: true);
@@ -209,12 +215,12 @@ namespace Lampac.Engine.Middlewares
                     return;
                 }
 
-                cache.json = JsonConvert.SerializeObject(result.content);
+                cache.json = JsonConvertPool.SerializeObject(result.content);
 
                 if (init.cache_api > 0 && !string.IsNullOrEmpty(cache.json))
                     hybridCache.Set(mkey, cache, DateTime.Now.AddMinutes(init.cache_api), inmemory: false);
 
-                proxyManager.Success();
+                proxyManager?.Success();
                 httpContex.Response.ContentType = "application/json; charset=utf-8";
                 await httpContex.Response.WriteAsync(cache.json, ctsHttp.Token);
             }
@@ -236,8 +242,8 @@ namespace Lampac.Engine.Middlewares
                     return;
                 }
 
-                string path = httpContex.Request.Path.Value.Replace("/tmdb/img", "");
-                path = Regex.Replace(path, "^/https?://image.tmdb.org", "");
+                string path = httpContex.Request.Path.Value.Replace("/tmdb/img", "", StringComparison.OrdinalIgnoreCase);
+                path = Regex.Replace(path, "^/https?://image.tmdb.org", "", RegexOptions.IgnoreCase);
 
                 string query = Regex.Replace(httpContex.Request.QueryString.Value, "(&|\\?)(account_email|email|uid|token)=[^&]+", "");
                 string uri = "https://image.tmdb.org" + path + query;
@@ -247,7 +253,9 @@ namespace Lampac.Engine.Middlewares
 
                 bool cacheimg = init.cache_img > 0 && AppInit.conf.mikrotik == false;
 
-                httpContex.Response.ContentType = path.Contains(".png") ? "image/png" : path.Contains(".svg") ? "image/svg+xml" : "image/jpeg";
+                httpContex.Response.ContentType = path.Contains(".png", StringComparison.OrdinalIgnoreCase) 
+                    ? "image/png" 
+                    : path.Contains(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : "image/jpeg";
 
                 #region cacheFiles
                 if (cacheimg)
@@ -320,7 +328,9 @@ namespace Lampac.Engine.Middlewares
                 }
                 #endregion
 
-                var proxyManager = new ProxyManager("tmdb_img", init);
+                var proxyManager = init.useproxy 
+                    ? new ProxyManager("tmdb_img", init) 
+                    : null;
 
                 var semaphore = cacheimg ? new SemaphorManager(outFile, ctsHttp.Token) : null;
 
@@ -339,15 +349,16 @@ namespace Lampac.Engine.Middlewares
                             if (init.responseContentLength && cacheFiles.ContainsKey(md5key))
                                 httpContex.Response.ContentLength = cacheFiles[md5key];
 
+                            semaphore?.Release();
                             await httpContex.Response.SendFileAsync(outFile, ctsHttp.Token).ConfigureAwait(false);
                             return;
                         }
                     }
                     #endregion
 
-                    var handler = Http.Handler(uri, proxyManager.Get());
+                    var handler = Http.Handler(uri, proxyManager?.Get());
 
-                    var client = FrendlyHttp.HttpMessageClient(init.httpversion == 2 ? "http2proxyimg" : "proxyimg", handler);
+                    var client = FrendlyHttp.MessageClient(init.httpversion == 2 ? "http2proxyimg" : "proxyimg", handler);
 
                     var req = new HttpRequestMessage(HttpMethod.Get, uri)
                     {
@@ -366,9 +377,9 @@ namespace Lampac.Engine.Middlewares
                     using (HttpResponseMessage response = await client.SendAsync(req, ctsHttp.Token).ConfigureAwait(false))
                     {
                         if (response.StatusCode == HttpStatusCode.OK)
-                            proxyManager.Success();
+                            proxyManager?.Success();
                         else
-                            proxyManager.Refresh();
+                            proxyManager?.Refresh();
 
                         httpContex.Response.StatusCode = (int)response.StatusCode;
 
@@ -380,17 +391,13 @@ namespace Lampac.Engine.Middlewares
                             #region cache
                             httpContex.Response.Headers["X-Cache-Status"] = "MISS";
 
-                            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+                            byte[] buffer = ArrayPool<byte>.Shared.Rent(PoolInvk.rentChunk);
 
                             try
                             {
                                 int cacheLength = 0;
 
-                                int bufferSize = response.Content.Headers.ContentLength.HasValue
-                                    ? (int)response.Content.Headers.ContentLength.Value
-                                    : 50_000; // 50kB
-
-                                using (var cacheStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize))
+                                using (var cacheStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, PoolInvk.bufferSize))
                                 {
                                     using (var responseStream = await response.Content.ReadAsStreamAsync(ctsHttp.Token).ConfigureAwait(false))
                                     {
@@ -428,6 +435,7 @@ namespace Lampac.Engine.Middlewares
                         }
                         else
                         {
+                            semaphore?.Release();
                             httpContex.Response.Headers["X-Cache-Status"] = "bypass";
                             await response.Content.CopyToAsync(httpContex.Response.Body, ctsHttp.Token).ConfigureAwait(false);
                         }
@@ -435,7 +443,7 @@ namespace Lampac.Engine.Middlewares
                 }
                 catch
                 {
-                    proxyManager.Refresh();
+                    proxyManager?.Refresh();
 
                     if (!string.IsNullOrEmpty(tmdb_ip))
                         httpContex.Response.Redirect(uri.Replace(tmdb_ip, "image.tmdb.org"));

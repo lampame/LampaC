@@ -1,40 +1,29 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
-using Shared.Models.Online.Settings;
 using Shared.Models.Online.Vibix;
 
 namespace Online.Controllers
 {
     public class Vibix : BaseOnlineController
     {
+        public Vibix() : base(AppInit.conf.Vibix) { }
+
         [HttpGet]
         [Route("lite/vibix")]
-        async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title,  int s = -1, bool rjson = false, bool origsource = false)
+        async public Task<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int s = -1, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.Vibix);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.token))
                 return OnError();
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var data = await search(proxyManager, init, imdb_id, kinopoisk_id);
+            var data = await search(imdb_id, kinopoisk_id);
             if (data == null)
                 return OnError();
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            reset:
-            var cache = await InvokeCache<EmbedModel>(rch.ipkey($"vibix:iframe:{data.iframe_url}:{init.token}", proxyManager), cacheTime(20, rhub: 2, init: init), rch.enable ? null : proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<EmbedModel>(ipkey($"vibix:iframe:{data.iframe_url}"), 20, async e =>
             {
                 string api_url = data.iframe_url
                     .Replace("/embed/", "/api/v1/embed/")
@@ -42,33 +31,32 @@ namespace Online.Controllers
 
                 api_url += $"?iframe_url={HttpUtility.UrlEncode(data.iframe_url)}";
                 api_url += $"&kp={CrypTo.unic(6).ToLower()}";
+                api_url += "&domain=cm.vibix.biz&parent_domain=cm.vibix.biz";
 
-                var api_headers = httpHeaders(init, HeadersModel.Init(
+                var api_headers = HeadersModel.Init(
                     ("accept", "*/*"),
                     ("accept-language", "ru-RU,ru;q=0.9,uk-UA;q=0.8,uk;q=0.7,en-US;q=0.6,en;q=0.5"),
                     ("sec-fetch-dest", "empty"),
                     ("sec-fetch-mode", "cors"),
                     ("sec-fetch-site", "same-origin"),
                     ("referer", data.iframe_url)
-                ));
+                );
 
-                var root = rch.enable 
-                    ? await rch.Get<JObject>(init.cors(api_url), api_headers) 
-                    : await Http.Get<JObject>(init.cors(api_url), timeoutSeconds: 8, proxy: proxy, headers: api_headers, httpversion: 2);
+                var root = await httpHydra.Get<JObject>(api_url, addheaders: api_headers);
 
                 if (root == null || !root.ContainsKey("data") || root["data"]?["playlist"] == null)
-                    return res.Fail("root");
+                    return e.Fail("root", refresh_proxy: true);
 
-                return new EmbedModel() { playlist = root["data"]["playlist"].ToObject<Seasons[]>() };
+                return e.Success(new EmbedModel() { playlist = root["data"]["playlist"].ToObject<Seasons[]>() });
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
 
             if (data.type == "movie")
             {
                 #region Фильм
-                return OnResult(cache, () => 
+                return await ContentTpl(cache, () => 
                 {
                     var mtpl = new MovieTpl(title, original_title, 1);
 
@@ -81,21 +69,20 @@ namespace Online.Controllers
                             var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+)").Match(movie.file).Groups;
 
                             if (!string.IsNullOrEmpty(g["file"].Value))
-                                streams.Append(HostStreamProxy(init, g["file"].Value, proxy: proxy), $"{q}p");
+                                streams.Append(HostStreamProxy(g["file"].Value), $"{q}p");
                         }
 
                         mtpl.Append(movie.title, streams.Firts().link, streamquality: streams, vast: init.vast);
                     }
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
-
-                }, origsource: origsource, gbcache: !rch.enable);
+                    return mtpl;
+                });
                 #endregion
             }
             else
             {
                 #region Сериал
-                return OnResult(cache, () =>
+                return await ContentTpl(cache, () =>
                 {
                     string enc_title = HttpUtility.UrlEncode(title);
                     string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -114,7 +101,7 @@ namespace Online.Controllers
                             }
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -140,64 +127,62 @@ namespace Online.Controllers
                                 {
                                     var g = new Regex($"{q}p?\\](\\{{[^\\}}]+\\}})?(?<file>https?://[^,\t\\[\\;\\{{ ]+)").Match(file).Groups;
                                     if (!string.IsNullOrEmpty(g["file"].Value))
-                                        streams.Append(HostStreamProxy(init, g["file"].Value, proxy: proxy), $"{q}p");
+                                        streams.Append(HostStreamProxy(g["file"].Value), $"{q}p");
                                 }
 
                                 etpl.Append(name, title ?? original_title, sArhc, Regex.Match(name, "([0-9]+)").Groups[1].Value, streams.Firts().link, streamquality: streams, vast: init.vast);
                             }
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
-
-                }, origsource: origsource, gbcache: !rch.enable);
+                });
                 #endregion
             }
         }
 
 
         #region search
-        async ValueTask<Video> search(ProxyManager proxyManager, OnlinesSettings init, string imdb_id, long kinopoisk_id)
+        async ValueTask<Video> search(string imdb_id, long kinopoisk_id)
         {
             string memKey = $"vibix:view:{kinopoisk_id}:{imdb_id}";
 
             if (!hybridCache.TryGetValue(memKey, out Video root))
             {
-                async Task<Video> goSearch(string imdb_id, long kinopoisk_id)
-                {
-                    if (string.IsNullOrEmpty(imdb_id) && kinopoisk_id == 0)
-                        return null;
-
-                    string uri = kinopoisk_id > 0 ? $"kp/{kinopoisk_id}" : $"imdb/{imdb_id}";
-                    var header = httpHeaders(init, HeadersModel.Init(
-                        ("Accept", "application/json"),
-                        ("Authorization", $"Bearer {init.token}"),
-                        ("X-CSRF-TOKEN", "")
-                    ));
-
-                    var video = await Http.Get<Video>($"{init.host}/api/v1/publisher/videos/{uri}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: header);
-
-                    if (video == null)
-                    {
-                        proxyManager.Refresh();
-                        return null;
-                    }
-
-                    if (string.IsNullOrEmpty(video.iframe_url) || string.IsNullOrEmpty(video.type))
-                        return null;
-
-                    return video;
-                }
-
                 root = await goSearch(null, kinopoisk_id) ?? await goSearch(imdb_id, 0);
                 if (root == null)
                     return null;
 
-                proxyManager.Success();
-                hybridCache.Set(memKey, root, cacheTime(30, init: init));
+                proxyManager?.Success();
+                hybridCache.Set(memKey, root, cacheTime(30));
             }
 
             return root;
+        }
+
+        async Task<Video> goSearch(string imdb_id, long kinopoisk_id)
+        {
+            if (string.IsNullOrEmpty(imdb_id) && kinopoisk_id == 0)
+                return null;
+
+            string uri = kinopoisk_id > 0 ? $"kp/{kinopoisk_id}" : $"imdb/{imdb_id}";
+
+            var video = await httpHydra.Get<Video>($"{init.host}/api/v1/publisher/videos/{uri}", safety: true, addheaders: HeadersModel.Init(
+                ("Accept", "application/json"),
+                ("Authorization", $"Bearer {init.token}"),
+                ("X-CSRF-TOKEN", "")
+            ));
+
+            if (video == null)
+            {
+                proxyManager?.Refresh();
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(video.iframe_url) || string.IsNullOrEmpty(video.type))
+                return null;
+
+            return video;
         }
         #endregion
     }

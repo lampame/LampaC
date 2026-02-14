@@ -4,62 +4,81 @@ namespace SISI.Controllers.Eporner
 {
     public class ListController : BaseSisiController
     {
+        public ListController() : base(AppInit.conf.Eporner) { }
+
         [HttpGet]
         [Route("epr")]
-        async public ValueTask<ActionResult> Index(string search, string sort, string c, int pg = 1)
+        async public Task<ActionResult> Index(string search, string sort, string c, int pg = 1)
         {
-            var init = await loadKit(AppInit.conf.Eporner);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_keepalive: -1))
                 return badInitMsg;
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
 
             pg += 1;
 
             string semaphoreKey = $"epr:{search}:{sort}:{c}:{pg}";
+            var semaphore = new SemaphorManager(semaphoreKey, TimeSpan.FromSeconds(30));
 
-            return await InvkSemaphore(semaphoreKey, async () =>
+            List<PlaylistItem> playlists = null;
+            HybridCacheEntry<List<PlaylistItem>> entryCache;
+
+            try
             {
-                reset:
-                string memKey = rch.ipkey(semaphoreKey, proxyManager);
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+
+                reset: // http запросы последовательно 
+                if (rch?.enable != true)
+                    await semaphore.WaitAsync();
+
+                entryCache = hybridCache.Entry<List<PlaylistItem>>(semaphoreKey);
+
+                // fallback cache
+                if (!entryCache.success)
                 {
-                    string html = await EpornerTo.InvokeHtml(init.corsHost(), search, sort, c, pg, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
-                    );
+                    string memKey = headerKeys(semaphoreKey, "accept");
 
-                    playlists = EpornerTo.Playlist("epr/vidosik", html);
-
-                    if (playlists.Count == 0)
+                    bool next = rch == null;
+                    if (!next)
                     {
-                        if (IsRhubFallback(init))
-                            goto reset;
-
-                        return OnError("playlists", proxyManager, string.IsNullOrEmpty(search));
+                        // user cache разделенный по ip
+                        entryCache = hybridCache.Entry<List<PlaylistItem>>(memKey);
+                        next = !entryCache.success;
                     }
 
-                    if (!rch.enable)
-                        proxyManager.Success();
+                    if (next)
+                    {
+                        string url = EpornerTo.Uri(init.corsHost(), search, sort, c, pg);
 
-                    hybridCache.Set(memKey, playlists, cacheTime(10, init: init), inmemory: false);
+                        await httpHydra.GetSpan(url, span => 
+                        {
+                            playlists = EpornerTo.Playlist("epr/vidosik", span);
+                        });
+
+                        if (playlists == null || playlists.Count == 0)
+                        {
+                            if (IsRhubFallback())
+                                goto reset;
+
+                            return OnError("playlists", refresh_proxy: string.IsNullOrEmpty(search));
+                        }
+
+                        proxyManager?.Success();
+
+                        hybridCache.Set(memKey, playlists, cacheTime(10));
+                    }
                 }
+            }
+            finally
+            {
+                semaphore.Release();
+            }
 
-                return OnResult(
-                    playlists, 
-                    EpornerTo.Menu(host, search, sort, c), 
-                    plugin: init.plugin, 
-                    imageHeaders: httpHeaders(init.host, init.headers_image)
-                );
-            });
+            if (playlists == null)
+                playlists = entryCache.value;
+
+            return await PlaylistResult(
+                playlists,
+                entryCache.singleCache,
+                EpornerTo.Menu(host, search, sort, c)
+            );
         }
     }
 }

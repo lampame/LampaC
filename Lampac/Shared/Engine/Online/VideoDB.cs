@@ -1,4 +1,4 @@
-﻿using Shared.Models;
+﻿using Shared.Engine.RxEnumerate;
 using Shared.Models.Online.VideoDB;
 using Shared.Models.Templates;
 using System.Text;
@@ -14,84 +14,73 @@ namespace Shared.Engine.Online
         #region VideoDBInvoke
         string host;
         string apihost;
-        Func<string, string> onstreamfile;
-        Func<string, string> onlog;
-        Func<string, List<HeadersModel>, ValueTask<string>> onget;
+        Action requesterror;
 
-        public VideoDBInvoke(string host, string apihost, Func<string, List<HeadersModel>, ValueTask<string>> onget, Func<string, string> onstreamfile, Func<string, string> onlog = null)
+        public VideoDBInvoke(string host, string apihost,  Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost!;
-            this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
-            this.onget = onget;
+            this.requesterror = requesterror;
         }
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(long kinopoisk_id)
+        public async Task<EmbedModel> Embed(long kinopoisk_id, Func<string, Task<string>> onget)
         {
-            string html = await onget.Invoke($"{apihost}/embed/AN?kinopoisk_id={kinopoisk_id}", null);
+            string html = await onget.Invoke($"{apihost}/embed/AN?kinopoisk_id={kinopoisk_id}");
 
-            if (html == null)
+            if (string.IsNullOrWhiteSpace(html))
             {
-                onlog?.Invoke("VideoDB: html null");
+                requesterror?.Invoke();
                 return null;
             }
 
             return Embed(html);
         }
 
-        public EmbedModel Embed(in string html)
+        public EmbedModel Embed(ReadOnlySpan<char> html)
         {
-            if (string.IsNullOrEmpty(html))
+            if (html.IsEmpty)
                 return null;
-
-            string decodePlayer(in string _html)
-            {
-                try
-                {
-                    string base64 = Regex.Match(_html, "new Player\\(\"([^\n\r]+)\"\\);").Groups[1].Value.Remove(0, 73);
-                    base64 = Regex.Replace(base64, "//[^=]+=", "");
-                    string json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
-                    //json = json.Split("\"player\",\"file\":")[1].Split(",\"hls\":")[0];
-
-                    return json;
-                }
-                catch 
-                {
-                    return null;
-                }
-            }
 
             string file = decodePlayer(html);
             if (file == null)
-            {
-                onlog?.Invoke("VideoDB: file null");
                 return null;
-            }
-
-            onlog?.Invoke("VideoDB: file OK");
 
             var pl = JsonNode.Parse(file)?["file"]?.Deserialize<RootObject[]>();
             if (pl == null || pl.Length == 0)
-            {
-                onlog?.Invoke("VideoDB: pl null");
                 return null;
-            }
-
-            onlog?.Invoke("VideoDB: pl OK");
 
             string quality = file.Contains("2160p") ? "2160p" : file.Contains("1080p") ? "1080p" : file.Contains("720p") ? "720p" : "480p";
             return new EmbedModel() { pl = pl, movie = !file.Contains("\"folder\":"), quality = quality };
         }
+
+
+        static string decodePlayer(ReadOnlySpan<char> _html)
+        {
+            try
+            {
+                string base64 = Rx.Match(_html, "new Player\\(\".{73}([^\n\r]+)\"\\);");
+                if (base64 == null)
+                    return null;
+
+                if (Regex.IsMatch(base64, "//[^=]+="))
+                    base64 = Regex.Replace(base64, "//[^=]+=", "");
+
+                return Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+            }
+            catch
+            {
+                return null;
+            }
+        }
         #endregion
 
         #region Html
-        public string Html(EmbedModel root, string args, long kinopoisk_id, string title, string original_title, string t, int s, int sid, bool rjson, bool bwa = false, bool rhub = false)
+        public ITplResult Tpl(EmbedModel root, string args, long kinopoisk_id, string title, string original_title, string t, int s, int sid, bool rjson, bool bwa = false, bool rhub = false)
         {
             if (root?.pl == null || root.pl.Length == 0)
-                return string.Empty;
+                return default;
 
             if (!string.IsNullOrEmpty(args))
                 args = $"&{args.Remove(0, 1)}";
@@ -163,7 +152,7 @@ namespace Shared.Engine.Online
                     }
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -186,18 +175,18 @@ namespace Shared.Engine.Online
                         tpl.Append(name, host + $"lite/videodb?rjson={rjson}&kinopoisk_id={kinopoisk_id}&rjson={rjson}&title={enc_title}&original_title={enc_original_title}&s={season}&sid={i}", season);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                 }
                 else
                 {
                     var season = root.pl[sid].folder;
                     if (season == null)
-                        return string.Empty;
+                        return default;
 
                     var vtpl = new VoiceTpl();
                     var etpl = new EpisodeTpl();
 
-                    var hashvoices = new HashSet<string>();
+                    var hashvoices = new HashSet<string>(20);
 
                     string sArhc = s.ToString();
 
@@ -260,10 +249,9 @@ namespace Shared.Engine.Online
                         }
                     }
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
+                    etpl.Append(vtpl);
 
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                 }
                 #endregion
             }

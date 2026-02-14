@@ -1,52 +1,39 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 
 namespace Online.Controllers
 {
     public class CDNvideohub : BaseOnlineController
     {
+        public CDNvideohub() : base(AppInit.conf.CDNvideohub) { }
+
         [HttpGet]
         [Route("lite/cdnvideohub")]
-        async public ValueTask<ActionResult> Index(string title, string original_title, long kinopoisk_id, string t, int s = -1, bool origsource = false, bool rjson = false)
+        async public Task<ActionResult> Index(string title, string original_title, long kinopoisk_id, string t, int s = -1, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.CDNvideohub);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            reset:
-            var cache = await InvokeCache<JObject>($"cdnvideohub:view:{kinopoisk_id}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<JObject>($"cdnvideohub:view:{kinopoisk_id}", 30, async e =>
             {
-                string uri = $"{init.corsHost()}/api/v1/player/sv/playlist?pub=12&aggr=kp&id={kinopoisk_id}";
-
-                var root = rch.enable 
-                    ? await rch.Get<JObject>(uri, httpHeaders(init)) 
-                    : await Http.Get<JObject>(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                var root = await httpHydra.Get<JObject>($"{init.corsHost()}/api/v1/player/sv/playlist?pub=12&aggr=kp&id={kinopoisk_id}");
 
                 if (root == null || !root.ContainsKey("items"))
-                    return res.Fail("root");
+                    return e.Fail("root", refresh_proxy: true);
 
                 var videos = root["items"] as JArray;
                 if (videos == null || videos.Count == 0)
-                    return res.Fail("video");
+                    return e.Fail("video");
 
-                return root;
+                return e.Success(root);
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
 
-            return OnResult(cache, () => 
+            return await ContentTpl(cache, () => 
             {
                 if (cache.Value.Value<bool>("isSerial"))
                 {
@@ -70,7 +57,7 @@ namespace Online.Controllers
                             tpl.Append($"{season} сезон", $"{host}/lite/cdnvideohub?s={season}{defaultargs}", season);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                         #endregion
                     }
                     else
@@ -97,8 +84,7 @@ namespace Online.Controllers
                         }
                         #endregion
 
-                        var etpl = new EpisodeTpl();
-                        string sArhc = s.ToString();
+                        var etpl = new EpisodeTpl(vtpl);
                         var tmpEpisode = new HashSet<int>();
 
                         foreach (var video in cache.Value["items"].OrderBy(i => i.Value<int>("episode")))
@@ -119,13 +105,10 @@ namespace Online.Controllers
 
                             string link = accsArgs($"{host}/lite/cdnvideohub/video.m3u8?vkId={vkId}&title={HttpUtility.UrlEncode(title)}");
 
-                            etpl.Append($"{episode} серия", title ?? original_title, sArhc, episode.ToString(), link, "call", streamlink: $"{link}&play=true", vast: init.vast);
+                            etpl.Append($"{episode} серия", title ?? original_title, s.ToString(), episode.ToString(), link, "call", streamlink: $"{link}&play=true", vast: init.vast);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                     #endregion
                 }
@@ -144,11 +127,10 @@ namespace Online.Controllers
                         mtpl.Append(voice, link, "call", vast: init.vast);
                     }
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                    return mtpl;
                     #endregion
                 }
-
-            }, origsource: origsource, gbcache: !rch.enable);
+            });
         }
 
 
@@ -157,64 +139,50 @@ namespace Online.Controllers
         [Route("lite/cdnvideohub/video.m3u8")]
         async public ValueTask<ActionResult> Video(string vkId, string title, bool play)
         {
-            var init = await loadKit(AppInit.conf.CDNvideohub);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_check: false))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            reset: 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected())
-            {
-                if (init.rhub_fallback && play)
-                    rch.Disabled();
-                else
-                    return ContentTo(rch.connectionMsg);
-            }
-
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var cache = await InvokeCache<string>(rch.ipkey($"cdnvideohub:video:{vkId}", proxyManager), cacheTime(20, init: init), rch.enable ? null : proxyManager, async res =>
+            if (rch != null)
             {
                 if (rch.IsNotConnected())
-                    return res.Fail(rch.connectionMsg);
-
-                string uri = $"{init.corsHost()}/api/v1/player/sv/video/{vkId}";
-
-                string iframe;
-                if (rch.enable)
                 {
-                    iframe = await rch.Get(init.cors(uri), headers: httpHeaders(init));
-                }
-                else
-                {
-                    iframe = await Http.Get(uri, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init), httpversion: 2);
+                    if (init.rhub_fallback && play)
+                        rch.Disabled();
+                    else
+                        return ContentTo(rch.connectionMsg);
                 }
 
-                if (iframe == null)
-                    return res.Fail("iframe");
+                if (!play && rch.IsRequiredConnected())
+                    return ContentTo(rch.connectionMsg);
 
-                string hls = Regex.Match(iframe, "\"hlsUrl\":\"([^\"]+)\"").Groups[1].Value;
+                if (rch.IsNotSupport(out string rch_error))
+                    return ShowError(rch_error);
+            }
+
+            rhubFallback:
+
+            var cache = await InvokeCacheResult<string>(ipkey($"cdnvideohub:video:{vkId}"), 20, async e =>
+            {
+                string hls = null;
+
+                await httpHydra.GetSpan($"{init.corsHost()}/api/v1/player/sv/video/{vkId}", iframe => 
+                {
+                    hls = Rx.Match(iframe, "\"hlsUrl\":\"([^\"]+)\"");
+                });
+
                 if (string.IsNullOrEmpty(hls))
-                    return res.Fail("hls");
+                    return e.Fail("hls", refresh_proxy: true);
 
-                return hls.Replace("u0026", "&").Replace("\\", "");
+                return e.Success(hls.Replace("u0026", "&").Replace("\\", ""));
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
 
             if (!cache.IsSuccess)
-                return OnError(cache.ErrorMsg, gbcache: !rch.enable);
+                return OnError(cache.ErrorMsg);
 
-            string link = HostStreamProxy(init, cache.Value, proxy: proxyManager.Get());
+            string link = HostStreamProxy(cache.Value);
 
             if (play)
                 return RedirectToPlay(link);

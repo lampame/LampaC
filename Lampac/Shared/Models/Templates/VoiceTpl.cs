@@ -1,51 +1,89 @@
-﻿using System.Text;
-using System.Text.Json;
-using System.Web;
+﻿using Shared.Engine.Pools;
+using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Shared.Models.Templates
 {
     public struct VoiceTpl
     {
-        public List<(string name, bool active, string link)> data { get; set; }
+        public List<VoiceDto> data { get; private set; }
 
-        public VoiceTpl() : this(15) { }
+        public VoiceTpl() : this(20) { }
 
-        public VoiceTpl(int capacity) { data = new List<(string, bool, string)>(capacity); }
+        public VoiceTpl(int capacity) 
+        { 
+            data = new List<VoiceDto>(capacity); 
+        }
+
+        public bool IsEmpty => data == null || data.Count == 0;
 
         public void Append(string name, bool active, string link)
         {
             if (!string.IsNullOrEmpty(name))
-                data.Add((name, active, link));
+                data.Add(new VoiceDto(link, active, name));
         }
 
         public string ToHtml()
         {
-            if (data.Count == 0)
+            if (IsEmpty)
                 return string.Empty;
 
-            var html = new StringBuilder();
-            html.Append("<div class=\"videos__line\">");
+            var sb = StringBuilderPool.Rent();
+            WriteTo(sb);
 
-            foreach (var i in data)
-                html.Append("<div class=\"videos__button selector " + (i.active ? "active" : "") + "\" data-json='{\"method\":\"link\",\"url\":\"" + i.link + "\"}'>" + HttpUtility.HtmlEncode(i.name) + "</div>");
-
-            return html.ToString() + "</div>";
+            StringBuilderPool.Return(sb);
+            return sb.ToString();
         }
 
-        public string ToJson() => JsonSerializer.Serialize(ToObject());
-
-        public object ToObject()
+        public void WriteTo(StringBuilder sb)
         {
-            if (data.Count == 0)
-                return new List<string>();
+            if (IsEmpty)
+                return;
 
-            return data.Select(i => new 
+            sb.Append("<div class=\"videos__line\">");
+
+            foreach (var i in data)
             {
-                method = "link",
-                url = i.link,
-                i.active,
-                i.name
-            });
+                sb.Append("<div class=\"videos__button selector ");
+                if (i.active)
+                    sb.Append("active");
+
+                sb.Append("\" data-json='{\"method\":\"link\",\"url\":\"");
+                sb.Append(i.url);
+                sb.Append("\"}'>");
+
+                UtilsTpl.HtmlEncode(i.name, sb);
+
+                sb.Append("</div>");
+            }
+
+            sb.Append("</div>");
+        }
+
+        public IReadOnlyList<VoiceDto> ToObject(bool emptyToNull = false)
+        {
+            if (IsEmpty)
+                return emptyToNull ? null : Array.Empty<VoiceDto>();
+
+            return data;
+        }
+    }
+
+
+    public readonly struct VoiceDto
+    {
+        public string method { get; }
+        public string url { get; }
+        public bool active { get; }
+        public string name { get; }
+
+        [JsonConstructor]
+        public VoiceDto(string url, bool active, string name)
+        {
+            method = "link";
+            this.url = url;
+            this.active = active;
+            this.name = name;
         }
     }
 }

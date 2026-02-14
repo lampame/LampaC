@@ -1,51 +1,46 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 
 namespace Online.Controllers
 {
     public class AnimeGo : BaseOnlineController
     {
+        public AnimeGo() : base(AppInit.conf.AnimeGo) { }
+
         [HttpGet]
         [Route("lite/animego")]
-        async public ValueTask<ActionResult> Index(string title, int year, int pid, int s, string t, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Index(string title, int year, int pid, int s, string t, bool similar = false)
         {
-            var init = await loadKit(AppInit.conf.AnimeGo);
-            if (await IsBadInitialization(init, rch: false))
-                return badInitMsg;
-
             if (string.IsNullOrWhiteSpace(title))
                 return OnError();
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
+            if (await IsRequestBlocked(rch: false))
+                return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
             var headers_stream = httpHeaders(init.host, init.headers_stream);
 
             if (pid == 0)
             {
                 #region Поиск
-                string memkey = $"animego:search:{title}";
-
-                return await InvkSemaphore(init, memkey, async () =>
+                return await InvkSemaphore($"animego:search:{title}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memkey, out List<(string title, string year, string pid, string s, string img)> catalog, inmemory: false))
+                    if (!hybridCache.TryGetValue(key, out List<(string title, string year, string pid, string s, string img)> catalog, inmemory: false))
                     {
-                        string search = await Http.Get($"{init.corsHost()}/search/anime?q={HttpUtility.UrlEncode(title)}", timeoutSeconds: 10, proxy: proxyManager.Get(), headers: httpHeaders(init), httpversion: 2);
+                        string search = await httpHydra.Get($"{init.corsHost()}/search/anime?q={HttpUtility.UrlEncode(title)}");
                         if (search == null)
-                            return OnError(proxyManager);
+                            return OnError(refresh_proxy: true);
 
-                        var rows = search.Split("class=\"p-poster__stack\"");
+                        var rx = Rx.Split("class=\"p-poster__stack\"", search, 1);
 
-                        catalog = new List<(string title, string year, string pid, string s, string img)>(rows.Length);
+                        catalog = new List<(string title, string year, string pid, string s, string img)>(rx.Count);
 
-                        foreach (string row in rows.Skip(1))
+                        foreach (var row in rx.Rows())
                         {
-                            string player_id = Regex.Match(row, "data-ajax-url=\"/[^\"]+-([0-9]+)\"").Groups[1].Value;
-                            string name = Regex.Match(row, "card-title text-truncate\"><a [^>]+>([^<]+)<").Groups[1].Value;
-                            string animeyear = Regex.Match(row, "class=\"anime-year\"><a [^>]+>([0-9]{4})<").Groups[1].Value;
-                            string img = Regex.Match(row, "data-original=\"([^\"]+)\"").Groups[1].Value;
+                            string player_id = row.Match("data-ajax-url=\"/[^\"]+-([0-9]+)\"");
+                            string name = row.Match("card-title text-truncate\"><a [^>]+>([^<]+)<");
+                            string animeyear = row.Match("class=\"anime-year\"><a [^>]+>([0-9]{4})<");
+                            string img = row.Match("data-original=\"([^\"]+)\"");
                             if (string.IsNullOrEmpty(img))
                                 img = null;
 
@@ -55,15 +50,15 @@ namespace Online.Controllers
                                 if (animeyear == year.ToString() && StringConvert.SearchName(name) == StringConvert.SearchName(title))
                                     season = "1";
 
-                                catalog.Add((name, Regex.Match(row, ">([0-9]{4})</a>").Groups[1].Value, player_id, season, img));
+                                catalog.Add((name, row.Match(">([0-9]{4})</a>"), player_id, season, img));
                             }
                         }
 
                         if (catalog.Count == 0)
                             return OnError();
 
-                        proxyManager.Success();
-                        hybridCache.Set(memkey, catalog, cacheTime(40, init: init), inmemory: false);
+                        proxyManager?.Success();
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (!similar && catalog.Count == 1)
@@ -77,21 +72,19 @@ namespace Online.Controllers
                         stpl.Append(res.title, res.year, string.Empty, uri, PosterApi.Size(res.img));
                     }
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return await ContentTpl(stpl);
                 });
                 #endregion
             }
             else 
             {
                 #region Серии
-                string memKey = $"animego:playlist:{pid}";
-
-                return await InvkSemaphore(init, memKey, async () =>
+                return await InvkSemaphore($"animego:playlist:{pid}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memKey, out (string translation, List<(string episode, string uri)> links, List<(string name, string id)> translations) cache))
+                    if (!hybridCache.TryGetValue(key, out (string translation, List<(string episode, string uri)> links, List<(string name, string id)> translations) cache))
                     {
                         #region content
-                        var player = await Http.Get<JObject>($"{init.corsHost()}/anime/{pid}/player?_allow=true", timeoutSeconds: 10, proxy: proxyManager.Get(), httpversion: 2, headers: httpHeaders(init, HeadersModel.Init(
+                        var player = await httpHydra.Get<JObject>($"{init.corsHost()}/anime/{pid}/player?_allow=true", addheaders: HeadersModel.Init(
                             ("cache-control", "no-cache"),
                             ("dnt", "1"),
                             ("pragma", "no-cache"),
@@ -100,11 +93,11 @@ namespace Online.Controllers
                             ("sec-fetch-mode", "cors"),
                             ("sec-fetch-site", "same-origin"),
                             ("x-requested-with", "XMLHttpRequest")
-                        )));
+                        ));
 
                         string content = player?.Value<string>("content");
                         if (string.IsNullOrWhiteSpace(content))
-                            return OnError(proxyManager);
+                            return OnError(refresh_proxy: true);
                         #endregion
 
                         var g = Regex.Match(content, "data-player=\"(https?:)?//(aniboom\\.[^/]+)/embed/([^\"\\?&]+)\\?episode=1\\&amp;translation=([0-9]+)\"").Groups;
@@ -146,8 +139,8 @@ namespace Online.Controllers
                         }
                         #endregion
 
-                        proxyManager.Success();
-                        hybridCache.Set(memKey, cache, cacheTime(30, init: init));
+                        proxyManager?.Success();
+                        hybridCache.Set(key, cache, cacheTime(30));
                     }
 
                     #region Перевод
@@ -162,44 +155,34 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl(cache.links.Count);
-                    string sArhc = s.ToString();
+                    var etpl = new EpisodeTpl(vtpl, cache.links.Count);
 
                     foreach (var l in cache.links)
                     {
                         string hls = accsArgs($"{host}/lite/animego/{l.uri}&t={t ?? cache.translation}");
 
-                        etpl.Append($"{l.episode} серия", title, sArhc, l.episode, hls, "play", headers: headers_stream);
+                        etpl.Append($"{l.episode} серия", title, s.ToString(), l.episode, hls, "play", headers: headers_stream);
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return await ContentTpl(etpl);
                 });
                 #endregion
             }
         }
-
 
         #region Video
         [HttpGet]
         [Route("lite/animego/video.m3u8")]
         async public ValueTask<ActionResult> Video(string host, string token, string t, int e)
         {
-            var init = await loadKit(AppInit.conf.AnimeGo);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false, rch_check: false))
                 return badInitMsg;
 
-            string memKey = $"animego:video:{token}:{t}:{e}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"animego:video:{token}:{t}:{e}", async key =>
             {
-                var proxyManager = new ProxyManager(init);
-
-                if (!hybridCache.TryGetValue(memKey, out string hls))
+                if (!hybridCache.TryGetValue(key, out string hls))
                 {
-                    string embed = await Http.Get($"https://{host}/embed/{token}?episode={e}&translation={t}", timeoutSeconds: 10, proxy: proxyManager.Get(), httpversion: 2, headers: httpHeaders(init, HeadersModel.Init(
+                    string embed = await httpHydra.Get($"https://{host}/embed/{token}?episode={e}&translation={t}", addheaders: HeadersModel.Init(
                         ("cache-control", "no-cache"),
                         ("dnt", "1"),
                         ("pragma", "no-cache"),
@@ -208,24 +191,24 @@ namespace Online.Controllers
                         ("sec-fetch-mode", "cors"),
                         ("sec-fetch-site", "same-origin"),
                         ("x-requested-with", "XMLHttpRequest")
-                    )));
+                    ));
 
                     if (string.IsNullOrWhiteSpace(embed))
-                        return OnError(proxyManager);
+                        return OnError(refresh_proxy: true);
 
                     embed = embed.Replace("&quot;", "\"").Replace("\\", "");
 
                     hls = Regex.Match(embed, "\"hls\":\"\\{\"src\":\"(https?:)?(//[^\"]+\\.m3u8)\"").Groups[2].Value;
                     if (string.IsNullOrWhiteSpace(hls))
-                        return OnError(proxyManager);
+                        return OnError(refresh_proxy: true);
 
                     hls = "https:" + hls;
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, hls, cacheTime(30, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, hls, cacheTime(30));
                 }
 
-                return Redirect(HostStreamProxy(init, hls, proxy: proxyManager.Get()));
+                return Redirect(HostStreamProxy(hls));
             });
         }
         #endregion

@@ -1,16 +1,17 @@
-﻿using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.Caching.Memory;
-using System;
-using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
 using Shared;
-using System.Threading;
-using IO = System.IO.File;
-using System.IO;
 using Shared.Engine;
-using Shared.Models.Merchant.LtcWallet;
 using Shared.Models;
+using Shared.Models.Merchant.LtcWallet;
+using System;
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using IO = System.IO.File;
 
 namespace Merchant.Controllers
 {
@@ -44,6 +45,7 @@ namespace Merchant.Controllers
         #endregion
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("litecoin/getnewaddress")]
         async public Task<ActionResult> Index(string email)
         {

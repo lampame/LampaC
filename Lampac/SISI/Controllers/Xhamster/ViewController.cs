@@ -4,55 +4,44 @@ namespace SISI.Controllers.Xhamster
 {
     public class ViewController : BaseSisiController
     {
+        public ViewController() : base(AppInit.conf.Xhamster) { }
+
         [HttpGet]
         [Route("xmr/vidosik")]
-        async public ValueTask<ActionResult> Index(string uri, bool related)
+        async public Task<ActionResult> Index(string uri, bool related)
         {
-            var init = await loadKit(AppInit.conf.Xhamster);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"xhamster:view:{uri}";
-
-            return await InvkSemaphore(memKey, async () =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<StreamItem>($"xhamster:view:{uri}", 20, async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out StreamItem stream_links))
+                string targetHost = init.corsHost();
+                string url = XhamsterTo.StreamLinksUri(targetHost, uri);
+
+                if (url == null)
+                    return e.Fail("uri");
+
+                StreamItem stream_links = null;
+
+                await httpHydra.GetSpan(url, span =>
                 {
-                    reset:
-                    stream_links = await XhamsterTo.StreamLinks("xmr/vidosik", init.corsHost(), uri, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), httpversion: 2, timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
-                    );
+                    stream_links = XhamsterTo.StreamLinks(targetHost, "xmr/vidosik", span);
+                });
 
-                    if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)
-                    {
-                        if (IsRhubFallback(init))
-                            goto reset;
+                if (stream_links?.qualitys == null || stream_links.qualitys.Count == 0)
+                    return e.Fail("stream_links", refresh_proxy: true);
 
-                        return OnError("stream_links", proxyManager);
-                    }
-
-                    if (!rch.enable)
-                        proxyManager.Success();
-
-                    hybridCache.Set(memKey, stream_links, cacheTime(20));
-                }
-
-                if (related)
-                    return OnResult(stream_links?.recomends, null, plugin: init.plugin, total_pages: 1);
-
-                return OnResult(stream_links, init, proxy);
+                return e.Success(stream_links);
             });
+
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
+
+            if (related)
+                return await PlaylistResult(cache.Value?.recomends, cache.ISingleCache, null, total_pages: 1);
+
+            return OnResult(cache);
         }
     }
 }

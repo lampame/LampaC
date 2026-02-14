@@ -14,19 +14,17 @@ namespace Shared.Engine.Online
         string host;
         bool usehls;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
 
-        public VDBmoviesInvoke(string host, bool hls, Func<string, string> onstreamfile, Func<string, string> onlog = null)
+        public VDBmoviesInvoke(string host, bool hls, Func<string, string> onstreamfile)
         {
             this.host = host != null ? $"{host}/" : null;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             usehls = hls;
         }
         #endregion
 
         #region EvalCode
-        public string EvalCode(in string file)
+        public string EvalCode(string file)
         {
             return @"(function () {
                     var enc = function enc(str) {
@@ -60,49 +58,52 @@ namespace Shared.Engine.Online
         #endregion
 
         #region DecodeEval
-        public string DecodeEval(in string file)
+        static readonly List<string> trashList = new List<string>
         {
-            Func<string, string> enc = str =>
+            "wNp2wBTNcPRQvTC0_CpxCsq_8T1u9Q",
+            "md-Od2G9RWOgSa5HoBSSbWrCyIqQyY",
+            "kzuOYQqB_QSOL-xzN_Kz3kkgkHhHit",
+            "6-xQWMh7ertLp8t_M9huUDk1M0VrYJ",
+            "RyTwtf15_GLEsXxnpU4Ljjd0ReY-VH"
+        };
+
+        static List<string> trashListBase64;
+
+        public string DecodeEval(string file)
+        {
+            if (trashListBase64 == null)
             {
-                var bytes = Encoding.UTF8.GetBytes(str);
-                return Convert.ToBase64String(bytes);
-            };
+                Func<string, string> enc = str =>
+                {
+                    var bytes = Encoding.UTF8.GetBytes(str);
+                    return Convert.ToBase64String(bytes);
+                };
 
-            Func<string, string> dec = str =>
+                trashListBase64 = new List<string>(5);
+
+                foreach (string trash in trashList)
+                    trashListBase64.Add("//" + enc(trash));
+            }
+
+            foreach (string trash in trashListBase64)
             {
-                var bytes = Convert.FromBase64String(str);
-                return Encoding.UTF8.GetString(bytes);
-            };
-
-            List<string> trashList = new List<string>
-            {
-                "wNp2wBTNcPRQvTC0_CpxCsq_8T1u9Q",
-                "md-Od2G9RWOgSa5HoBSSbWrCyIqQyY",
-                "kzuOYQqB_QSOL-xzN_Kz3kkgkHhHit",
-                "6-xQWMh7ertLp8t_M9huUDk1M0VrYJ",
-                "RyTwtf15_GLEsXxnpU4Ljjd0ReY-VH"
-            };
-
-            string x = file.Substring(2);
-
-            foreach (var trash in trashList)
-                x = x.Replace("//" + enc(trash), "");
+                if (file.Contains(trash))
+                    file = file.Replace(trash, "");
+            }
 
             try
             {
-                x = dec(x);
+                var bytes = Convert.FromBase64String(file);
+                return Encoding.UTF8.GetString(bytes);
             }
-            catch
-            {
-                x = string.Empty;
-            }
+            catch { }
 
-            return x;
+            return file;
         }
         #endregion
 
         #region Embed
-        public EmbedModel Embed(in string json, string forbidden_quality, string default_quality)
+        public EmbedModel Embed(string json, string forbidden_quality, string default_quality)
         {
             if (string.IsNullOrEmpty(json))
                 return null;
@@ -135,11 +136,11 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel root, string orid, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int s, int sid, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel root, string orid, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int s, int sid, VastConf vast = null, bool rjson = false)
         {
             if (root == null)
-                return string.Empty;
+                return default;
 
             if (root.movies != null)
             {
@@ -170,7 +171,7 @@ namespace Shared.Engine.Online
                     mtpl.Append(m.title, streamquality.Firts().link, subtitles: subtitles, streamquality: streamquality, vast: vast);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -193,7 +194,7 @@ namespace Shared.Engine.Online
                         tpl.Append($"{season} сезон", host + $"lite/vdbmovies?orid={orid}&imdb_id={imdb_id}&kinopoisk_id={kinopoisk_id}&rjson={rjson}&title={enc_title}&original_title={enc_original_title}&s={season}&sid={i}", season);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                     #endregion
                 }
                 else
@@ -202,7 +203,7 @@ namespace Shared.Engine.Online
                     var vtpl = new VoiceTpl();
                     var etpl = new EpisodeTpl();
 
-                    var hashvoices = new HashSet<string>();
+                    var hashvoices = new HashSet<string>(20);
 
                     string sArhc = s.ToString();
 
@@ -216,11 +217,8 @@ namespace Shared.Engine.Online
                             if (string.IsNullOrEmpty(t))
                                 t = perevod;
 
-                            if (!hashvoices.Contains(perevod))
-                            {
-                                hashvoices.Add(perevod);
+                            if (hashvoices.Add(perevod))
                                 vtpl.Append(perevod, t == perevod, host + $"lite/vdbmovies?orid={orid}&imdb_id={imdb_id}&kinopoisk_id={kinopoisk_id}&rjson={rjson}&title={enc_title}&original_title={enc_original_title}&s={s}&sid={sid}&t={HttpUtility.UrlEncode(perevod)}");
-                            }
 
                             if (perevod != t)
                                 continue;
@@ -231,10 +229,9 @@ namespace Shared.Engine.Online
                         }
                     }
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
+                    etpl.Append(vtpl);
 
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                     #endregion
                 }
                 #endregion

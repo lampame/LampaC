@@ -222,14 +222,14 @@ namespace Shared.PlaywrightCore
         #endregion
 
         #region WebLog
-        public static void WebLog(IRequest request, IResponse response, in string result, (string ip, string username, string password) proxy = default)
+        public static void WebLog(IRequest request, IResponse response, string result, (string ip, string username, string password) proxy = default)
         {
             try
             {
-                if (request.Url.Contains("127.0.0.1") || !AppInit.conf.weblog.enable)
+                if (request.Url.Contains("127.0.0.1") || !Http.IsLogged)
                     return;
 
-                var log = new StringBuilder();
+                var log = new StringBuilder(3000);
 
                 log.Append($"{DateTime.Now}\n");
 
@@ -257,11 +257,11 @@ namespace Shared.PlaywrightCore
             catch { }
         }
 
-        public static void WebLog(string method, string url, in string result, (string ip, string username, string password) proxy = default, IRequest request = default, IResponse response = default)
+        public static void WebLog(string method, string url, string result, (string ip, string username, string password) proxy = default, IRequest request = default, IResponse response = default)
         {
             try
             {
-                if (url.Contains("127.0.0.1") || !AppInit.conf.weblog.enable)
+                if (url.Contains("127.0.0.1") || !Http.IsLogged)
                     return;
 
                 var log = new StringBuilder();
@@ -446,17 +446,22 @@ namespace Shared.PlaywrightCore
         #endregion
 
         #region ConsoleLog
-        public static void ConsoleLog(in string value, List<HeadersModel> headers = null)
+        public static void ConsoleLog(Func<string> func)
+            => ConsoleLog(() => (func.Invoke(), null));
+
+        public static void ConsoleLog(Func<(string value, List<HeadersModel> headers)> func)
         {
             if (AppInit.conf.chromium.consoleLog || AppInit.conf.firefox.consoleLog)
             {
-                if (headers != null)
+                var r = func.Invoke();
+
+                if (r.headers != null)
                 {
-                    Console.WriteLine($"\n{value}\n{Newtonsoft.Json.JsonConvert.SerializeObject(headers.ToDictionary(), Newtonsoft.Json.Formatting.Indented)}\n");
+                    Console.WriteLine($"\n{r.value}\n{Newtonsoft.Json.JsonConvert.SerializeObject(r.headers.ToDictionary(), Newtonsoft.Json.Formatting.Indented)}\n");
                 }
                 else
                 {
-                    Console.WriteLine(value);
+                    Console.WriteLine(r.value);
                 }
             }
         }

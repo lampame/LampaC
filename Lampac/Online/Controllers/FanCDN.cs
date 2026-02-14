@@ -1,46 +1,37 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Playwright;
 using Shared.PlaywrightCore;
-using System.Net;
 using BrowserCookie = Microsoft.Playwright.Cookie;
 using Microsoft.AspNetCore.Routing;
-using Shared.Models.Online.Settings;
 using Shared.Models.Online.FanCDN;
 
 namespace Online.Controllers
 {
     public class FanCDN : BaseOnlineController
     {
+        public FanCDN() : base(AppInit.conf.FanCDN) { }
+
         [HttpGet]
         [Route("lite/fancdn")]
-        async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int serial, int t = -1, int s = -1, bool origsource = false, bool rjson = false)
+        async public Task<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int serial, int t = -1, int s = -1, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.FanCDN);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            if (string.IsNullOrEmpty(init.token) && string.IsNullOrEmpty(init.cookie))
+            if (kinopoisk_id == 0 || serial == 1)
                 return OnError();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
 
             var oninvk = new FanCDNInvoke
             (
                host,
                init.host,
+               httpHydra,
                async ongettourl => 
                {
+                   return await httpHydra.Get(ongettourl);
+
                    if (ongettourl.Contains("fancdn."))
-                       return await black_magic(init, rch, init.cors(ongettourl), proxy);
+                       return await black_magic(init.cors(ongettourl));
 
                    if (string.IsNullOrEmpty(init.cookie))
                        return null;
@@ -52,18 +43,15 @@ namespace Online.Controllers
                        ("cookie", init.cookie)
                    ));
 
-                   if (rch.enable)
-                       return await rch.Get(init.cors(ongettourl), headers);
-
-                   if (init.priorityBrowser == "http")
-                       return await Http.Get(init.cors(ongettourl), httpversion: 2, timeoutSeconds: 8, proxy: proxy.proxy, headers: headers);
+                   if (rch?.enable == true || init.priorityBrowser == "http")
+                       return await httpHydra.Get(ongettourl, newheaders: headers, safety: true);
 
                    #region Browser Search
                    try
                    {
                        using (var browser = new PlaywrightBrowser())
                        {
-                           var page = await browser.NewPageAsync(init.plugin, proxy: proxy.data);
+                           var page = await browser.NewPageAsync(init.plugin, proxy: proxy_data);
                            if (page == null)
                                return null;
 
@@ -100,7 +88,7 @@ namespace Online.Controllers
                                return null;
 
                            string result = await response.TextAsync();
-                           PlaywrightBase.WebLog("GET", ongettourl, result, proxy.data, response: response);
+                           PlaywrightBase.WebLog("GET", ongettourl, result, proxy_data, response: response);
                            return result;
                        }
                    }
@@ -110,28 +98,35 @@ namespace Online.Controllers
                    }
                    #endregion
                },
-               streamfile => HostStreamProxy(init, streamfile, proxy: proxy.proxy)
+               streamfile => HostStreamProxy(streamfile)
             );
 
-            reset:
-            var cache = await InvokeCache<EmbedModel>(rch.ipkey($"fancdn:{title}", proxyManager), cacheTime(20, init: init), proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<EmbedModel>(ipkey($"fancdn:{title}"), 20, async e =>
             {
-                var result = !string.IsNullOrEmpty(init.token) && kinopoisk_id > 0 ? await oninvk.EmbedToken(kinopoisk_id, init.token) : await oninvk.EmbedSearch(title, original_title, year, serial);
-                if (result == null)
-                    return res.Fail("result");
+                //var result = !string.IsNullOrEmpty(init.token) && kinopoisk_id > 0 
+                //    ? await oninvk.EmbedToken(kinopoisk_id, init.token) 
+                //    : await oninvk.EmbedSearch(title, original_title, year, serial);
 
-                return result;
+                var result = await oninvk.EmbedFilms(init.corsHost(), kinopoisk_id);
+
+                if (result == null)
+                    return e.Fail("result");
+
+                return e.Success(result);
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache, safety: true))
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init)), origsource: origsource);
+            return await ContentTpl(cache, 
+                () => oninvk.Tpl(cache.Value, imdb_id, kinopoisk_id, title, original_title, t, s, rjson: rjson, vast: init.vast, headers: httpHeaders(init))
+            );
         }
 
 
         #region black_magic
-        async Task<string> black_magic(OnlinesSettings init, RchClient rch, string uri, (WebProxy proxy, (string ip, string username, string password) data) baseproxy)
+        async Task<string> black_magic(string uri)
         {
             try
             {
@@ -142,15 +137,12 @@ namespace Online.Controllers
                     ("referer", $"{init.host}/")
                 ));
 
-                if (rch.enable)
-                    return await rch.Get(uri, headers);
-
-                if (init.priorityBrowser == "http")
-                    return await Http.Get(uri, httpversion: 2, timeoutSeconds: 8, proxy: baseproxy.proxy, headers: headers);
+                if (rch?.enable == true || init.priorityBrowser == "http")
+                    return await httpHydra.Get(uri, newheaders: headers, safety: true);
 
                 using (var browser = new PlaywrightBrowser())
                 {
-                    var page = await browser.NewPageAsync(init.plugin, init.headers, proxy: baseproxy.data, imitationHuman: init.imitationHuman);
+                    var page = await browser.NewPageAsync(init.plugin, init.headers, proxy: proxy_data, imitationHuman: init.imitationHuman);
                     if (page == null)
                         return null;
 
@@ -177,13 +169,13 @@ namespace Online.Controllers
                                     html = await response.TextAsync();
 
                                 browser.SetPageResult(html);
-                                PlaywrightBase.WebLog(route.Request, response, html, baseproxy.data);
+                                PlaywrightBase.WebLog(route.Request, response, html, proxy_data);
                             }
                             else
                             {
                                 if (!init.imitationHuman || route.Request.Url.EndsWith(".m3u8"))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                 }
                                 else

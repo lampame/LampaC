@@ -1,5 +1,4 @@
-﻿using Org.BouncyCastle.Utilities.IO;
-using Shared.Models.Online.Settings;
+﻿using Shared.Models.Online.Settings;
 using Shared.Models.Online.VideoCDN;
 using Shared.Models.Templates;
 using System.Text;
@@ -17,9 +16,8 @@ namespace Shared.Engine.Online
         string apihost;
         string token;
         bool usehls;
-        Func<string, string, ValueTask<string>> onget;
+        Func<string, string, Task<string>> onget;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
         public string onstream(string stream)
@@ -30,7 +28,7 @@ namespace Shared.Engine.Online
             return onstreamfile.Invoke(stream);
         }
 
-        public VideoCDNInvoke(OnlinesSettings init, Func<string, string, ValueTask<string>> onget, Func<string, string> onstreamfile, string host = null, Func<string, string> onlog = null, Action requesterror = null)
+        public VideoCDNInvoke(OnlinesSettings init, Func<string, string, Task<string>> onget, Func<string, string> onstreamfile, string host = null, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.scheme = init.scheme;
@@ -39,14 +37,13 @@ namespace Shared.Engine.Online
             this.token = init!.token;
             this.onget = onget;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             usehls = init.hls;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Search
-        public async ValueTask<SimilarTpl?> Search(string title, string original_title, int serial)
+        public async Task<SimilarTpl> Search(string title, string original_title, int serial)
         {
             if (string.IsNullOrWhiteSpace(title ?? original_title))
                 return null;
@@ -95,7 +92,7 @@ namespace Shared.Engine.Online
                 string year = item.add?.Split("-")?[0] ?? string.Empty;
                 string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.orig_title) ? $"{item.title} / {item.orig_title}" : (item.title ?? item.orig_title);
 
-                string details = $"imdb: {item.imdb_id} {stpl.OnlineSplit} kinopoisk: {item.kp_id}";
+                string details = $"imdb: {item.imdb_id} {SimilarTpl.OnlineSplit} kinopoisk: {item.kp_id}";
 
                 stpl.Append(name, year, details, host + $"lite/vcdn?title={enc_title}&original_title={enc_original_title}&kinopoisk_id={item.kp_id}&imdb_id={item.imdb_id}");
             }
@@ -105,7 +102,7 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(long kinopoisk_id, string imdb_id)
+        public async Task<EmbedModel> Embed(long kinopoisk_id, string imdb_id)
         {
             string args = kinopoisk_id > 0 ? $"kp_id={kinopoisk_id}&imdb_id={imdb_id}" : $"imdb_id={imdb_id}";
             string content = await onget.Invoke($"{iframeapihost}?{args}", "https://kinogo.ec/113447-venom-3-poslednij-tanec.html");
@@ -149,7 +146,7 @@ namespace Shared.Engine.Online
                         passArr[i] = (byte)pass[i];
                     }
 
-                    StringBuilder res = new StringBuilder();
+                    StringBuilder res = new StringBuilder(PoolInvk.rentChunk);
 
                     for (int i = 0; i < srcLen; i += 2)
                     {
@@ -236,17 +233,17 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int s, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int s, bool rjson = false)
         {
             if (result == null)
-                return string.Empty;
+                return default;
 
             if (result.type is "movie" or "anime")
             {
                 #region Фильм
                 if (result.movie == null || result.movie.Count == 0)
-                    return string.Empty;
+                    return default;
 
                 var mtpl = new MovieTpl(title, original_title, result.movie.Count);
 
@@ -280,7 +277,7 @@ namespace Shared.Engine.Online
                     mtpl.Append(name, streamquality.Firts().link, streamquality: streamquality);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -292,11 +289,11 @@ namespace Shared.Engine.Online
                 try
                 {
                     if (result.serial == null || result.serial.Count == 0)
-                        return string.Empty;
+                        return default;
 
                     if (s == -1)
                     {
-                        var seasons = new HashSet<int>();
+                        var seasons = new HashSet<int>(10);
 
                         foreach (var voice in result.serial)
                         {
@@ -312,7 +309,7 @@ namespace Shared.Engine.Online
                             tpl.Append($"{id} сезон", link, id);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -339,10 +336,9 @@ namespace Shared.Engine.Online
 
                         var season = result.serial[t].First(i => i.id == s);
                         if (season.folder == null)
-                            return string.Empty;
+                            return default;
 
-                        string sArhc = s.ToString();
-                        var etpl = new EpisodeTpl(season.folder.Length);
+                        var etpl = new EpisodeTpl(vtpl, season.folder.Length);
 
                         foreach (var episode in season.folder)
                         {
@@ -364,18 +360,15 @@ namespace Shared.Engine.Online
 
                             string e = episode.id.Split("_")[1];
 
-                            etpl.Append($"{e} серия", title ?? original_title, sArhc, e, streamquality.Firts().link, streamquality: streamquality);
+                            etpl.Append($"{e} серия", title ?? original_title, s.ToString(), e, streamquality.Firts().link, streamquality: streamquality);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

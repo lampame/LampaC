@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Shared.Models;
 using Shared.Models.Events;
 using Shared.Models.JacRed;
+using Shared.Models.Templates;
 
 namespace Shared
 {
@@ -17,6 +18,8 @@ namespace Shared
 
         public static Func<EventProxyImgMd5key, string> ProxyImgMd5key;
 
+        public static Func<EventStaticache, bool> Staticache;
+
         public static Func<EventBadInitialization, Task<ActionResult>> BadInitialization;
 
         public static Func<EventHostStreamProxy, string> HostStreamProxy;
@@ -25,7 +28,7 @@ namespace Shared
 
         public static Func<EventMyLocalIp, Task<string>> MyLocalIp;
 
-        public static Func<EventControllerHttpHeaders, List<HeadersModel>> HttpHeaders;
+        public static Func<EventControllerHttpHeaders, Dictionary<string, string>> HttpHeaders;
 
         public static Func<bool, EventMiddleware, Task<bool>> Middleware;
 
@@ -51,7 +54,7 @@ namespace Shared
 
         public static Func<EventStreamQuality, (bool? next, string link)> StreamQuality;
 
-        public static Func<EventStreamQualityFirts, (string link, string quality)?> StreamQualityFirts;
+        public static Func<EventStreamQualityFirts, StreamQualityDto?> StreamQualityFirts;
 
         public static Func<string, EventHybridCache, (DateTimeOffset ex, string value)> HybridCache;
 

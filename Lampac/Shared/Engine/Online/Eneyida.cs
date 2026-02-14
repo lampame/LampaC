@@ -1,4 +1,5 @@
-﻿using Shared.Models.Base;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.Base;
 using Shared.Models.Online.Eneyida;
 using Shared.Models.Templates;
 using System.Text.Json;
@@ -12,18 +13,16 @@ namespace Shared.Engine.Online
         #region EneyidaInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
-        Func<string, string, ValueTask<string>> onpost;
+        HttpHydra httpHydra;
         Func<string, string> onstreamfile;
         Func<string, string> onlog;
         Action requesterror;
 
-        public EneyidaInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public EneyidaInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
-            this.onget = onget;
-            this.onpost = onpost;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
             this.onlog = onlog;
             this.requesterror = requesterror;
@@ -31,7 +30,7 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(string original_title, int year, string href, bool similar)
+        public async Task<EmbedModel> Embed(string original_title, int year, string href, bool similar)
         {
             if (string.IsNullOrWhiteSpace(href) && (string.IsNullOrWhiteSpace(original_title) || year == 0))
                 return null;
@@ -42,54 +41,55 @@ namespace Shared.Engine.Online
             if (string.IsNullOrEmpty(link))
             {
                 onlog?.Invoke("search start");
-                string search = await onpost.Invoke($"{apihost}/index.php?do=search", $"do=search&subaction=search&search_start=0&result_from=1&story={HttpUtility.UrlEncode(original_title)}");
-                if (search == null)
+
+                bool searchEmpty = false;
+                string _site = apihost;
+
+                await httpHydra.PostSpan($"{_site}/index.php?do=search", $"do=search&subaction=search&search_start=0&result_from=1&story={HttpUtility.UrlEncode(original_title)}", search => 
                 {
-                    requesterror?.Invoke();
-                    return null;
-                }
+                    searchEmpty = search.Contains(">Пошук по сайту<", StringComparison.OrdinalIgnoreCase);
 
-                onlog?.Invoke("search ok");
+                    var rx = Rx.Split("<article ", search, 1);
 
-                var rows = search.Split("<article ");
-                string stitle = StringConvert.SearchName(original_title?.ToLower());
+                    string stitle = StringConvert.SearchName(original_title?.ToLower());
 
-                foreach (string row in rows.Skip(1))
-                {
-                    if (row.Contains(">Анонс</div>") || row.Contains(">Трейлер</div>"))
-                        continue;
-
-                    string newslink = Regex.Match(row, "href=\"(https?://[^/]+/[^\"]+\\.html)\"").Groups[1].Value;
-                    if (string.IsNullOrEmpty(newslink))
-                        continue;
-
-                    // <div class="short_subtitle"><a href="https://eneyida.tv/xfsearch/year/2025/">2025</a> &bull; Thunderbolts</div>
-                    var g = Regex.Match(row, "class=\"short_subtitle\">(<a [^>]+>([0-9]{4})</a>)?([^<]+)</div>").Groups;
-
-                    string name = g[3].Value.Replace("&bull;", "").Trim();
-                    if (string.IsNullOrEmpty(name))
-                        continue;
-
-                    if (result.similars == null)
-                        result.similars = new List<Similar>(rows.Length);
-
-                    string uaname = Regex.Match(row, "id=\"short_title\"[^>]+>([^<]+)<").Groups[1].Value;
-                    string img = Regex.Match(row, "data-src=\"/([^\"]+)\"").Groups[1].Value;
-
-                    result.similars.Add(new Similar()
+                    foreach (var row in rx.Rows())
                     {
-                        title = $"{uaname} / {name}",
-                        year = g[2].Value,
-                        href = newslink,
-                        img = string.IsNullOrEmpty(img) ? null : $"{apihost}/{img}"
-                    });
+                        if (row.Contains(">Анонс</div>") || row.Contains(">Трейлер</div>"))
+                            continue;
 
-                    if (StringConvert.SearchName(name) == stitle && g[2].Value == year.ToString())
-                    {
-                        link = newslink;
-                        break;
+                        string newslink = row.Match("href=\"(https?://[^/]+/[^\"]+\\.html)\"");
+                        if (newslink == null)
+                            continue;
+
+                        // <div class="short_subtitle"><a href="https://eneyida.tv/xfsearch/year/2025/">2025</a> &bull; Thunderbolts</div>
+                        var g = row.Groups("class=\"short_subtitle\">(<a [^>]+>([0-9]{4})</a>)?([^<]+)</div>");
+
+                        string name = g[3].Value.Replace("&bull;", "").Trim();
+                        if (string.IsNullOrEmpty(name))
+                            continue;
+
+                        if (result.similars == null)
+                            result.similars = new List<Similar>(rx.Count);
+
+                        string uaname = row.Match("id=\"short_title\"[^>]+>([^<]+)<");
+                        string img = row.Match("data-src=\"/([^\"]+)\"");
+
+                        result.similars.Add(new Similar()
+                        {
+                            title = $"{uaname} / {name}",
+                            year = g[2].Value,
+                            href = newslink,
+                            img = string.IsNullOrEmpty(img) ? null : $"{_site}/{img}"
+                        });
+
+                        if (StringConvert.SearchName(name) == stitle && g[2].Value == year.ToString())
+                        {
+                            link = newslink;
+                            break;
+                        }
                     }
-                }
+                });
 
                 if (similar)
                     return result;
@@ -99,64 +99,70 @@ namespace Shared.Engine.Online
                     if (result.similars.Count > 0)
                         return result;
 
-                    if (search.Contains(">Пошук по сайту<"))
+                    if (searchEmpty)
                         return new EmbedModel() { IsEmpty = true };
 
+                    requesterror?.Invoke();
                     return null;
                 }
             }
 
             onlog?.Invoke("link: " + link);
-            string news = await onget.Invoke(link);
-            if (news == null)
+
+            string iframeUri = null;
+
+            await httpHydra.GetSpan(link, news => 
+            {
+                if (news.Contains("full_content fx_row", StringComparison.Ordinal))
+                    result.quel = Rx.Match(news, " (1080p|720p|480p)</div>");
+
+                iframeUri = Rx.Match(news, "<iframe width=\"100%\" height=\"400\" src=\"(https?://[^/]+/[^\"]+/[0-9]+)\"");
+            });
+
+            if (iframeUri == null)
             {
                 requesterror?.Invoke();
                 return null;
             }
-
-            if (news.Contains("full_content fx_row"))
-                result.quel = Regex.Match(news.Split("full_content fx_row")[1].Split("full__favourite")[0], " (1080p|720p|480p)</div>").Groups[1].Value;
-
-            string iframeUri = Regex.Match(news, "<iframe width=\"100%\" height=\"400\" src=\"(https?://[^/]+/[^\"]+/[0-9]+)\"").Groups[1].Value;
-            if (string.IsNullOrEmpty(iframeUri))
-                return null;
 
             onlog?.Invoke("iframeUri: " + iframeUri);
-            string content = await onget.Invoke(iframeUri);
-            if (content == null || !content.Contains("file:"))
+
+            await httpHydra.GetSpan(iframeUri, content => 
+            {
+                if (!content.Contains("file:", StringComparison.Ordinal))
+                    return;
+
+                if (Regex.IsMatch(content, "file: ?'\\["))
+                {
+                    try
+                    {
+                        var root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(Rx.Match(content, "file: ?'([^\n\r]+)',"));
+                        if (root != null && root.Length > 0)
+                            result.serial = root;
+                    }
+                    catch { }
+                }
+                else
+                {
+                    result.content = content.ToString();
+                }
+            });
+
+            if (result.serial == null && string.IsNullOrEmpty(result.content))
             {
                 requesterror?.Invoke();
                 return null;
-            }
-
-            if (Regex.IsMatch(content, "file: ?'\\["))
-            {
-                Models.Online.Tortuga.Voice[] root = null;
-
-                try
-                {
-                    root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(Regex.Match(content, "file: ?'([^\n\r]+)',").Groups[1].Value);
-                    if (root == null || root.Length == 0)
-                        return null;
-                }
-                catch { return null; }
-
-                result.serial = root;
-            }
-            else
-            {
-                result.content = content;
             }
 
             return result;
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, int clarification, string title, string original_title, int year, int t, int s, string href, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, int clarification, string title, string original_title, int year, int t, int s, string href, VastConf vast = null, bool rjson = false)
         {
             if (result == null || result.IsEmpty)
-                return string.Empty;
+                return default;
 
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -175,10 +181,10 @@ namespace Shared.Engine.Online
                         stpl.Append(similar.title, similar.year, string.Empty, link, PosterApi.Size(similar.img));
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
+                    return stpl;
                 }
 
-                return string.Empty;
+                return default;
             }
             #endregion
 
@@ -189,7 +195,7 @@ namespace Shared.Engine.Online
 
                 string hls = Regex.Match(result.content, "file: ?\"(https?://[^\"]+/index.m3u8)\"").Groups[1].Value;
                 if (string.IsNullOrWhiteSpace(hls))
-                    return string.Empty;
+                    return default;
 
                 #region subtitle
                 SubtitleTpl subtitles = new SubtitleTpl();
@@ -208,7 +214,7 @@ namespace Shared.Engine.Online
 
                 mtpl.Append(string.IsNullOrEmpty(result.quel) ? "По умолчанию" : result.quel, onstreamfile.Invoke(hls), subtitles: subtitles, vast: vast);
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -223,74 +229,148 @@ namespace Shared.Engine.Online
                         #region Сезоны
                         var tpl = new SeasonTpl();
 
-                        foreach (var season in result.serial)
+                        if (result.serial[0].folder != null)
                         {
-                            string numberseason = Regex.Match(season.title, "^([0-9]+)").Groups[1].Value;
-                            if (string.IsNullOrEmpty(numberseason))
-                                continue;
+                            var tmp = new HashSet<string>();
 
-                            string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={numberseason}";
+                            foreach (var voice in result.serial)
+                            {
+                                foreach (var season in voice.folder)
+                                {
+                                    string numberseason = Regex.Match(season.title, "^([0-9]+)").Groups[1].Value;
+                                    if (string.IsNullOrEmpty(numberseason))
+                                        continue;
 
-                            tpl.Append(season.title, link, numberseason);
+                                    if (!tmp.Add(numberseason))
+                                        continue;
+
+                                    string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={numberseason}";
+
+                                    tpl.Append(season.title, link, numberseason);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            foreach (var season in result.serial)
+                            {
+                                string numberseason = Regex.Match(season.title, "^([0-9]+)").Groups[1].Value;
+                                if (string.IsNullOrEmpty(numberseason))
+                                    continue;
+
+                                string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={numberseason}";
+
+                                tpl.Append(season.title, link, numberseason);
+                            }
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                         #endregion
                     }
                     else
                     {
-                        var season = result.serial.First(i => i.title.StartsWith($"{s} "));
-
-                        #region Перевод
-                        var vtpl = new VoiceTpl();
-
-                        for (int i = 0; i < season.folder.Length; i++)
+                        if (result.serial[0].folder != null)
                         {
-                            if (t == -1)
-                                t = i;
+                            #region Перевод
+                            var vtpl = new VoiceTpl();
 
-                            string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={s}&t={i}";
-
-                            vtpl.Append(season.folder[i].title, t == i, link);
-                        }
-                        #endregion
-
-                        string sArch = s.ToString();
-                        var episodes = season.folder[t].folder;
-
-                        var etpl = new EpisodeTpl(episodes.Length);
-
-                        foreach (var episode in episodes)
-                        {
-                            #region subtitle
-                            SubtitleTpl? subtitles = null;
-
-                            if (!string.IsNullOrEmpty(episode.subtitle))
+                            for (int i = 0; i < result.serial.Length; i++)
                             {
-                                var match = new Regex("\\[([^\\]]+)\\](https?://[^\\,]+)").Match(episode.subtitle);
-                                subtitles = new SubtitleTpl(match.Length);
+                                if (result.serial[i].folder.FirstOrDefault(i => i.title.StartsWith($"{s} ")).folder == null)
+                                    continue;
 
-                                while (match.Success)
-                                {
-                                    subtitles.Value.Append(match.Groups[1].Value, onstreamfile.Invoke(match.Groups[2].Value));
-                                    match = match.NextMatch();
-                                }
+                                if (t == -1)
+                                    t = i;
+
+                                string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={s}&t={i}";
+
+                                vtpl.Append(result.serial[i].title, t == i, link);
                             }
                             #endregion
 
-                            string file = onstreamfile.Invoke(episode.file);
-                            etpl.Append(episode.title, title ?? original_title, sArch, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, file, subtitles: subtitles, vast: vast);
+                            string sArch = s.ToString();
+
+                            var season = result.serial[t].folder.First(i => i.title.StartsWith($"{s} "));
+                            var episodes = season.folder;
+
+                            var etpl = new EpisodeTpl(vtpl, episodes.Length);
+
+                            foreach (var episode in episodes)
+                            {
+                                #region subtitle
+                                SubtitleTpl? subtitles = null;
+
+                                if (!string.IsNullOrEmpty(episode.subtitle))
+                                {
+                                    var match = new Regex("\\[([^\\]]+)\\](https?://[^\\,]+)").Match(episode.subtitle);
+                                    subtitles = new SubtitleTpl(match.Length);
+
+                                    while (match.Success)
+                                    {
+                                        subtitles.Value.Append(match.Groups[1].Value, onstreamfile.Invoke(match.Groups[2].Value));
+                                        match = match.NextMatch();
+                                    }
+                                }
+                                #endregion
+
+                                string file = onstreamfile.Invoke(episode.file);
+                                etpl.Append(episode.title, title ?? original_title, sArch, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, file, subtitles: subtitles, vast: vast);
+                            }
+
+                            return etpl;
                         }
+                        else
+                        {
+                            var season = result.serial.First(i => i.title.StartsWith($"{s} "));
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
+                            #region Перевод
+                            var vtpl = new VoiceTpl();
 
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                            for (int i = 0; i < season.folder.Length; i++)
+                            {
+                                if (t == -1)
+                                    t = i;
+
+                                string link = host + $"lite/eneyida?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={s}&t={i}";
+
+                                vtpl.Append(season.folder[i].title, t == i, link);
+                            }
+                            #endregion
+
+                            string sArch = s.ToString();
+                            var episodes = season.folder[t].folder;
+
+                            var etpl = new EpisodeTpl(vtpl, episodes.Length);
+
+                            foreach (var episode in episodes)
+                            {
+                                #region subtitle
+                                SubtitleTpl? subtitles = null;
+
+                                if (!string.IsNullOrEmpty(episode.subtitle))
+                                {
+                                    var match = new Regex("\\[([^\\]]+)\\](https?://[^\\,]+)").Match(episode.subtitle);
+                                    subtitles = new SubtitleTpl(match.Length);
+
+                                    while (match.Success)
+                                    {
+                                        subtitles.Value.Append(match.Groups[1].Value, onstreamfile.Invoke(match.Groups[2].Value));
+                                        match = match.NextMatch();
+                                    }
+                                }
+                                #endregion
+
+                                string file = onstreamfile.Invoke(episode.file);
+                                etpl.Append(episode.title, title ?? original_title, sArch, Regex.Match(episode.title, "^([0-9]+)").Groups[1].Value, file, subtitles: subtitles, vast: vast);
+                            }
+
+                            return etpl;
+                        }
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

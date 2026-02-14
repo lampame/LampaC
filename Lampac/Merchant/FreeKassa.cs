@@ -1,10 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using IO = System.IO.File;
-using System.IO;
-using Shared.Engine;
 using Shared;
+using Shared.Engine;
+using System;
+using System.IO;
+using IO = System.IO.File;
 
 namespace Merchant.Controllers
 {
@@ -17,6 +18,7 @@ namespace Merchant.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("freekassa/new")]
         public ActionResult Index(string email)
         {
@@ -33,6 +35,7 @@ namespace Merchant.Controllers
 
 
         [HttpPost]
+        [AllowAnonymous]
         [Route("freekassa/callback")]
         public ActionResult Callback(string AMOUNT, long MERCHANT_ORDER_ID, string SIGN)
         {

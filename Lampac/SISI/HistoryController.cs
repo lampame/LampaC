@@ -1,54 +1,72 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using Shared.Engine.Utilities;
 using Shared.Models.SQL;
 using System.Web;
 
 namespace SISI
 {
-    public class HistoryController : BaseSisiController
+    public class HistoryController : BaseController
     {
+        [HttpGet]
         [Route("sisi/historys")]
         async public Task<ActionResult> List(int pg = 1, int pageSize = 36)
         {
             string md5user = getuser();
             if (md5user == null || !AppInit.conf.sisi.history.enable)
-                return OnError("access denied");
+                return StatusCode(403, "access denied");
 
             #region historys
-            var historys = new List<PlaylistItem>();
-            var historysQuery = new List<SisiHistorySqlModel>();
+            int total_pages = 0;
+            var historys = new List<PlaylistItem>(pageSize);
 
-            using (var sqlDb = new SisiContext())
+            using (var sqlDb = SisiContext.Factory != null
+                ? SisiContext.Factory.CreateDbContext()
+                : new SisiContext())
             {
-                historysQuery = await sqlDb.historys
+                var historysQuery = sqlDb.historys
                     .AsNoTracking()
                     .Where(i => i.user == md5user)
-                    .Take(pageSize * 20)
-                    .ToListAsync();
-            }
+                    .Take(pageSize * 20);
 
-            int total_pages = Math.Max(0, historysQuery.Count / pageSize) + 1;
+                total_pages = Math.Max(0, await historysQuery.CountAsync() / pageSize) + 1;
 
-            var items = historysQuery
-                .OrderByDescending(i => i.created)
-                .Skip((pg * pageSize) - pageSize)
-                .Take(pageSize);
+                var items = historysQuery
+                    .OrderByDescending(i => i.created)
+                    .Skip((pg * pageSize) - pageSize)
+                    .Take(pageSize);
 
-            if (items.Any())
-            {
-                foreach (var json in items.Select(i => i.json))
+                if (items.Any())
                 {
-                    if (string.IsNullOrEmpty(json))
-                        continue;
-
-                    try
+                    foreach (var item in items)
                     {
-                        var history = JsonConvert.DeserializeObject<PlaylistItem>(json);
-                        if (history != null)
-                            historys.Add(history);
+                        if (string.IsNullOrEmpty(item.json))
+                            continue;
+
+                        try
+                        {
+                            var pl = JsonConvert.DeserializeObject<PlaylistItem>(item.json);
+                            if (pl != null)
+                            {
+                                historys.Add(new PlaylistItem()
+                                {
+                                    name = pl.name,
+                                    video = getvideLink(pl),
+                                    picture = pl.bookmark.image != null ? HostImgProxy(pl.bookmark.image, plugin: pl.bookmark.site) : null,
+                                    time = pl.time,
+                                    json = pl.json,
+                                    related = pl.related || Regex.IsMatch(pl.bookmark.site, "^(elo|epr|fph|phub|sbg|xmr|xnx|xds)"),
+                                    quality = pl.quality,
+                                    preview = pl.preview,
+                                    model = pl.model,
+                                    bookmark = pl.bookmark,
+                                    history_uid = pl.history_uid
+                                });
+                            }
+                        }
+                        catch { }
                     }
-                    catch { }
                 }
             }
             #endregion
@@ -65,23 +83,10 @@ namespace SISI
 
             string localhost = $"http://{AppInit.conf.listen.localhost}:{AppInit.conf.listen.port}";
 
-            return new JsonResult(new
+            return new JsonResult(new Channel()
             {
-                list = historys.Select(pl => new
-                {
-                    pl.name,
-                    video = getvideLink(pl),
-                    picture = pl.bookmark.image != null ? HostImgProxy(pl.bookmark.image, plugin: pl.bookmark.site) : null,
-                    pl.time,
-                    pl.json,
-                    related = pl.related || Regex.IsMatch(pl.bookmark.site, "^(elo|epr|fph|phub|sbg|xmr|xnx|xds)"),
-                    pl.quality,
-                    pl.preview,
-                    pl.model,
-                    pl.bookmark,
-                    pl.history_uid
-                }).ToArray(),
-                total_pages
+                list = historys,
+                total_pages = total_pages
             });
         }
 
@@ -92,11 +97,13 @@ namespace SISI
         {
             string md5user = getuser();
             if (md5user == null || !AppInit.conf.sisi.history.enable || data == null || string.IsNullOrEmpty(data?.bookmark?.site) || string.IsNullOrEmpty(data?.bookmark?.href))
-                return OnError("access denied");
+                return StatusCode(403, "access denied");
 
             string uid = CrypTo.md5($"{data.bookmark.site}:{data.bookmark.href}");
 
-            using (var sqlDb = new SisiContext())
+            using (var sqlDb = SisiContext.Factory != null
+                ? SisiContext.Factory.CreateDbContext()
+                : new SisiContext())
             {
                 bool any = await sqlDb.historys.AsNoTracking().AnyAsync(i => i.user == md5user && i.uid == uid);
 
@@ -109,7 +116,7 @@ namespace SISI
                         user = md5user,
                         uid = uid,
                         created = DateTime.UtcNow,
-                        json = JsonConvert.SerializeObject(data)
+                        json = JsonConvertPool.SerializeObject(data)
                     });
 
                     await sqlDb.SaveChangesLocks();
@@ -123,18 +130,21 @@ namespace SISI
         }
 
 
+        [HttpGet]
         [Route("sisi/history/remove")]
         async public Task<ActionResult> Remove(string id)
         {
             string md5user = getuser();
             if (md5user == null || !AppInit.conf.sisi.history.enable || string.IsNullOrEmpty(id))
-                return OnError("access denied");
+                return StatusCode(403, "access denied");
 
             try
             {
                 await SisiContext.semaphore.WaitAsync(TimeSpan.FromSeconds(30));
 
-                using (var sqlDb = new SisiContext())
+                using (var sqlDb = SisiContext.Factory != null
+                    ? SisiContext.Factory.CreateDbContext()
+                    : new SisiContext())
                 {
                     await sqlDb.historys
                         .Where(i => i.user == md5user && i.uid == id)

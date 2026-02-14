@@ -2,13 +2,22 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Shared.Models.Online.Settings;
 using System.Text;
 
 namespace Online.Controllers
 {
     public class GetsTV : BaseOnlineController
     {
+        List<HeadersModel> bearer;
+
+        public GetsTV() : base(AppInit.conf.GetsTV) 
+        {
+            requestInitialization = () =>
+            {
+                bearer = HeadersModel.Init("authorization", $"Bearer {init.token}");
+            };
+        }
+
         #region Bind
         [HttpGet]
         [AllowAnonymous]
@@ -23,8 +32,8 @@ namespace Online.Controllers
             }
             else
             {
-                string postdata = $"{{\"email\":\"{login}\",\"password\":\"{pass}\",\"fingerprint\":\"{CrypTo.md5(DateTime.Now.ToString())}\",\"device\":{{}}}}";
-                var result =  await Http.Post<JObject>($"{AppInit.conf.GetsTV.corsHost()}/api/login", new System.Net.Http.StringContent(postdata, Encoding.UTF8, "application/json"), headers: httpHeaders(AppInit.conf.GetsTV));
+                var postdata = new System.Net.Http.StringContent($"{{\"email\":\"{login}\",\"password\":\"{pass}\",\"fingerprint\":\"{CrypTo.md5(DateTime.Now.ToString())}\",\"device\":{{}}}}", Encoding.UTF8, "application/json");
+                var result =  await Http.Post<JObject>($"{init.corsHost()}/api/login", postdata, httpversion: init.httpversion, proxy: proxy, headers: httpHeaders(init));
 
                 if (result == null)
                     return ContentTo("Ошибка авторизации ;(");
@@ -40,17 +49,10 @@ namespace Online.Controllers
 
         [HttpGet]
         [Route("lite/getstv")]
-        async public ValueTask<ActionResult> Index(string orid, string title, string original_title, int year, int t = -1, int s = -1, bool rjson = false, bool similar = false, string source = null, string id = null)
+        async public Task<ActionResult> Index(string orid, string title, string original_title, int year, int t = -1, int s = -1, bool rjson = false, bool similar = false, string source = null, string id = null)
         {
-            var init = await loadKit(AppInit.conf.GetsTV);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
 
             if (string.IsNullOrEmpty(orid) && !string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(id))
             {
@@ -60,30 +62,36 @@ namespace Online.Controllers
 
             if (string.IsNullOrEmpty(orid))
             {
-                var result = await search(proxyManager, init, title, original_title, year);
+                var result = await search(title, original_title, year);
 
                 if (result.id != null && similar == false)
                     orid = result.id;
                 else
                 {
-                    if (result.similar.data == null || result.similar.data.Count == 0)
+                    if (result.similar == null || result.similar.IsEmpty)
                         return OnError("data");
 
-                    return ContentTo(rjson ? result.similar.ToJson() : result.similar.ToHtml());
+                    return await ContentTpl(result.similar);
                 }
             }
 
-            var cache = await InvokeCache<JObject>($"getstv:movies:{orid}", cacheTime(20, init: init), proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<JObject>($"getstv:movies:{orid}", 20, async e =>
             {
-                var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
-                var root = await Http.Get<JObject>($"{init.corsHost()}/api/movies/{orid}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: headers);
-                if (root == null)
-                    return res.Fail("movies");
+                var root = await httpHydra.Get<JObject>($"{init.corsHost()}/api/movies/{orid}", 
+                    addheaders: bearer, safety: true
+                );
 
-                return root;
+                if (root == null)
+                    return e.Fail("movies", refresh_proxy: true);
+
+                return e.Success(root);
             });
 
-            return OnResult(cache, () => 
+            if (IsRhubFallback(cache, safety: true))
+                goto rhubFallback;
+
+            return await ContentTpl(cache, () => 
             {
                 string defaultargs = $"&orid={orid}&title={HttpUtility.UrlEncode(title)}&original_title={HttpUtility.UrlEncode(original_title)}&year={year}";
 
@@ -100,7 +108,7 @@ namespace Online.Controllers
                         mtpl.Append(media.Value<string>("trName"), link, "call", streamlink, details: media.Value<string>("sourceType"));
                     }
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                    return mtpl;
                     #endregion
                 }
                 else
@@ -116,7 +124,7 @@ namespace Online.Controllers
                             tpl.Append($"{seasonNum} сезон", $"{host}/lite/getstv?rjson={rjson}&s={seasonNum}{defaultargs}", seasonNum);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -144,8 +152,7 @@ namespace Online.Controllers
                         }
                         #endregion
 
-                        var etpl = new EpisodeTpl();
-                        string sArhc = s.ToString();
+                        var etpl = new EpisodeTpl(vtpl);
 
                         foreach (var episode in episodes)
                         {
@@ -157,55 +164,43 @@ namespace Online.Controllers
                                     string link = $"{host}/lite/getstv/video.m3u8?id={tr.Value<string>("_id")}";
                                     string streamlink = accsArgs($"{link}&play=true");
 
-                                    etpl.Append($"{e} серия", title ?? original_title, sArhc, e.ToString(), link, "call", streamlink: streamlink);
+                                    etpl.Append($"{e} серия", title ?? original_title, s.ToString(), e.ToString(), link, "call", streamlink: streamlink);
                                     break;
                                 }
                             }
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                     #endregion
                 }
             });
         }
 
-
         #region Video
         [HttpGet]
         [Route("lite/getstv/video.m3u8")]
         async public ValueTask<ActionResult> Video(string id, bool play)
         {
-            var init = await loadKit(AppInit.conf.GetsTV);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: true, rch_check: !play))
                 return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            string memKey = $"getstv:view:stream:{id}:{init.token}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"getstv:view:stream:{id}:{init.token}", async key =>
             {
-                if (!hybridCache.TryGetValue(memKey, out JObject root))
+                if (!hybridCache.TryGetValue(key, out JObject root))
                 {
-                    var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
-                    root = await Http.Get<JObject>($"{init.corsHost()}/api/media/{id}?format=m3u8&protocol=https", timeoutSeconds: 8, proxy: proxy, headers: headers);
+                    root = await httpHydra.Get<JObject>($"{init.corsHost()}/api/media/{id}?format=m3u8&protocol=https", 
+                        addheaders: bearer, safety: true
+                    );
+
                     if (root == null)
-                        return OnError("json", proxyManager);
+                        return OnError("json", refresh_proxy: true);
 
                     if (!root.ContainsKey("resolutions"))
                         return OnError("resolutions");
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, root, cacheTime(10, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, root, cacheTime(10));
                 }
 
                 #region subtitle
@@ -222,7 +217,7 @@ namespace Online.Controllers
                 var streamquality = new StreamQualityTpl();
 
                 foreach (var r in root["resolutions"])
-                    streamquality.Append(HostStreamProxy(init, r.Value<string>("url"), proxy: proxy), $"{r.Value<int>("type")}p");
+                    streamquality.Append(HostStreamProxy(r.Value<string>("url")), $"{r.Value<int>("type")}p");
 
                 if (!streamquality.Any())
                     return OnError("stream");
@@ -250,28 +245,25 @@ namespace Online.Controllers
         #region SpiderSearch
         [HttpGet]
         [Route("lite/getstv-search")]
-        async public ValueTask<ActionResult> SpiderSearch(string title, bool rjson = false)
+        async public Task<ActionResult> SpiderSearch(string title, bool rjson = false)
         {
             if (string.IsNullOrWhiteSpace(title))
                 return OnError();
 
-            var init = await loadKit(AppInit.conf.GetsTV);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-
-            var result = await search(proxyManager, init, title, null, 0);
-            if (result.similar.data?.Count == 0)
+            var result = await search(title, null, 0);
+            if (result.similar == null || result.similar.IsEmpty)
                 return OnError("data");
 
-            return ContentTo(rjson ? result.similar.ToJson() : result.similar.ToHtml());
+            return await ContentTpl(result.similar);
         }
         #endregion
 
 
         #region search
-        async ValueTask<(string id, SimilarTpl similar)> search(ProxyManager proxyManager, OnlinesSettings init, string title, string original_title, int year)
+        async ValueTask<(string id, SimilarTpl similar)> search(string title, string original_title, int year)
         {
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrEmpty(init.token))
                 return default;
@@ -279,16 +271,18 @@ namespace Online.Controllers
             string memKey = $"getstv:search:{title ?? original_title}";
             if (!hybridCache.TryGetValue(memKey, out JArray root))
             {
-                var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
-                root = await Http.Get<JArray>($"{init.corsHost()}/api/movies?skip=0&sort=updated&searchText={HttpUtility.UrlEncode(title)}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: headers);
+                root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/movies?skip=0&sort=updated&searchText={HttpUtility.UrlEncode(title)}", 
+                    addheaders: bearer, safety: true
+                );
+                
                 if (root == null)
                 {
-                    proxyManager.Refresh();
+                    proxyManager?.Refresh();
                     return default;
                 }
 
-                proxyManager.Success();
-                hybridCache.Set(memKey, root, cacheTime(20, init: init));
+                proxyManager?.Success();
+                hybridCache.Set(memKey, root, cacheTime(20));
             }
 
             List<string> ids = new List<string>();

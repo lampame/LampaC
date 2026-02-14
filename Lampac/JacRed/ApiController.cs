@@ -1,13 +1,15 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Jackett;
-using Newtonsoft.Json.Linq;
+﻿using Jackett;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Shared.Engine.Utilities;
 
 namespace JacRed.Controllers
 {
     public class ApiController : JacBaseController
     {
         #region Conf
+        [HttpGet]
         [Route("api/v1.0/conf")]
         public JsonResult JacConf(string apikey)
         {
@@ -19,6 +21,7 @@ namespace JacRed.Controllers
         #endregion
 
         #region Indexers
+        [HttpGet]
         [Route("/api/v2.0/indexers/{status}/results")]
         async public Task<ActionResult> Indexers(string apikey, string query, string title, string title_original, int year, Dictionary<string, string> category, int is_serial = -1)
         {
@@ -45,7 +48,7 @@ namespace JacRed.Controllers
                 else
                 {
                     if (Regex.IsMatch(query, "^([^a-z-A-Z]+) ((19|20)[0-9]{2})$"))
-                        return Content(JsonConvert.SerializeObject(new { Results = new List<object>(), jacred = ModInit.conf.typesearch == "red" }), "application/json; charset=utf-8");
+                        return Content(JsonConvertPool.SerializeObject(new { Results = new List<object>(), jacred = ModInit.conf.typesearch == "red" }), "application/json; charset=utf-8");
 
                     mNum = Regex.Match(query, "^([^a-z-A-Z]+) ([^а-я-А-Я]+)$");
 
@@ -155,6 +158,7 @@ namespace JacRed.Controllers
         #endregion
 
         #region Api
+        [HttpGet]
         [Route("/api/v1.0/torrents")]
         async public Task<ActionResult> Api(string apikey, string search, string altname, bool exact, string type, string sort, string tracker, string voice, string videotype, long relased, long quality, long season)
         {
@@ -268,7 +272,7 @@ namespace JacRed.Controllers
                 var gsize = Regex.Match(sizeName, "([0-9\\.,]+) (Mb|МБ|GB|ГБ|TB|ТБ)", RegexOptions.IgnoreCase).Groups;
                 if (!string.IsNullOrWhiteSpace(gsize[2].Value))
                 {
-                    if (double.TryParse(gsize[1].Value.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out size) && size != 0)
+                    if (double.TryParse(gsize[1].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out size) && size != 0)
                     {
                         if (gsize[2].Value.ToLower() is "gb" or "гб")
                             size *= 1024;

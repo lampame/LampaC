@@ -32,7 +32,7 @@ for lang in cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant; do
 done
 
 # Download zip
-curl -L -k -o publish.zip https://github.com/immisterio/Lampac/releases/latest/download/publish.zip
+curl -L -k -o publish.zip https://github.com/lampac-talks/lampac/releases/latest/download/publish.zip
 unzip -o publish.zip
 rm -f publish.zip
 
@@ -43,6 +43,13 @@ cat <<EOF > init.conf
 {
   "typecache": "mem",
   "mikrotik": true,
+  "GC": {
+    "enable": true,
+    "Concurrent": false,
+    "ConserveMemory": 9,
+    "HighMemoryPercent": 1,
+    "RetainVM": false
+  },
   "pirate_store": false,
   "listen": {
     "compression": false
@@ -134,7 +141,7 @@ cat <<EOF > module/manifest.json
 EOF
 
 # update info
-curl -k -s https://api.github.com/repos/immisterio/Lampac/releases/latest | grep tag_name | sed s/[^0-9]//g > data/vers.txt
+curl -k -s https://api.github.com/repos/lampac-talks/lampac/releases/latest | grep tag_name | sed s/[^0-9]//g > data/vers.txt
 echo -n "1" > data/vers-minor.txt
 
 # update.sh
@@ -142,11 +149,11 @@ cat <<EOF > update.sh
 #!/usr/bin/env bash
 
 ver=$(cat data/vers.txt)
-gitver=$(curl --connect-timeout 10 -m 20 -k -s https://api.github.com/repos/immisterio/Lampac/releases/latest | grep tag_name | sed s/[^0-9]//g)
+gitver=$(curl --connect-timeout 10 -m 20 -k -s https://api.github.com/repos/lampac-talks/lampac/releases/latest | grep tag_name | sed s/[^0-9]//g)
 if [ $gitver -gt $ver ]; then
     echo "update lampac to version $gitver"
     rm -f update.zip
-    if ! curl -L -k -o update.zip https://github.com/immisterio/Lampac/releases/latest/download/update.zip; then
+    if ! curl -L -k -o update.zip https://github.com/lampac-talks/lampac/releases/latest/download/update.zip; then
         echo "Failed to download update.zip. Exiting."
         exit 1
     fi
@@ -178,7 +185,7 @@ else
 
     mver=$(cat data/vers-minor.txt)
     dver=$(curl -k -s $BASE_URL/update/$ver.txt)
-	
+
     if [[ ${#dver} -eq 8 && $dver != $mver ]]; then
         echo "update lampac to version $gitver.$mver"
         rm -f update.zip
@@ -280,7 +287,7 @@ bash update.sh
 exit
 EOF
 
-# Run Motherfucker Run 
+# Run Motherfucker Run
 ln -s /data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/debian/ debian
 tmux new-session -d -s Lampac "proot-distro login debian -- dotnet Lampac.dll"
 

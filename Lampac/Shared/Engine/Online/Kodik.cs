@@ -1,11 +1,11 @@
 ﻿using HtmlAgilityPack;
-using Shared.Models;
+using Shared.Engine.RxEnumerate;
 using Shared.Models.Base;
 using Shared.Models.Online.Kodik;
+using Shared.Models.Online.Settings;
 using Shared.Models.Templates;
 using System.Collections.Concurrent;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 
@@ -15,42 +15,37 @@ namespace Shared.Engine.Online
     {
         #region KodikInvoke
         static readonly ConcurrentDictionary<string, string> psingles = new ();
-        static readonly HybridCache hybridCache = new HybridCache();
+        static readonly IHybridCache hybridCache = IHybridCache.Get(null);
         readonly IEnumerable<Result> fallbackDatabase;
 
         string host;
         string apihost, token, videopath;
         bool usehls, cdn_is_working;
-        Func<string, List<HeadersModel>, ValueTask<string>> onget;
-        Func<string, string, ValueTask<string>> onpost;
+        HttpHydra httpHydra;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
-        public KodikInvoke(string host, string apihost, string token, bool hls, bool cdn_is_working, string videopath, IEnumerable<Result> fallbackDatabase, Func<string, List<HeadersModel>, ValueTask<string>> onget, Func<string, string, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public KodikInvoke(string host, KodikSettings init, string videopath, IEnumerable<Result> fallbackDatabase, HttpHydra httpHydra, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
-            this.apihost = apihost;
-            this.token = token;
+            this.apihost = init.apihost;
+            this.token = init.token;
             this.videopath = videopath;
             this.fallbackDatabase = fallbackDatabase;
-            this.onget = onget;
-            this.onpost = onpost;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
-            this.usehls = hls;
-            this.cdn_is_working = cdn_is_working;
+            this.usehls = init.hls;
+            this.cdn_is_working = init.cdn_is_working;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Embed
-        async public ValueTask<List<Result>> Embed(string imdb_id, long kinopoisk_id, int s)
+        async public Task<List<Result>> Embed(string imdb_id, long kinopoisk_id, int s)
         {
             if (string.IsNullOrEmpty(imdb_id) && kinopoisk_id == 0)
                 return null;
 
-            string json = null;
             List<Result> results = null;
 
             if (!string.IsNullOrWhiteSpace(token))
@@ -65,93 +60,54 @@ namespace Shared.Engine.Online
                 if (s > 0)
                     url += $"&season={s}";
 
-                try
-                {
-                    json = await onget(url, null);
-
-                    if (string.IsNullOrWhiteSpace(json))
-                    {
-                        requesterror?.Invoke();
-                    }
-                    else
-                    {
-                        var root = JsonSerializer.Deserialize<RootObject>(json);
-                        if (root?.results != null)
-                            results = root.results;
-                        else
-                            requesterror?.Invoke();
-                    }
-                }
-                catch
-                {
+                var root = await httpHydra.Get<RootObject>(url, safety: true);
+                if (root?.results != null)
+                    results = root.results;
+                else
                     requesterror?.Invoke();
-                }
             }
 
-            if (json == null || json.Contains("Отсутствует или неверный токен"))
-            {
-                if (results == null)
-                    results = FallbackByIds(imdb_id, kinopoisk_id, s);
-            }
+            if (results == null)
+                results = FallbackByIds(imdb_id, kinopoisk_id, s);
 
             return results;
         }
 
 
-        public async ValueTask<EmbedModel> Embed(string title, string original_title, int clarification)
+        public async Task<EmbedModel> Embed(string title, string original_title, int clarification)
         {
             try
             {
                 if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(original_title))
                     return null;
 
-                string json = null;
                 List<Result> results = null;
 
                 if (!string.IsNullOrWhiteSpace(token))
                 {
                     string url = $"{apihost}/search?token={token}&limit=100&title={HttpUtility.UrlEncode(original_title ?? title)}&with_episodes=true&with_material_data=true";
 
-                    try
-                    {
-                        json = await onget(url, null);
-
-                        if (string.IsNullOrWhiteSpace(json))
-                        {
-                            requesterror?.Invoke();
-                        }
-                        else
-                        {
-                            var root = JsonSerializer.Deserialize<RootObject>(json);
-                            if (root?.results != null)
-                                results = root.results;
-                            else
-                                requesterror?.Invoke();
-                        }
-                    }
-                    catch
-                    {
+                    var root = await httpHydra.Get<RootObject>(url, safety: true);
+                    if (root?.results != null)
+                        results = root.results;
+                    else
                         requesterror?.Invoke();
-                    }
                 }
 
-                if (json == null || json.Contains("Отсутствует или неверный токен"))
-                {
-                    if (results == null)
-                        results = FallbackByTitle(title, original_title);
-                }
+                if (results == null)
+                    results = FallbackByTitle(title, original_title);
 
                 if (results == null)
                     return null;
 
-                var hash = new HashSet<string>();
+                var hash = new HashSet<string>(20);
                 var stpl = new SimilarTpl(results.Count);
                 string enc_title = HttpUtility.UrlEncode(title);
                 string enc_original_title = HttpUtility.UrlEncode(original_title);
 
                 foreach (var similar in results)
                 {
-                    string pick = similar.title?.ToLower()?.Trim();
+                    string pick = similar.title?.ToLowerAndTrim();
                     if (string.IsNullOrEmpty(pick))
                         continue;
 
@@ -164,7 +120,7 @@ namespace Shared.Engine.Online
 
                     string details = similar.translation.title;
                     if (similar.last_season > 0)
-                        details += $"{stpl.OnlineSplit} {similar.last_season}й сезон";
+                        details += $"{SimilarTpl.OnlineSplit} {similar.last_season}й сезон";
 
                     var matd = similar.material_data;
                     string img = PosterApi.Size(matd.anime_poster_url ?? matd.drama_poster_url ?? matd.poster_url);
@@ -186,7 +142,7 @@ namespace Shared.Engine.Online
 
             foreach (var i in results)
             {
-                if (i.title == null || i.title.ToLower().Trim() != pick)
+                if (i.title == null || i.title.ToLowerAndTrim() != pick)
                     continue;
 
                 content.Add(i);
@@ -196,8 +152,135 @@ namespace Shared.Engine.Online
         }
         #endregion
 
-        #region Html
-        public async ValueTask<string> Html(List<Result> results, string args, string imdb_id, long kinopoisk_id, string title, string original_title, int clarification, string pick, string kid, int s, bool showstream, bool rjson)
+        #region VideoParse
+        async public Task<List<StreamModel>> VideoParse(string linkhost, string link)
+        {
+            List<StreamModel> streams = null;
+
+            string player_single = null;
+            string domain = null, d_sign = null, pd = null, pd_sign = null, ref_domain = null, ref_sign = null, type = null, hash = null, id = null;
+
+            await httpHydra.GetSpan($"https:{link}", iframe => 
+            {
+                player_single = Rx.Match(iframe, "src=\"/(assets/js/app\\.player_[^\"]+\\.js)\"");
+
+                var advertDebug = Rx.Split("advertDebug", iframe);
+                if (advertDebug.Count > 1)
+                {
+                    var preview = Rx.Split("preview-icons", advertDebug[1].Span);
+                    if (preview.Count > 0)
+                    {
+                        string _frame = Regex.Replace(preview[0].ToString(), "[\n\r\t ]+", "");
+                        domain = Regex.Match(_frame, "domain=\"([^\"]+)\"").Groups[1].Value;
+                        d_sign = Regex.Match(_frame, "d_sign=\"([^\"]+)\"").Groups[1].Value;
+                        pd = Regex.Match(_frame, "pd=\"([^\"]+)\"").Groups[1].Value;
+                        pd_sign = Regex.Match(_frame, "pd_sign=\"([^\"]+)\"").Groups[1].Value;
+                        ref_domain = Regex.Match(_frame, "ref=\"([^\"]+)\"").Groups[1].Value;
+                        ref_sign = Regex.Match(_frame, "ref_sign=\"([^\"]+)\"").Groups[1].Value;
+                        type = Regex.Match(_frame, "videoInfo.type='([^']+)'").Groups[1].Value;
+                        hash = Regex.Match(_frame, "videoInfo.hash='([^']+)'").Groups[1].Value;
+                        id = Regex.Match(_frame, "videoInfo.id='([^']+)'").Groups[1].Value;
+                    }
+                }
+            });
+
+            if (string.IsNullOrEmpty(domain) || string.IsNullOrEmpty(player_single))
+            {
+                requesterror?.Invoke();
+                return null;
+            }
+
+            string uri = null;
+            if (!psingles.TryGetValue(player_single, out uri))
+            {
+                await httpHydra.GetSpan($"{linkhost}/{player_single}", playerjs => 
+                {
+                    uri = DecodeUrlBase64(Rx.Match(playerjs, "type:\"POST\",url:atob\\(\"([^\"]+)\"\\)"));
+                    if (!string.IsNullOrEmpty(uri))
+                        psingles.TryAdd(player_single, uri);
+                });
+            }
+
+            if (string.IsNullOrEmpty(uri))
+            {
+                requesterror?.Invoke();
+                return null;
+            }
+
+            bool _usehls = usehls;
+
+            await httpHydra.PostSpan($"{linkhost + uri}", $"d={domain}&d_sign={d_sign}&pd={pd}&pd_sign={pd_sign}&ref={ref_domain}&ref_sign={ref_sign}&bad_user=false&cdn_is_working={cdn_is_working.ToString().ToLower()}&type={type}&hash={hash}&id={id}&info=%7B%7D", json => 
+            {
+                var rx = Rx.Matches("\"([0-9]+)p?\":\\[\\{\"src\":\"([^\"]+)", json);
+                if (rx.Count == 0)
+                    return;
+
+                streams = new List<StreamModel>(rx.Count);
+
+                foreach (var row in rx.Rows())
+                {
+                    var g = row.Groups();
+
+                    if (!string.IsNullOrWhiteSpace(g[2].Value))
+                    {
+                        string m3u = g[2].Value;
+                        if (!m3u.Contains("manifest.m3u8"))
+                        {
+                            int zCharCode = Convert.ToInt32('Z');
+
+                            string src = Regex.Replace(g[2].Value, "[a-zA-Z]", e =>
+                            {
+                                int eCharCode = Convert.ToInt32(e.Value[0]);
+                                return ((eCharCode <= zCharCode ? 90 : 122) >= (eCharCode = eCharCode + 18) ? (char)eCharCode : (char)(eCharCode - 26)).ToString();
+                            });
+
+                            m3u = DecodeUrlBase64(src);
+                        }
+
+                        if (m3u.StartsWith("//"))
+                            m3u = $"https:{m3u}";
+
+                        if (!_usehls && m3u.Contains(".m3u"))
+                            m3u = m3u.Replace(":hls:manifest.m3u8", "");
+
+                        streams.Add(new StreamModel() { q = $"{g[1].Value}p", url = m3u });
+                    }
+                }
+            });
+
+            if (streams == null || streams.Count == 0)
+            {
+                requesterror?.Invoke();
+                return null;
+            }
+
+            streams.Reverse();
+
+            return streams;
+        }
+
+        public string VideoParse(List<StreamModel> streams, string title, string original_title, int episode, bool play, VastConf vast = null)
+        {
+            if (streams == null || streams.Count == 0)
+                return string.Empty;
+
+            if (play)
+                return onstreamfile(streams[0].url);
+
+            string name = title ?? original_title ?? "auto";
+            if (episode > 0)
+                name += $" ({episode} серия)";
+
+            var streamquality = new StreamQualityTpl();
+            foreach (var l in streams)
+                streamquality.Append(onstreamfile(l.url), l.q);
+
+            return VideoTpl.ToJson("play", onstreamfile(streams[0].url), name, streamquality: streamquality, vast: vast);
+        }
+        #endregion
+
+        #region Tpl
+        public async Task<ITplResult> Tpl(List<Result> results, string args, string imdb_id, long kinopoisk_id, string title, string original_title, int clarification, string pick, string kid, int s, bool showstream, bool rjson)
         {
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -223,7 +306,7 @@ namespace Shared.Engine.Online
                     mtpl.Append(data.translation.title, url, "call", streamlink);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -248,7 +331,7 @@ namespace Shared.Engine.Online
                         tpl.Append($"{season} сезон", link, season);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                 }
                 else
                 {
@@ -289,9 +372,9 @@ namespace Shared.Engine.Online
 
                     var series = await ResolveEpisodesAsync(selected, s);
                     if (series == null || series.Count == 0)
-                        return string.Empty;
+                        return default;
 
-                    var etpl = new EpisodeTpl(series.Count);
+                    var etpl = new EpisodeTpl(vtpl, series.Count);
 
                     string sArhc = s.ToString();
 
@@ -311,138 +394,25 @@ namespace Shared.Engine.Online
                         etpl.Append($"{episode.Key} серия", title ?? original_title, sArhc, episode.Key, url, "call", streamlink: streamlink);
                     }
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
-
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                 }
                 #endregion
             }
         }
         #endregion
 
-
-        #region VideoParse
-        async public ValueTask<List<StreamModel>> VideoParse(string linkhost, string link)
-        {
-            string iframe = await onget($"https:{link}", null);
-            if (iframe == null)
-            {
-                requesterror?.Invoke();
-                return null;
-            }
-
-            string uri = null;
-            string player_single = Regex.Match(iframe, "src=\"/(assets/js/app\\.player_[^\"]+\\.js)\"").Groups[1].Value;
-            if (!string.IsNullOrEmpty(player_single))
-            {
-                if (!psingles.TryGetValue(player_single, out uri))
-                {
-                    string playerjs = await onget($"{linkhost}/{player_single}", null);
-
-                    if (playerjs == null)
-                    {
-                        requesterror?.Invoke();
-                        return null;
-                    }
-
-                    uri = DecodeUrlBase64(Regex.Match(playerjs, "type:\"POST\",url:atob\\(\"([^\"]+)\"\\)").Groups[1].Value);
-                    if (!string.IsNullOrEmpty(uri))
-                        psingles.TryAdd(player_single, uri);
-                }
-            }
-
-            if (string.IsNullOrEmpty(uri))
-                return null;
-
-            string _frame = Regex.Replace(iframe.Split("advertDebug")[1].Split("preview-icons")[0], "[\n\r\t ]+", "");
-            string domain = Regex.Match(_frame, "domain=\"([^\"]+)\"").Groups[1].Value;
-            string d_sign = Regex.Match(_frame, "d_sign=\"([^\"]+)\"").Groups[1].Value;
-            string pd = Regex.Match(_frame, "pd=\"([^\"]+)\"").Groups[1].Value;
-            string pd_sign = Regex.Match(_frame, "pd_sign=\"([^\"]+)\"").Groups[1].Value;
-            string ref_domain = Regex.Match(_frame, "ref=\"([^\"]+)\"").Groups[1].Value;
-            string ref_sign = Regex.Match(_frame, "ref_sign=\"([^\"]+)\"").Groups[1].Value;
-            string type = Regex.Match(_frame, "videoInfo.type='([^']+)'").Groups[1].Value;
-            string hash = Regex.Match(_frame, "videoInfo.hash='([^']+)'").Groups[1].Value;
-            string id = Regex.Match(_frame, "videoInfo.id='([^']+)'").Groups[1].Value;
-
-            string json = await onpost($"{linkhost + uri}", $"d={domain}&d_sign={d_sign}&pd={pd}&pd_sign={pd_sign}&ref={ref_domain}&ref_sign={ref_sign}&bad_user=false&cdn_is_working={cdn_is_working.ToString().ToLower()}&type={type}&hash={hash}&id={id}&info=%7B%7D");
-            if (json == null || !json.Contains("\"src\":\""))
-            {
-                requesterror?.Invoke();
-                return null;
-            }
-
-            var streams = new List<StreamModel>(4);
-
-            var match = new Regex("\"([0-9]+)p?\":\\[\\{\"src\":\"([^\"]+)", RegexOptions.IgnoreCase).Match(json);
-            while (match.Success)
-            {
-                if (!string.IsNullOrWhiteSpace(match.Groups[2].Value))
-                {
-                    string m3u = match.Groups[2].Value;
-                    if (!m3u.Contains("manifest.m3u8"))
-                    {
-                        int zCharCode = Convert.ToInt32('Z');
-
-                        string src = Regex.Replace(match.Groups[2].Value, "[a-zA-Z]", e =>
-                        {
-                            int eCharCode = Convert.ToInt32(e.Value[0]);
-                            return ((eCharCode <= zCharCode ? 90 : 122) >= (eCharCode = eCharCode + 18) ? (char)eCharCode : (char)(eCharCode - 26)).ToString();
-                        });
-
-                        m3u = DecodeUrlBase64(src);
-                    }
-
-                    if (m3u.StartsWith("//"))
-                        m3u = $"https:{m3u}";
-
-                    if (!usehls && m3u.Contains(".m3u"))
-                        m3u = m3u.Replace(":hls:manifest.m3u8", "");
-
-                    streams.Add(new StreamModel() { q = $"{match.Groups[1].Value}p", url = m3u });
-                }
-
-                match = match.NextMatch();
-            }
-
-            if (streams.Count == 0)
-                return null;
-
-            streams.Reverse();
-
-            return streams;
-        }
-
-        public string VideoParse(List<StreamModel> streams, string title, string original_title, int episode, bool play, VastConf vast = null)
-        {
-            if (streams == null || streams.Count == 0)
-                return string.Empty;
-
-            if (play)
-                return onstreamfile(streams[0].url);
-
-            string name = title ?? original_title ?? "auto";
-            if (episode > 0)
-                name += $" ({episode} серия)";
-
-            var streamquality = new StreamQualityTpl();
-            foreach (var l in streams)
-                streamquality.Append(onstreamfile(l.url), l.q);
-
-            return VideoTpl.ToJson("play", onstreamfile(streams[0].url), name, streamquality: streamquality, vast: vast);
-        }
-        #endregion
-
         #region DecodeUrlBase64
         static string DecodeUrlBase64(string s)
         {
+            if (s == null)
+                return s;
+
             return Encoding.UTF8.GetString(Convert.FromBase64String(s.Replace('-', '+').Replace('_', '/').PadRight(4 * ((s.Length + 3) / 4), '=')));
         }
         #endregion
 
 
-        #region [Codex AI]
+        #region [Codex AI] - db.json
         List<Result> FallbackByIds(string imdb_id, long kinopoisk_id, int season)
         {
             var data = fallbackDatabase;
@@ -519,7 +489,7 @@ namespace Shared.Engine.Online
             return normalizedSource.Contains(normalizedTarget);
         }
 
-        async ValueTask<Dictionary<string, string>> ResolveEpisodesAsync(Result selected, int season)
+        async Task<Dictionary<string, string>> ResolveEpisodesAsync(Result selected, int season)
         {
             if (season <= 0)
                 return null;
@@ -546,9 +516,9 @@ namespace Shared.Engine.Online
             return null;
         }
 
-        async ValueTask<Dictionary<string, Season>> LoadSeasonsFromHtml(Result selected)
+        async Task<Dictionary<string, Season>> LoadSeasonsFromHtml(Result selected)
         {
-            if (string.IsNullOrWhiteSpace(selected.id) || string.IsNullOrWhiteSpace(selected.link) || onget == null)
+            if (string.IsNullOrWhiteSpace(selected.id) || string.IsNullOrWhiteSpace(selected.link) || httpHydra == null)
                 return null;
 
             string cacheKey = $"kodik:series:{selected.id}";
@@ -557,7 +527,7 @@ namespace Shared.Engine.Online
 
             try
             {
-                string html = await onget($"https:{selected.link}", null);
+                string html = await httpHydra.Get($"https:{selected.link}");
                 if (string.IsNullOrWhiteSpace(html))
                 {
                     requesterror?.Invoke();

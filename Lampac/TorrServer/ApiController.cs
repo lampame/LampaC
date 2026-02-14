@@ -57,6 +57,7 @@ namespace TorrServer.Controllers
 
 
         #region Main
+        [HttpGet]
         [Route("ts")]
         [Route("ts/static/js/{suffix}")]
         async public Task<ActionResult> Main()
@@ -90,6 +91,8 @@ namespace TorrServer.Controllers
         #endregion
 
         #region TorAPI
+        [HttpGet]
+        [HttpPost]
         [Route("ts/{*suffix}")]
         async public Task Index()
         {
@@ -133,7 +136,7 @@ namespace TorrServer.Controllers
                     byte[] data = Convert.FromBase64String(Authorization.ToString().Replace("Basic ", ""));
                     string[] decodedString = Encoding.UTF8.GetString(data).Split(":");
 
-                    string login = decodedString[0].ToLower().Trim();
+                    string login = decodedString[0].ToLowerAndTrim();
                     string passwd = decodedString[1];
 
                     if (AppInit.conf.accsdb.findUser(login) is AccsUser user && !user.ban && user.expires > DateTime.UtcNow && passwd == ModInit.conf.defaultPasswd)
@@ -181,7 +184,7 @@ namespace TorrServer.Controllers
                     return;
                 }
 
-                using (var reader = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, leaveOpen: true))
+                using (var reader = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, bufferSize: PoolInvk.bufferSize, leaveOpen: true))
                 {
                     string requestJson = await reader.ReadToEndAsync().ConfigureAwait(false);
 
@@ -218,7 +221,7 @@ namespace TorrServer.Controllers
                 if (HttpContext.Request.Method == "POST" && pathRequest == "/torrents" && user?.group != 666)
                 {
                     HttpContext.Request.EnableBuffering();
-                    using (var readerBody = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, leaveOpen: true)) // Оставляем поток открытым
+                    using (var readerBody = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, bufferSize: PoolInvk.bufferSize, leaveOpen: true)) // Оставляем поток открытым
                     {
                         string requestJson = await readerBody.ReadToEndAsync().ConfigureAwait(false);
 
@@ -290,7 +293,7 @@ namespace TorrServer.Controllers
                             }
                             catch { }
 
-                            HttpContext.Response.StatusCode = 500;
+                            HttpContext.Response.StatusCode = 503;
                             await HttpContext.Response.WriteAsync(string.Empty, HttpContext.RequestAborted).ConfigureAwait(false);
                             return;
                         }
@@ -325,7 +328,7 @@ namespace TorrServer.Controllers
 
             foreach (var header in request.Headers)
             {
-                if (header.Key.ToLower() is "authorization")
+                if (header.Key.Equals("authorization", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray()) && requestMessage.Content != null)
@@ -351,15 +354,14 @@ namespace TorrServer.Controllers
             {
                 foreach (var header in headers)
                 {
-                    if (header.Key.ToLower() is "transfer-encoding" or "etag" or "connection" or "content-security-policy" or "content-disposition")
+                    if (header.Key.Equals("transfer-encoding", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.Equals("etag", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.Equals("connection", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.Equals("content-security-policy", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.Equals("content-disposition", StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    string value = string.Empty;
-                    foreach (var val in header.Value)
-                        value += $"; {val}";
-
-                    response.Headers[header.Key] = Regex.Replace(value, "^; ", "");
-                    //response.Headers[header.Key] = header.Value.ToArray();
+                    response.Headers[header.Key] = header.Value.ToArray();
                 }
             }
             #endregion
@@ -381,7 +383,7 @@ namespace TorrServer.Controllers
             if (!responseStream.CanRead || !response.Body.CanWrite)
                 throw new NotSupportedException("NotSupported_UnreadableStream");
 
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(PoolInvk.rentChunk);
 
             try
             {

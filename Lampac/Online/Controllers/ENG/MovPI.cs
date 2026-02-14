@@ -1,19 +1,19 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Playwright;
 using Shared.PlaywrightCore;
-using Shared.Models.Online.Settings;
 
 namespace Online.Controllers
 {
     public class MovPI : BaseENGController
     {
+        public MovPI() : base(AppInit.conf.MovPI) { }
+
         [HttpGet]
         [Route("lite/movpi")]
-        public ValueTask<ActionResult> Index(bool checksearch, long id, long tmdb_id, string imdb_id, string title, string original_title, int serial, int s = -1, bool rjson = false)
+        public Task<ActionResult> Index(bool checksearch, long id, long tmdb_id, string imdb_id, string title, string original_title, int serial, int s = -1, bool rjson = false)
         {
-            return ViewTmdb(AppInit.conf.MovPI, checksearch, id, tmdb_id, imdb_id, title, original_title, serial, s, rjson, method: "call");
+            return ViewTmdb(checksearch, id, tmdb_id, imdb_id, title, original_title, serial, s, rjson, method: "call");
         }
-
 
         #region Video
         [HttpGet]
@@ -21,35 +21,27 @@ namespace Online.Controllers
         [Route("lite/movpi/video.m3u8")]
         async public ValueTask<ActionResult> Video(long id, int s = -1, int e = -1, bool play = false)
         {
-            var init = await loadKit(AppInit.conf.MovPI);
-            if (await IsBadInitialization(init, rch: false))
-                return badInitMsg;
-
             if (id == 0)
                 return OnError();
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
+            if (await IsRequestBlocked(rch: false, rch_check: !play))
+                return badInitMsg;
 
             string embed = $"{init.host}/movie/{id}?autoPlay=true&poster=false";
             if (s > 0)
                 embed = $"{init.host}/tv/{id}-{s}-{e}?autoPlay=true&poster=false";
 
-            return await InvkSemaphore(init, embed, async () =>
+            return await InvkSemaphore(embed, async () =>
             {
-                var cache = await black_magic(embed, init, proxyManager, proxy.data);
+                var cache = await black_magic(embed);
                 if (cache.m3u8 == null)
                     return StatusCode(502);
 
                 var headers_stream = httpHeaders(init.host, init.headers_stream);
-                if (headers_stream.Count == 0)
+                if (headers_stream == null || headers_stream.Count == 0)
                     headers_stream = cache.headers;
 
-                string hls = HostStreamProxy(init, cache.m3u8, proxy: proxy.proxy, headers: headers_stream);
+                string hls = HostStreamProxy(cache.m3u8, headers: headers_stream);
 
                 if (play)
                     return RedirectToPlay(hls);
@@ -60,14 +52,14 @@ namespace Online.Controllers
         #endregion
 
         #region black_magic
-        async ValueTask<(string m3u8, List<HeadersModel> headers)> black_magic(string uri, OnlinesSettings init, ProxyManager proxyManager, (string ip, string username, string password) proxy)
+        async ValueTask<(string m3u8, List<HeadersModel> headers)> black_magic(string uri)
         {
             if (string.IsNullOrEmpty(uri))
                 return default;
 
             try
             {
-                string memKey = $"movpi:black_magic:{uri}:{proxy.ip}";
+                string memKey = $"movpi:black_magic:{uri}:{proxy_data.ip}";
                 if (!hybridCache.TryGetValue(memKey, out (string m3u8, List<HeadersModel> headers) cache))
                 {
                     if (init.priorityBrowser == "scraping")
@@ -104,7 +96,7 @@ namespace Online.Controllers
                         #region Playwright
                         using (var browser = new PlaywrightBrowser(init.priorityBrowser))
                         {
-                            var page = await browser.NewPageAsync(init.plugin, httpHeaders(init).ToDictionary(), proxy);
+                            var page = await browser.NewPageAsync(init.plugin, httpHeaders(init).ToDictionary(), proxy_data);
                             if (page == null)
                                 return default;
 
@@ -120,7 +112,7 @@ namespace Online.Controllers
 
                                     if (browser.IsCompleted)
                                     {
-                                        PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                        PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                         await route.AbortAsync();
                                         return;
                                     }
@@ -148,7 +140,7 @@ namespace Online.Controllers
                                             cache.headers.Add(new HeadersModel(item.Key, item.Value.ToString()));
                                         }
 
-                                        PlaywrightBase.ConsoleLog($"Playwright: SET {route.Request.Url}", cache.headers);
+                                        PlaywrightBase.ConsoleLog(() => ($"Playwright: SET {route.Request.Url}", cache.headers));
                                         browser.SetPageResult(route.Request.Url);
                                         await route.AbortAsync();
                                         return;
@@ -168,12 +160,12 @@ namespace Online.Controllers
 
                     if (cache.m3u8 == null)
                     {
-                        proxyManager.Refresh();
+                        proxyManager?.Refresh();
                         return default;
                     }
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, cache, cacheTime(20, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(memKey, cache, cacheTime(20));
                 }
 
                 return cache;

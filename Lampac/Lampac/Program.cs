@@ -1,8 +1,11 @@
 using Lampac.Engine;
 using Lampac.Engine.CRON;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyModel;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -29,9 +32,16 @@ namespace Lampac
     public class Program
     {
         #region static
-        public static bool _reload = true;
+        public static string Runtime { get; private set; }
+
+        public static bool RuntimeCve2025_55315 { get; private set; }
+
+        public static AppReload appReload { get; private set; }
+
+        public static List<PortableExecutableReference> assemblieReferences { get; private set; }
 
         static IHost _host;
+        public static bool _reload { get; private set; } = true;
 
         public static List<(IPAddress prefix, int prefixLength)> cloudflare_ips = new List<(IPAddress prefix, int prefixLength)>();
 
@@ -68,7 +78,6 @@ namespace Lampac
                 }
             }
 
-
             AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
             {
                 foreach (string name in new string[] { $"ru/{assemblyName.Name}", assemblyName.Name })
@@ -88,12 +97,35 @@ namespace Lampac
         #region Run
         static void Run(string[] args)
         {
+            #region assemblieReferences
+            var dependencyContext = DependencyContext.Default;
+            var assemblies = dependencyContext.RuntimeLibraries
+                .SelectMany(library => library.GetDefaultAssemblyNames(dependencyContext))
+                .Select(Assembly.Load)
+                .ToList();
+
+            assemblieReferences = assemblies.Select(assembly => MetadataReference.CreateFromFile(assembly.Location)).ToList();
+            #endregion
+
+            #region dotnet runtime
+            var asm = typeof(WebApplication).Assembly;
+            string info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info))
+            {
+                Runtime = info.Split('+', '-', ' ')[0];
+                RuntimeCve2025_55315 = Runtime is "9.0.1" or "9.0.2" or "9.0.3" or "9.0.4" or "9.0.5" or "9.0.6" or "9.0.7" or "9.0.8" or "9.0.9";
+            }
+            #endregion
+
             CultureInfo.CurrentCulture = new CultureInfo("ru-RU");
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+            var init = AppInit.conf;
+            var mods = init.BaseModule;
+
             #region GC
-            var gc = AppInit.conf.GC;
-            if (gc != null && gc.enable && (gc.aggressive || AppInit.conf.multiaccess == false))
+            var gc = init.GC;
+            if (gc != null && gc.enable)
             {
                 if (gc.Concurrent.HasValue)
                     AppContext.SetSwitch("System.GC.Concurrent", gc.Concurrent.Value);
@@ -109,25 +141,39 @@ namespace Lampac
             }
             #endregion
 
+            #region Http.onlog
             Http.onlog += (e, log) =>
             {
-                nws.SendLog(log, "http");
-                soks.SendLog(log, "http");
-            };
+                if (mods.nws)
+                    NativeWebSocket.SendLog(log, "http");
 
+                if (mods.ws)
+                    soks.SendLog(log, "http");
+            };
+            #endregion
+
+            #region RchClient
             RchClient.hub += (e, req) =>
             {
-                _ = nws.SendRchRequestAsync(req.connectionId, req.rchId, req.url, req.data, req.headers, req.returnHeaders).ConfigureAwait(false);
-                _ = soks.hubClients?.Client(req.connectionId)?.SendAsync("RchClient", req.rchId, req.url, req.data, req.headers, req.returnHeaders)?.ConfigureAwait(false);
+                if (mods.nws)
+                    _ = NativeWebSocket.SendRchRequestAsync(req.connectionId, req.rchId, req.url, req.data, req.headers, req.returnHeaders).ConfigureAwait(false);
+
+                if (mods.ws)
+                    _ = soks.hubClients?.Client(req.connectionId)?.SendAsync("RchClient", req.rchId, req.url, req.data, req.headers, req.returnHeaders)?.ConfigureAwait(false);
             };
+            #endregion
 
-            string init = JsonConvert.SerializeObject(AppInit.conf, Formatting.Indented, new JsonSerializerSettings()
+            #region current.conf
+            if (!AppInit.conf.multiaccess)
             {
-                NullValueHandling = NullValueHandling.Ignore
-            });
+                Console.WriteLine(JsonConvert.SerializeObject(AppInit.conf, Formatting.Indented, new JsonSerializerSettings()
+                {
+                    NullValueHandling = NullValueHandling.Ignore
+                }));
+            }
 
-            Console.WriteLine(init + "\n");
             File.WriteAllText("current.conf", JsonConvert.SerializeObject(AppInit.conf, Formatting.Indented));
+            #endregion
 
             ThreadPool.GetMinThreads(out int workerThreads, out int completionPortThreads);
             ThreadPool.SetMinThreads(Math.Max(4096, workerThreads), Math.Max(1024, completionPortThreads));
@@ -154,12 +200,20 @@ namespace Lampac
             #endregion
 
             #region SQL
-            ExternalidsContext.Initialization();
             HybridCacheContext.Initialization();
-            SisiContext.Initialization();
             ProxyLinkContext.Initialization();
-            PlaywrightContext.Initialization();
-            SyncUserContext.Initialization();
+
+            if (init.chromium.enable || init.firefox.enable)
+                PlaywrightContext.Initialization();
+
+            if (mods.Sql.externalids)
+                ExternalidsContext.Initialization();
+
+            if (mods.Sql.sisi)
+                SisiContext.Initialization();
+
+            if (mods.Sql.syncUser)
+                SyncUserContext.Initialization();
             #endregion
 
             #region migration
@@ -168,7 +222,7 @@ namespace Lampac
                 Console.WriteLine("run migration");
 
                 #region cache/storage
-                if (Directory.Exists("cache/storage"))
+                if (mods.Sql.syncUser && Directory.Exists("cache/storage"))
                 {
                     string sourceDir = "cache/storage";
                     string targetDir = "database/storage";
@@ -197,7 +251,7 @@ namespace Lampac
                 #endregion
 
                 #region cache/bookmarks/sisi
-                if (Directory.Exists("cache/bookmarks/sisi"))
+                if (mods.Sql.sisi && Directory.Exists("cache/bookmarks/sisi"))
                 {
                     using (var sqlDb = new SisiContext())
                     {
@@ -258,19 +312,19 @@ namespace Lampac
             #endregion
 
             #region Playwright
-            if (AppInit.conf.chromium.enable || AppInit.conf.firefox.enable)
+            if (init.chromium.enable || init.firefox.enable)
             {
-                if (!AppInit.conf.multiaccess)
+                if (!init.multiaccess)
                     Environment.SetEnvironmentVariable("NODE_OPTIONS", "--max-old-space-size=256");
 
                 ThreadPool.QueueUserWorkItem(async _ =>
                 {
                     if (await PlaywrightBase.InitializationAsync())
                     {
-                        if (AppInit.conf.chromium.enable)
+                        if (init.chromium.enable)
                             _ = Chromium.CreateAsync().ConfigureAwait(false);
 
-                        if (AppInit.conf.firefox.enable)
+                        if (init.firefox.enable)
                             _ = Firefox.CreateAsync().ConfigureAwait(false);
                     }
                 });
@@ -281,7 +335,7 @@ namespace Lampac
             #endregion
 
             #region cloudflare_ips
-            ThreadPool.QueueUserWorkItem(async _ => 
+            ThreadPool.QueueUserWorkItem(async _ =>
             {
                 string ips = await Http.Get("https://www.cloudflare.com/ips-v4");
                 if (ips == null || !ips.Contains("173.245."))
@@ -317,7 +371,7 @@ namespace Lampac
             #region fix update.sh
             if (File.Exists("update.sh"))
             {
-                var olds = new string[] 
+                var olds = new string[]
                 {
                     "02a7e97392e63b7e9e35a39ce475d6f8",
                     "6354eab8b101af90cb247fc8c977dd6b",
@@ -335,16 +389,18 @@ namespace Lampac
                     "30078b973188c696273e10d6ef0ebbb2",
                     "92f5e2e03d2cc2697f2ee00becdb4696",
                     "b565c7e163485b8f8cc258b95f2891b6",
-                    "ec6659f1f91f1f6ec0c734ff2111c7d7"
+                    "ec6659f1f91f1f6ec0c734ff2111c7d7",
+                    "43c8f2a9fe75a3ce9c109e67bc552ace",
+                    "1ba06699c494190bce44f6786a24b96a"
                 };
 
                 try
                 {
                     if (olds.Contains(CrypTo.md5(File.ReadAllText("update.sh"))))
                     {
-                        ThreadPool.QueueUserWorkItem(async _ => 
+                        ThreadPool.QueueUserWorkItem(async _ =>
                         {
-                            string new_update = await Http.Get("https://raw.githubusercontent.com/immisterio/Lampac/refs/heads/main/update.sh");
+                            string new_update = await Http.Get("https://raw.githubusercontent.com/lampac-talks/lampac/refs/heads/main/update.sh");
                             if (new_update != null && new_update.Contains("DEST=\"/home/lampac\""))
                                 File.WriteAllText("update.sh", new_update);
                         });
@@ -355,11 +411,24 @@ namespace Lampac
             #endregion
 
             CacheCron.Run();
-            KurwaCron.Run();
+
+            if (mods.kurwaCron)
+                KurwaCron.Run();
+
             PluginsCron.Run();
             SyncCron.Run();
-            TrackersCron.Run();
+
+            if (AppInit.modules?.FirstOrDefault(i => i.dll == "DLNA.dll" && i.enable) != null)
+                TrackersCron.Run();
+
             LampaCron.Run();
+
+            appReload = new AppReload();
+            appReload.InkvReload = () =>
+            {
+                _host.StopAsync();
+                AppInit.LoadModules();
+            };
 
             _usersTimer = new Timer(UpdateUsersDb, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
             _kitTimer = new Timer(UpdateKitDb, null, TimeSpan.Zero, TimeSpan.FromSeconds(Math.Max(5, AppInit.conf.kit.cacheToSeconds)));
@@ -370,17 +439,6 @@ namespace Lampac
                 _reload = false;
                 _host.Run();
             }
-        }
-        #endregion
-
-
-        #region Reload
-        public static void Reload()
-        {
-            _reload = true;
-            _host.StopAsync();
-
-            AppInit.LoadModules();
         }
         #endregion
 
@@ -426,18 +484,16 @@ namespace Lampac
 
 
         #region UpdateUsersDb
-        static bool _updateUsersDb = false;
+        static int _updateUsersDb = 0;
         static string _usersKeyUpdate = string.Empty;
 
         static void UpdateUsersDb(object state)
         {
-            if (_updateUsersDb)
+            if (Interlocked.Exchange(ref _updateUsersDb, 1) == 1)
                 return;
 
             try
             {
-                _updateUsersDb = true;
-
                 if (File.Exists("users.json"))
                 {
                     var lastWriteTime = File.GetLastWriteTime("users.json");
@@ -477,23 +533,21 @@ namespace Lampac
             catch { }
             finally
             {
-                _updateUsersDb = false;
+                Volatile.Write(ref _updateUsersDb, 0);
             }
         }
         #endregion
 
         #region UpdateKitDb
-        static bool _updateKitDb = false;
+        static int _updateKitDb = 0;
 
         async static void UpdateKitDb(object state)
         {
-            if (_updateKitDb)
+            if (Interlocked.Exchange(ref _updateKitDb, 1) == 1)
                 return;
 
             try
             {
-                _updateKitDb = true;
-
                 if (AppInit.conf.kit.enable && AppInit.conf.kit.IsAllUsersPath && !string.IsNullOrEmpty(AppInit.conf.kit.path))
                 {
                     var users = await Http.Get<Dictionary<string, JObject>>(AppInit.conf.kit.path);
@@ -504,7 +558,7 @@ namespace Lampac
             catch { }
             finally
             {
-                _updateKitDb = false;
+                Volatile.Write(ref _updateKitDb, 0);
             }
         }
         #endregion

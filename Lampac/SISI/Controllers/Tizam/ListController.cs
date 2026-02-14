@@ -1,89 +1,78 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Shared.Engine.RxEnumerate;
 using System.Web;
 
 namespace SISI.Controllers.Tizam
 {
     public class ListController : BaseSisiController
     {
-        [Route("tizam")]
-        async public ValueTask<ActionResult> Index(string search, int pg = 1)
-        {
-            var init = await loadKit(AppInit.conf.Tizam);
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
+        public ListController() : base(AppInit.conf.Tizam) { }
 
+        [Route("tizam")]
+        async public Task<ActionResult> Index(string search, int pg = 1)
+        {
             if (!string.IsNullOrEmpty(search))
                 return OnError("no search", false);
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
+            if (await IsRequestBlocked(rch: true, rch_keepalive: -1))
+                return badInitMsg;
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"tizam:{pg}";
-
-            return await InvkSemaphore(memKey, async () =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<List<PlaylistItem>>($"tizam:{pg}", 60, async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out List<PlaylistItem> playlists, inmemory: false))
+                string uri = $"{init.corsHost()}/fil_my_dlya_vzroslyh/s_russkim_perevodom/";
+
+                int page = pg - 1;
+                if (page > 0)
+                    uri += $"?p={page}";
+
+                List<PlaylistItem> playlists = null;
+
+                await httpHydra.GetSpan(uri, span => 
                 {
-                    string uri = $"{init.corsHost()}/fil_my_dlya_vzroslyh/s_russkim_perevodom/";
+                    playlists = Playlist(span);
+                });
 
-                    int page = pg - 1;
-                    if (page > 0)
-                        uri += $"?p={page}";
+                if (playlists == null || playlists.Count == 0)
+                    return e.Fail("playlists", refresh_proxy: true);
 
-                    reset:
-                    string html = rch.enable 
-                        ? await rch.Get(init.cors(uri), httpHeaders(init)) 
-                        : await Http.Get(init.cors(uri), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init));
-
-                    playlists = Playlist(html);
-
-                    if (playlists.Count == 0)
-                    {
-                        if (IsRhubFallback(init))
-                            goto reset;
-
-                        return OnError("playlists", proxyManager);
-                    }
-
-                    if (!rch.enable)
-                        proxyManager.Success();
-
-                    hybridCache.Set(memKey, playlists, cacheTime(60, init: init), inmemory: false);
-                }
-
-                return OnResult(playlists, null, plugin: init.plugin, imageHeaders: httpHeaders(init.host, init.headers_image));
+                return e.Success(playlists);
             });
+
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
+
+            return await PlaylistResult(cache);
         }
 
 
-        static List<PlaylistItem> Playlist(string html)
+        static List<PlaylistItem> Playlist(ReadOnlySpan<char> html)
         {
-            var playlists = new List<PlaylistItem>() { Capacity = 25 };
-            if (string.IsNullOrEmpty(html))
-                return playlists;
+            if (html.IsEmpty)
+                return null;
 
-            foreach (string row in Regex.Split(html.Split("id=\"pagination\"")[0], "video-item").Skip(1))
+            var pagination = Rx.Split("id=\"pagination\"", html);
+            if (pagination.Count == 0)
+                return null;
+
+            var rx = Rx.Split("video-item", pagination[0].Span, 1);
+            if (rx.Count == 0)
+                return null;
+
+            var playlists = new List<PlaylistItem>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
                 if (row.Contains("pin--premium"))
                     continue;
 
-                string title = Regex.Match(row, "-name=\"name\">([^<]+)<").Groups[1].Value;
-                string href = Regex.Match(row, "href=\"/([^\"]+)\" itemprop=\"url\"").Groups[1].Value;
+                string title = row.Match("-name=\"name\">([^<]+)<");
+                string href = row.Match("href=\"/([^\"]+)\" itemprop=\"url\"");
 
                 if (!string.IsNullOrEmpty(href) && !string.IsNullOrWhiteSpace(title))
                 {
-                    string duration = Regex.Match(row, "itemprop=\"duration\" content=\"([^<]+)\"").Groups[1].Value;
-
-                    string img = Regex.Match(row, "class=\"item__img\" src=\"/([^\"]+)\"").Groups[1].Value;
-                    if (string.IsNullOrEmpty(img))
+                    string img = row.Match("class=\"item__img\" src=\"/([^\"]+)\"");
+                    if (img == null)
                         continue;
 
                     var pl = new PlaylistItem()
@@ -91,7 +80,7 @@ namespace SISI.Controllers.Tizam
                         name = title,
                         video = $"tizam/vidosik?uri={HttpUtility.UrlEncode(href)}",
                         picture = $"{AppInit.conf.Tizam.host}/{img}",
-                        time = duration?.Trim(),
+                        time = row.Match("itemprop=\"duration\" content=\"([^<]+)\"", trim: true),
                         json = true,
                         bookmark = new Bookmark()
                         {

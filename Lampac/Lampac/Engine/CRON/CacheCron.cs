@@ -16,14 +16,13 @@ namespace Lampac.Engine.CRON
 
         static Timer _cronTimer;
 
-        static bool _cronWork = false;
+
+        static int _updatingDb = 0;
 
         static void cron(object state)
         {
-            if (_cronWork)
+            if (Interlocked.Exchange(ref _updatingDb, 1) == 1)
                 return;
-
-            _cronWork = true;
 
             try
             {
@@ -42,12 +41,13 @@ namespace Lampac.Engine.CRON
                 {
                     try
                     {
-                        if (conf.minute == -1 || !Directory.Exists(Path.Combine("cache", conf.path)))
+                        string path = Path.Combine("cache", conf.path);
+                        if (conf.minute == -1 || !Directory.Exists(path))
                             continue;
 
-                        var ex = DateTime.Now.AddMinutes(-conf.minute);
+                        var ex = DateTime.UtcNow.AddMinutes(-conf.minute);
 
-                        foreach (string infile in Directory.EnumerateFiles(Path.Combine("cache", conf.path), "*", SearchOption.AllDirectories))
+                        foreach (string infile in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
                         {
                             try
                             {
@@ -55,11 +55,11 @@ namespace Lampac.Engine.CRON
                                     File.Delete(infile);
                                 else
                                 {
-                                    var fileinfo = new FileInfo(infile);
-                                    if (ex > fileinfo.LastWriteTime)
-                                        fileinfo.Delete();
+                                    var lastWriteTime = File.GetLastWriteTimeUtc(infile);
+                                    if (ex > lastWriteTime)
+                                        File.Delete(infile);
                                     else if (freeDiskSpace != -1 && AppInit.conf.fileCacheInactive.freeDiskSpace > freeDiskSpace)
-                                        files.TryAdd(infile, fileinfo);
+                                        files.TryAdd(infile, new FileInfo(infile));
                                 }
                             }
                             catch { }
@@ -91,9 +91,9 @@ namespace Lampac.Engine.CRON
                 }
             }
             catch { }
-            finally 
+            finally
             {
-                _cronWork = false;
+                Volatile.Write(ref _updatingDb, 0);
             }
         }
 

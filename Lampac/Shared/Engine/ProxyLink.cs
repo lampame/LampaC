@@ -6,8 +6,6 @@ using Shared.Models.SQL;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Shared.Engine
@@ -15,14 +13,11 @@ namespace Shared.Engine
     public class ProxyLink : IProxyLink
     {
         #region ProxyLink
-        static ConcurrentDictionary<string, ProxyLinkModel> links = new ConcurrentDictionary<string, ProxyLinkModel>();
+        static readonly ConcurrentDictionary<string, ProxyLinkModel> links = new();
 
-        static Timer _cronTimer;
+        static readonly Timer _cronTimer = new Timer(Cron, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 
-        static ProxyLink()
-        {
-            _cronTimer = new Timer(Cron, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        }
+        public static int Stat_ContLinks => links.IsEmpty ? 0 : links.Count;
         #endregion
 
 
@@ -42,13 +37,13 @@ namespace Shared.Engine
 
             if (plugin == "posterapi")
             {
-                hash = AesTo.Encrypt(JsonSerializer.Serialize(new { u = uri_clear }));
+                hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload() { u = uri_clear }));
             }
             else if (!forceMd5 && AppInit.conf.serverproxy.encrypt_aes && (headers == null || headers.Count == 0) && proxy == null && !uri_clear.Contains(" or "))
             {
                 if (verifyip && AppInit.conf.serverproxy.verifyip)
                 {
-                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new
+                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload()
                     {
                         p = plugin,
                         u = uri_clear,
@@ -59,7 +54,7 @@ namespace Shared.Engine
                 }
                 else
                 {
-                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new { p = plugin, u = uri_clear }));
+                    hash = AesTo.Encrypt(JsonSerializer.Serialize(new AesPayload() { p = plugin, u = uri_clear }));
                 }
             }
             else
@@ -129,26 +124,34 @@ namespace Shared.Engine
 
             if (IsAes(hash))
             {
-                hash = Regex.Replace(hash, "\\.[a-z0-9]+$", "", RegexOptions.IgnoreCase);
+                ReadOnlySpan<char> hashSpan = hash.AsSpan();
+                int dot = hash.LastIndexOf('.');
+                if (dot > 0)
+                    hashSpan = hashSpan.Slice(0, dot);
 
-                string dec = AesTo.Decrypt(hash);
+                string dec = AesTo.Decrypt(hashSpan);
                 if (string.IsNullOrEmpty(dec))
                     return null;
 
-                var root = JsonNode.Parse(dec);
+                var root = JsonSerializer.Deserialize<AesPayload>(dec);
+                if (root == null)
+                    return null;
 
-                if (root["v"]?.GetValue<bool>() == true)
+                if (root.v)
                 {
-                    if (reqip != null && root["i"].GetValue<string>() != reqip)
+                    if (reqip != null && root.i != reqip)
                         return null;
 
-                    if (DateTime.Now > root["e"].GetValue<DateTime>())
+                    if (DateTime.Now > root.e)
                         return null;
                 }
 
-                var headers = HeadersModel.Init(root["h"]?.Deserialize<Dictionary<string, string>>());
+                List<HeadersModel> headers = null;
 
-                return new ProxyLinkModel(reqip, headers, null, root["u"].GetValue<string>(), root["p"]?.GetValue<string>());
+                if (root.h != null && root.h.Count > 0)
+                    headers = HeadersModel.Init(root.h);
+
+                return new ProxyLinkModel(reqip, headers, null, root.u, root.p);
             }
 
             if (!links.TryGetValue(hash, out ProxyLinkModel val))
@@ -157,7 +160,9 @@ namespace Shared.Engine
                 {
                     if (IsUseSql(hash))
                     {
-                        using (var sqlDb = new ProxyLinkContext())
+                        using (var sqlDb = ProxyLinkContext.Factory != null
+                            ? ProxyLinkContext.Factory.CreateDbContext()
+                            : new ProxyLinkContext())
                         {
                             var link = sqlDb.links.Find(hash);
 
@@ -184,28 +189,51 @@ namespace Shared.Engine
         #endregion
 
         #region IsAes
-        public static bool IsAes(string hash)
+        public static bool IsAes(ReadOnlySpan<char> hash)
         {
-            if (hash.StartsWith("http"))
+            if (hash.IsEmpty)
                 return false;
 
-            if (hash.Split('?', '&', '.')[0].Length == 32)
+            if (hash.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            return true;
+            // Ищем первый из ?, &, .
+            int idx = hash.IndexOfAny('?', '&', '.');
+
+            ReadOnlySpan<char> firstPart;
+            if (idx >= 0)
+                firstPart = hash.Slice(0, idx);
+            else
+                firstPart = hash;
+
+            // Если длина 32 — это не AES
+            return firstPart.Length != 32;
         }
         #endregion
 
         #region IsUseSql
-        static bool IsUseSql(string hash)
+        static bool IsUseSql(ReadOnlySpan<char> hash)
         {
-            bool useSql = AppInit.conf.mikrotik;
-            if (useSql && AppInit.conf.serverproxy.image.noSqlDb)
-            {
-                string extension = Regex.Match(hash, "\\.([a-z0-9]+)$", RegexOptions.IgnoreCase).Groups[1].Value;
+            if (AppInit.conf.mikrotik)
+                return false;
 
-                if (extension is "jpg" or "jpeg" or "png" or "webp")
-                    useSql = false;
+            bool useSql = true;
+            if (AppInit.conf.serverproxy.image.noSqlDb)
+            {
+                int dot = hash.LastIndexOf('.');
+                if (dot > 0)
+                {
+                    ReadOnlySpan<char> ext = hash.Slice(dot + 1);
+
+                    useSql = ext switch
+                    {
+                        var e when e.Equals("jpg", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("jpeg", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("png", StringComparison.OrdinalIgnoreCase) => false,
+                        var e when e.Equals("webp", StringComparison.OrdinalIgnoreCase) => false,
+                        _ => true
+                    };
+                }
             }
 
             return useSql;
@@ -214,92 +242,131 @@ namespace Shared.Engine
 
 
         #region Cron
-        static HashSet<string> tempLinks = new();
+        static HashSet<string> tempLinks = new(1000), sqlLinks = new(1000), delete_ids = new(1000);
 
         static int cronRound = 0;
 
-        static DateTime _nextClearDb = DateTime.Now.AddHours(1);
+        static DateTime _nextClearDb = DateTime.Now.AddMinutes(5);
 
-        static bool _cronWork = false;
+        static int _updatingDb = 0;
 
         async static void Cron(object state)
         {
-            if (_cronWork || links.Count == 0)
+            if (links.IsEmpty)
                 return;
 
-            _cronWork = true;
+            if (Interlocked.Exchange(ref _updatingDb, 1) == 1)
+                return;
 
             try
             {
-                if (cronRound == 60)
+                if (cronRound >= 60)
                 {
                     cronRound = 0;
                     tempLinks.Clear();
                 }
 
                 cronRound++;
+                var now = DateTime.Now;
 
-                using (var sqlDb = new ProxyLinkContext())
+                if (now > _nextClearDb)
                 {
-                    if (DateTime.Now > _nextClearDb)
+                    _nextClearDb = now.AddMinutes(5);
+
+                    using (var sqlDb = new ProxyLinkContext())
                     {
-                        _nextClearDb = DateTime.Now.AddHours(1);
-
-                        var now = DateTime.Now;
-
                         await sqlDb.links
-                             .Where(i => now > i.ex)
-                             .ExecuteDeleteAsync();
+                            .Where(i => now > i.ex)
+                            .ExecuteDeleteAsync();
                     }
-                    else
+                }
+                else
+                {
+                    sqlLinks.Clear();
+                    delete_ids.Clear();
+
+                    foreach (var link in links)
                     {
-                        foreach (var link in links.ToArray())
+                        try
                         {
-                            try
+                            if (IsUseSql(link.Key) == false || link.Value.proxy != null || now.AddMinutes(5) > link.Value.ex || link.Value.uri.Contains(" or "))
                             {
-                                if (IsUseSql(link.Key) == false || AppInit.conf.mikrotik || link.Value.proxy != null || DateTime.Now.AddMinutes(5) > link.Value.ex || link.Value.uri.Contains(" or "))
-                                {
-                                    if (DateTime.Now > link.Value.ex)
-                                        links.TryRemove(link.Key, out _);
-                                }
+                                if (now > link.Value.ex)
+                                    delete_ids.Add(link.Key);
+                            }
+                            else
+                            {
+                                if (tempLinks.Contains(link.Key))
+                                    delete_ids.Add(link.Key);
                                 else
                                 {
-                                    if (tempLinks.Contains(link.Key))
-                                        links.TryRemove(link.Key, out _);
-                                    else
-                                    {
-                                        link.Value.id = link.Key;
-
-                                        await sqlDb.links
-                                            .Where(x => x.Id == link.Key)
-                                            .ExecuteDeleteAsync();
-
-                                        sqlDb.links.Add(new ProxyLinkSqlModel()
-                                        {
-                                            Id = link.Key,
-                                            ex = link.Value.ex,
-                                            json = JsonSerializer.Serialize(link.Value)
-                                        });
-
-                                        if (await sqlDb.SaveChangesAsync() > 0)
-                                        {
-                                            tempLinks.Add(link.Key);
-                                            links.TryRemove(link.Key, out _);
-                                        }
-                                    }
+                                    sqlLinks.Add(link.Key);
                                 }
                             }
-                            catch (Exception ex) { Console.WriteLine($"ProxyLink: {ex}"); }
+                        }
+                        catch { }
+                    }
+
+                    if (delete_ids.Count > 0)
+                    {
+                        foreach (string removeId in delete_ids)
+                            links.TryRemove(removeId, out _);
+                    }
+
+                    if (sqlLinks.Count > 0)
+                    {
+                        using (var sqlDb = new ProxyLinkContext())
+                        {
+                            await sqlDb.links
+                                .Where(x => sqlLinks.Contains(x.Id))
+                                .ExecuteDeleteAsync();
+
+                            foreach (string linkId in sqlLinks)
+                            {
+                                if (links.TryRemove(linkId, out var link))
+                                {
+                                    if (link.id == null)
+                                        link.id = linkId;
+
+                                    sqlDb.links.Add(new ProxyLinkSqlModel()
+                                    {
+                                        Id = linkId,
+                                        ex = link.ex,
+                                        json = JsonSerializer.Serialize(link)
+                                    });
+                                }
+                            }
+
+                            await sqlDb.SaveChangesAsync();
+
+                            foreach (string removeLink in sqlLinks)
+                                tempLinks.Add(removeLink);
                         }
                     }
                 }
             }
-            catch (Exception ex) { Console.WriteLine($"ProxyLink: {ex}"); }
+            catch (Exception ex) 
+            { 
+                Console.WriteLine($"ProxyLink: {ex}"); 
+            }
             finally 
             {
-                _cronWork = false;
+                Volatile.Write(ref _updatingDb, 0);
             }
         }
         #endregion
+
+
+
+
+        sealed class AesPayload
+        {
+            public string p { get; set; }
+            public string u { get; set; }
+            public string i { get; set; }
+            public bool v { get; set; }
+            public DateTime e { get; set; }
+            public Dictionary<string, string> h { get; set; }
+        }
     }
 }

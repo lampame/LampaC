@@ -1,22 +1,42 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
 namespace Shared.Models.SQL
 {
     public partial class ProxyLinkContext
     {
-        public static ProxyLinkContext Read { get; private set; }
+        public static IDbContextFactory<ProxyLinkContext> Factory { get; set; }
 
         public static void Initialization() 
         {
+            Directory.CreateDirectory("cache");
+
             try
             {
-                var sqlDb = new ProxyLinkContext();
+                using (var sqlDb = new ProxyLinkContext())
                     sqlDb.Database.EnsureCreated();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ProxyLinkDb initialization failed: {ex.Message}");
+            }
+        }
+
+        static readonly string _connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = "cache/ProxyLink.sql",
+            Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 10,
+            Pooling = true
+        }.ToString();
+
+        public static void ConfiguringDbBuilder(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlite(_connection);
+                optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
             }
         }
     }
@@ -28,8 +48,7 @@ namespace Shared.Models.SQL
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite("Data Source=cache/ProxyLink.sql");
-            optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+            ConfiguringDbBuilder(optionsBuilder);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -13,17 +13,20 @@ namespace Shared.Models
         Task EventsAsync(string connectionId, string uid, string name, string data);
 
         Task SendAsync(string connectionId, string method, params object[] args);
+
+        int CountWeblogClients { get; }
+
+        int CountEventClients { get; }
     }
 
     public class NwsConnection : IDisposable
     {
-        public NwsConnection(string connectionId, WebSocket socket, string host, string ip, string userAgent)
+        public NwsConnection(string connectionId, WebSocket socket, string host, RequestModel requestInfo)
         {
             ConnectionId = connectionId;
             Socket = socket;
             Host = host;
-            Ip = ip;
-            UserAgent = userAgent;
+            RequestInfo = requestInfo;
             SendLock = new SemaphoreSlim(1, 1);
             UpdateActivity();
         }
@@ -34,15 +37,14 @@ namespace Shared.Models
 
         public string Host { get; }
 
-        public string Ip { get; }
+        public string Ip => RequestInfo.IP;
 
-        public string UserAgent { get; }
+        public RequestModel RequestInfo { get; }
 
         public SemaphoreSlim SendLock { get; }
 
+        #region LastActivityUtc
         long _lastActivityTicks;
-
-        CancellationTokenSource _cancellationSource;
 
         public DateTime LastActivityUtc
         {
@@ -57,6 +59,27 @@ namespace Shared.Models
         {
             Interlocked.Exchange(ref _lastActivityTicks, DateTime.UtcNow.Ticks);
         }
+        #endregion
+
+        #region LastSendActivityUtc
+        long _lastSendActivityTicks;
+
+        public DateTime LastSendActivityUtc
+        {
+            get
+            {
+                long ticks = Interlocked.Read(ref _lastSendActivityTicks);
+                return new DateTime(ticks, DateTimeKind.Utc);
+            }
+        }
+
+        public void UpdateSendActivity()
+        {
+            Interlocked.Exchange(ref _lastSendActivityTicks, DateTime.UtcNow.Ticks);
+        }
+        #endregion
+
+        CancellationTokenSource _cancellationSource;
 
         public void SetCancellationSource(CancellationTokenSource source)
         {

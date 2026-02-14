@@ -9,16 +9,37 @@ namespace Shared.Models.SQL
     {
         public static readonly SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
 
+        public static IDbContextFactory<ExternalidsContext> Factory { get; set; }
+
         public static void Initialization() 
         {
+            Directory.CreateDirectory("cache");
+
             try
             {
-                var sqlDb = new ExternalidsContext();
+                using (var sqlDb = new ExternalidsContext())
                     sqlDb.Database.EnsureCreated();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ExternalidsDb initialization failed: {ex.Message}");
+            }
+        }
+
+        static readonly string _connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = "cache/Externalids.sql",
+            Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 10,
+            Pooling = true
+        }.ToString();
+
+        public static void ConfiguringDbBuilder(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlite(_connection);
+                optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
             }
         }
 
@@ -50,15 +71,7 @@ namespace Shared.Models.SQL
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite(new SqliteConnectionStringBuilder
-            {
-                DataSource = "cache/Externalids.sql",
-                Cache = SqliteCacheMode.Shared,
-                DefaultTimeout = 10,
-                Pooling = true
-            }.ToString());
-
-            optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+            ConfiguringDbBuilder(optionsBuilder);
         }
     }
 

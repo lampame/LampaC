@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 
 namespace Online.Controllers
 {
@@ -9,38 +10,32 @@ namespace Online.Controllers
             Directory.CreateDirectory("cache/logs/MoonAnime");
         }
 
+        public MoonAnime() : base(AppInit.conf.MoonAnime) { }
+
+
         [HttpGet]
         [Route("lite/moonanime")]
-        async public ValueTask<ActionResult> Index(string imdb_id, string title, string original_title, long animeid, string t, int s = -1, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Index(string imdb_id, string title, string original_title, long animeid, string t, int s = -1, bool rjson = false, bool similar = false)
         {
-            var init = await loadKit(AppInit.conf.MoonAnime);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.token))
-                return OnError();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
+                return OnError("token", statusCode: 401, gbcache: false);
 
             if (animeid == 0)
             {
                 #region Поиск
-                string memkey = $"moonanime:search:{imdb_id}:{title}:{original_title}";
-
-                return await InvkSemaphore(init, memkey, async () =>
+                return await InvkSemaphore($"moonanime:search:{imdb_id}:{title}:{original_title}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memkey, out List<(string title, string year, long id, string poster)> catalog, inmemory: false))
+                    if (!hybridCache.TryGetValue(key, out List<(string title, string year, long id, string poster)> catalog, inmemory: false))
                     {
                         async Task<JObject> goSearch(string arg)
                         {
                             if (string.IsNullOrEmpty(arg.Split("=")?[1]))
                                 return null;
 
-                            var search = await Http.Get<JObject>($"{init.corsHost()}/api/2.0/titles?api_key={init.token}&limit=20" + arg, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                            var search = await httpHydra.Get<JObject>($"{init.corsHost()}/api/2.0/titles?api_key={init.token}&limit=20" + arg, safety: true);
                             if (search == null || !search.ContainsKey("anime_list"))
                                 return null;
 
@@ -50,9 +45,12 @@ namespace Online.Controllers
                             return search;
                         }
 
-                        JObject search = await goSearch($"&imdbid={imdb_id}") ?? await goSearch($"&japanese_title={HttpUtility.UrlEncode(original_title)}") ?? await goSearch($"&title={HttpUtility.UrlEncode(title)}");
+                        JObject search = await goSearch($"&imdbid={imdb_id}") 
+                            ?? await goSearch($"&japanese_title={HttpUtility.UrlEncode(original_title)}") 
+                            ?? await goSearch($"&title={HttpUtility.UrlEncode(title)}");
+
                         if (search == null)
-                            return OnError(proxyManager);
+                            return OnError(refresh_proxy: true);
 
                         catalog = new List<(string title, string year, long id, string poster)>();
 
@@ -70,8 +68,8 @@ namespace Online.Controllers
                         if (catalog.Count == 0)
                             return OnError();
 
-                        proxyManager.Success();
-                        hybridCache.Set(memkey, catalog, cacheTime(40, init: init), inmemory: false);
+                        proxyManager?.Success();
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (!similar && catalog.Count == 1)
@@ -85,25 +83,23 @@ namespace Online.Controllers
                         stpl.Append(res.title, res.year, string.Empty, uri, PosterApi.Size(res.poster));
                     }
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return await ContentTpl(stpl);
                 });
                 #endregion
             }
             else 
             {
                 #region Серии
-                string memKey = $"moonanime:playlist:{animeid}";
-
-                return await InvkSemaphore(init, memKey, async () =>
+                return await InvkSemaphore($"moonanime:playlist:{animeid}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memKey, out JArray root))
+                    if (!hybridCache.TryGetValue(key, out JArray root))
                     {
-                        root = await Http.Get<JArray>($"{init.corsHost()}/api/2.0/title/{animeid}/videos?api_key={init.token}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                        root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/2.0/title/{animeid}/videos?api_key={init.token}", safety: true);
                         if (root == null)
-                            return OnError(proxyManager);
+                            return OnError(refresh_proxy: true);
 
-                        proxyManager.Success();
-                        hybridCache.Set(memKey, root, cacheTime(30, init: init));
+                        proxyManager?.Success();
+                        hybridCache.Set(key, root, cacheTime(30));
                     }
 
                     if (s == -1)
@@ -127,7 +123,7 @@ namespace Online.Controllers
                             }
                         }
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return await ContentTpl(tpl);
                     }
                     else
                     {
@@ -153,7 +149,7 @@ namespace Online.Controllers
                         }
                         #endregion
 
-                        var etpl = new EpisodeTpl();
+                        var etpl = new EpisodeTpl(vtpl);
                         string sArhc = s.ToString();
 
                         foreach (var voices in root)
@@ -182,16 +178,12 @@ namespace Online.Controllers
                             }
                         }
 
-                        if (rjson)
-                            return ContentTo(etpl.ToJson(vtpl));
-
-                        return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                        return await ContentTpl(etpl);
                     }
                 });
                 #endregion
             }
         }
-
 
         #region Video
         [HttpGet]
@@ -199,26 +191,17 @@ namespace Online.Controllers
         [Route("lite/moonanime/video.m3u8")]
         async public ValueTask<ActionResult> Video(string vod, bool play, string title, string original_title)
         {
-            var init = await loadKit(AppInit.conf.MoonAnime);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: true, rch_check: !play))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.token))
-                return OnError();
+                return OnError("token", statusCode: 401, gbcache: false);
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-
-            string memKey = $"moonanime:vod:{vod}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"moonanime:vod:{vod}", async key =>
             {
-                if (!hybridCache.TryGetValue(memKey, out (string file, string subtitle) cache))
+                if (!hybridCache.TryGetValue(key, out (string file, string subtitle) cache))
                 {
-                    string iframe = await Http.Get(vod + "?partner=lampa", timeoutSeconds: 10, httpversion: 2, proxy: proxyManager.Get(), headers: httpHeaders(init, HeadersModel.Init(
+                    await httpHydra.GetSpan(vod + "?partner=lampa", useDefaultHeaders: false, addheaders: HeadersModel.Init(
                         ("cache-control", "no-cache"),
                         ("dnt", "1"),
                         ("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"),
@@ -233,53 +216,49 @@ namespace Online.Controllers
                         ("sec-fetch-user", "?1"),
                         ("upgrade-insecure-requests", "1"),
                         ("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
-                    )));
+                    ), spanAction: iframe => 
+                    {
+                        cache.file = Rx.Match(iframe, "file: ?\"([^\"]+)\"");
 
-                    if (iframe == null)
-                        return OnError(proxyManager);
+                        cache.subtitle = Rx.Match(iframe, "subtitle: ?\"([^\"]+)\"");
+                        if (string.IsNullOrEmpty(cache.subtitle) || cache.subtitle == "null")
+                            cache.subtitle = Rx.Match(iframe, "thumbnails: ?\"([^\"]+)\"");
+                    });
 
-                    cache.file = Regex.Match(iframe, "file: ?\"([^\"]+)\"").Groups[1].Value;
-                    if (string.IsNullOrEmpty(cache.file))
-                        return OnError();
+                    if (cache.file == null)
+                        return OnError(refresh_proxy: true);
 
                     #region stats
-                    _ = await Http.Post("https://moonanime.art/api/stats/", $"{{\"domain\":\"{CrypTo.DecodeBase64("bGFtcGEubXg=")}\",\"player\":\"{vod}?partner=lampa\",\"play\":1}}", timeoutSeconds: 4, httpversion: 2, removeContentType: true, proxy: proxyManager.Get(), headers: HeadersModel.Init(
-                        ("accept", "*/*"),
-                        ("cache-control", "no-cache"),
-                        ("dnt", "1"),
-                        ("origin", CrypTo.DecodeBase64("aHR0cDovL2xhbXBhLm14")),
-                        ("pragma", "no-cache"),
-                        ("priority", "u=1, i"),
-                        ("referer", vod),
-                        ("sec-ch-ua", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\""),
-                        ("sec-ch-ua-mobile", "?0"),
-                        ("sec-ch-ua-platform", "\"Windows\""),
-                        ("sec-fetch-dest", "empty"),
-                        ("sec-fetch-mode", "cors"),
-                        ("sec-fetch-site", "same-origin"),
-                        ("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                    ));
-
-                    try
+                    if (rch?.enable != true)
                     {
-                        System.IO.File.AppendAllText($"cache/logs/MoonAnime/{DateTime.Today.ToString("MM-yyyy")}.txt", $"{DateTime.Now.ToString("dd / HH:mm")} - {requestInfo.IP} / {vod}\n");
+                        _ = await Http.Post("https://moonanime.art/api/stats/", $"{{\"domain\":\"{CrypTo.DecodeBase64("bGFtcGEubXg=")}\",\"player\":\"{vod}?partner=lampa\",\"play\":1}}", timeoutSeconds: 4, httpversion: 2, removeContentType: true, useDefaultHeaders: false, proxy: proxy, headers: HeadersModel.Init(
+                            ("accept", "*/*"),
+                            ("cache-control", "no-cache"),
+                            ("dnt", "1"),
+                            ("origin", CrypTo.DecodeBase64("aHR0cDovL2xhbXBhLm14")),
+                            ("pragma", "no-cache"),
+                            ("priority", "u=1, i"),
+                            ("referer", vod),
+                            ("sec-ch-ua", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\""),
+                            ("sec-ch-ua-mobile", "?0"),
+                            ("sec-ch-ua-platform", "\"Windows\""),
+                            ("sec-fetch-dest", "empty"),
+                            ("sec-fetch-mode", "cors"),
+                            ("sec-fetch-site", "same-origin"),
+                            ("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                        ));
                     }
-                    catch { }
                     #endregion
 
-                    cache.subtitle = Regex.Match(iframe, "subtitle: ?\"([^\"]+)\"").Groups[1].Value;
-                    if (string.IsNullOrEmpty(cache.subtitle) || cache.subtitle == "null")
-                        cache.subtitle = Regex.Match(iframe, "thumbnails: ?\"([^\"]+)\"").Groups[1].Value;
-
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, cache, cacheTime(30, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, cache, cacheTime(30));
                 }
 
                 var subtitles = new SubtitleTpl();
                 if (!string.IsNullOrEmpty(cache.subtitle))
                     subtitles.Append("По умолчанию", cache.subtitle);
 
-                string file = HostStreamProxy(init, cache.file, proxy: proxyManager.Get(), headers: HeadersModel.Init(
+                string file = HostStreamProxy(cache.file, headers: HeadersModel.Init(
                     ("accept", "*/*"),
                     ("accept-language", "ru,en;q=0.9,en-GB;q=0.8,en-US;q=0.7"),
                     ("dnt", "1"),
@@ -293,7 +272,6 @@ namespace Online.Controllers
                     ("sec-fetch-site", "cross-site"),
                     ("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
                 ));
-
 
                 if (play)
                     return RedirectToPlay(file);

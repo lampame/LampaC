@@ -8,13 +8,16 @@ using System.Net;
 
 namespace Online.Controllers
 {
-    public class RezkaPremium : BaseOnlineController
+    public class RezkaPremium : BaseOnlineController<RezkaSettings>
     {
         #region InitRezkaInvoke
         static string uid = null, typeuid = null;
 
-        static void genUid()
+        (RezkaInvoke invk, string cookie, string log) onrezka;
+
+        public RezkaPremium() : base(AppInit.conf.RezkaPrem)
         {
+            #region genUid
             if (uid == null)
             {
                 try
@@ -55,55 +58,72 @@ namespace Online.Controllers
                     typeuid = "generate";
                 }
             }
+            #endregion
+
+            loadKitInitialization = (j, i, c) =>
+            {
+                if (j.ContainsKey("uacdn"))
+                    i.uacdn = c.uacdn;
+
+                if (j.ContainsKey("forceua"))
+                    i.forceua = c.forceua;
+
+                if (j.ContainsKey("reserve"))
+                    i.reserve = c.reserve;
+
+                return i;
+            };
+
+            requestInitializationAsync = async () =>
+            {
+                init.host = new RezkaSettings(null, "kwwsv=22odps1df").host;
+
+                var cook = await getCookie(init);
+                if (string.IsNullOrEmpty(cook.cookie))
+                {
+                    onrezka = (null, null, cook.log);
+                    return;
+                }
+
+                var headers = apiHeaders(cook.cookie);
+
+                string country = requestInfo.Country;
+
+                if (rch != null && !rch.enable && country != null)
+                    headers.Add(new HeadersModel("X-Real-IP", requestInfo.IP));
+
+                if (init.forceua)
+                    country = "UA";
+
+                init.premium = true;
+
+                onrezka = (new RezkaInvoke
+                (
+                    host,
+                    "lite/rhsprem",
+                    init,
+                    true,
+                    headers,
+                    httpHydra,
+                    streamfile => HostStreamProxy(RezkaInvoke.fixcdn(country, init.uacdn, streamfile)),
+                    requesterror: () => proxyManager?.Refresh()
+                ), cook.cookie, null);
+            };
         }
 
-        List<HeadersModel> apiHeaders(RezkaSettings init, string cookie)
+        List<HeadersModel> apiHeaders(string cookie)
         {
-            genUid();
-            return httpHeaders(init, HeadersModel.Init(
+            var headers = httpHeaders(init, HeadersModel.Init(
                ("X-Lampac-App", "1"),
                ("X-Lampac-Version", $"{appversion}.{minorversion}"),
                ("X-Lampac-Device-Id", $"{(AppInit.Win32NT ? "win32" : "linux")}:uid/{Regex.Replace(uid, "[^a-zA-Z0-9]+", "").Trim()}:type_uid/{typeuid}"),
-               ("X-Lampac-Cookie", cookie),
-               ("User-Agent", requestInfo.UserAgent)
+               ("X-Lampac-Cookie", cookie)
             ));
-        }
 
-        async public ValueTask<(RezkaInvoke invk, string cookie, string log)> InitRezkaInvoke(RezkaSettings init)
-        {
-            init.host = new RezkaSettings(null, "kwwsv=22odps1df").host;
+            if (!init.rhub)
+                headers.Add(new HeadersModel("User-Agent", requestInfo.UserAgent));
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            genUid();
-
-            var cook = await getCookie(init, proxy);
-            if (string.IsNullOrEmpty(cook.cookie))
-                return (null, null, cook.log);
-
-            var headers = apiHeaders(init, cook.cookie);
-
-            string country = requestInfo.Country;
-
-            if (!rch.enable && country != null)
-                headers.Add(new HeadersModel("X-Real-IP", requestInfo.IP));
-
-            if (init.forceua)
-                country = "UA";
-
-            init.premium = true;
-
-            return (new RezkaInvoke
-            (
-                host,
-                init,
-                (url, _) => rch.enable ? rch.Get(url, headers) : Http.Get(url, timeoutSeconds: 8, proxy: proxy, headers: headers, statusCodeOK: !url.Contains("do=search")),
-                (url, data, _) => rch.enable ? rch.Post(url, data, headers) : Http.Post(url, data, timeoutSeconds: 8, proxy: proxy, headers: headers),
-                streamfile => HostStreamProxy(init, RezkaInvoke.fixcdn(country, init.uacdn, streamfile), proxy: proxy),
-                requesterror: () => { if (!rch.enable) { proxyManager.Refresh(); } }
-            ), cook.cookie, null);
+            return headers;
         }
         #endregion
 
@@ -137,68 +157,33 @@ namespace Online.Controllers
                 }
             }
 
-            return Content(html, "text/html; charset=utf-8");
-        }
-        #endregion
-
-        #region Initialization
-        ValueTask<RezkaSettings> Initialization()
-        {
-            return loadKit(AppInit.conf.RezkaPrem, (j, i, c) =>
-            {
-                if (j.ContainsKey("uacdn"))
-                    i.uacdn = c.uacdn;
-
-                if (j.ContainsKey("forceua"))
-                    i.forceua = c.forceua;
-
-                if (j.ContainsKey("reserve"))
-                    i.reserve = c.reserve;
-
-                return i;
-            });
+            return ContentTo(html);
         }
         #endregion
 
         [HttpGet]
         [Route("lite/rhsprem")]
-        async public ValueTask<ActionResult> Index(string title, string original_title, int clarification, int year, int s = -1, string href = null, bool rjson = false, int serial = -1, bool similar = false, string source = null, string id = null)
+        async public Task<ActionResult> Index(string title, string original_title, int clarification, int year, int s = -1, string href = null, bool rjson = false, int serial = -1, bool similar = false, string source = null, string id = null)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(href) && !string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(id))
             {
-                if (source.ToLower() is "rezka" or "hdrezka")
+                if (source.Equals("rezka", StringComparison.OrdinalIgnoreCase) ||
+                    source.Equals("hdrezka", StringComparison.OrdinalIgnoreCase))
                     href = id;
             }
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: serial == 0 ? null : -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            if (rch.enable)
-            {
-                if (!AppInit.conf.rch.enable)
-                    return ShowError(RchClient.ErrorMsg);
-
-                if (string.IsNullOrEmpty(init.cookie))
-                    return ShowError($"rhub работает через cookie - {host}/lite/rhs/bind");
-            }
+            if (rch?.enable == true && string.IsNullOrEmpty(init.cookie))
+                return ShowError($"rhub работает через cookie - {host}/lite/rhs/bind");
 
             if (string.IsNullOrWhiteSpace(href) && string.IsNullOrWhiteSpace(title))
                 return OnError("href/title = null");
 
-            var onrezka = await InitRezkaInvoke(init);
             if (onrezka.invk == null)
                 return OnError("authorization error ;(", weblog: onrezka.log);
 
-            var proxyManager = new ProxyManager(init);
             var oninvk = onrezka.invk;
 
             #region search
@@ -206,27 +191,34 @@ namespace Online.Controllers
 
             if (string.IsNullOrEmpty(href))
             {
-                var search = await InvokeCache<SearchModel>($"rhsprem:search:{title}:{original_title}:{clarification}:{year}", cacheTime(40, init: init), rch.enable ? null : proxyManager, async res =>
+                var search = await InvokeCacheResult<SearchModel>($"rhsprem:search:{title}:{original_title}:{clarification}:{year}", 40, async e =>
                 {
                     var content = await oninvk.Search(title, original_title, clarification, year);
-                    if (content == null || (content.IsEmpty && content.content != null))
-                        return res.Fail(content.content ?? "content");
 
-                    return content;
+                    if (content.IsError)
+                        return e.Fail(string.Empty, refresh_proxy: true);
+
+                    if (content.IsEmpty)
+                    {
+                        if (rch.enable || content.content != null)
+                            return e.Fail(content.content ?? "content");
+                    }
+
+                    return e.Success(content);
                 });
 
-                if (search.ErrorMsg != null && search.ErrorMsg.Contains("Ошибка доступа"))
-                    return ShowError(search.ErrorMsg);
+                if (search.ErrorMsg != null)
+                    return ShowError(string.IsNullOrEmpty(search.ErrorMsg) ? "поиск не дал результатов" : search.ErrorMsg);
 
                 if (similar || string.IsNullOrEmpty(search.Value?.href))
                 {
                     if (search.Value?.IsEmpty == true)
                         return ShowError(search.Value.content ?? "поиск не дал результатов");
 
-                    return OnResult(search, () =>
+                    return await ContentTpl(search, () =>
                     {
                         if (search.Value.similar == null)
-                            return string.Empty;
+                            return default;
 
                         var stpl = new SimilarTpl(search.Value.similar.Count);
 
@@ -237,7 +229,7 @@ namespace Online.Controllers
                             stpl.Append(similar.title, similar.year, string.Empty, link, PosterApi.Size(similar.img));
                         }
 
-                        return rjson ? stpl.ToJson() : stpl.ToHtml();
+                        return stpl;
                     });
                 }
 
@@ -246,49 +238,50 @@ namespace Online.Controllers
             }
             #endregion
 
-            var cache = await InvokeCache<EmbedModel>($"rhsprem:{href}", cacheTime(10, init: init), rch.enable ? null : proxyManager, async res => 
-            {
-                return await oninvk.Embed(href, search_uri);
-            });
+            var cache = await InvokeCacheResult($"rhsprem:{href}", 10, 
+                () => oninvk.Embed(href, search_uri)
+            );
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, accsArgs(string.Empty), title, original_title, s, href, true, rjson).Replace("/rezka", "/rhsprem"), gbcache: !rch.enable);
+            if (cache.Value?.IsEmpty == true)
+                return ShowError(cache.Value.content);
+
+            return await ContentTpl(cache, 
+                () => oninvk.Tpl(cache.Value, accsArgs(string.Empty), title, original_title, s, href, true, rjson)
+            );
         }
 
 
         #region Serial
         [HttpGet]
         [Route("lite/rhsprem/serial")]
-        async public ValueTask<ActionResult> Serial(string title, string original_title, string href, long id, int t, int s = -1, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Serial(string title, string original_title, string href, long id, int t, int s = -1, bool rjson = false, bool similar = false)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
-
             if (string.IsNullOrWhiteSpace(href))
                 return OnError("href = null");
 
-            var onrezka = await InitRezkaInvoke(init);
+            if (await IsRequestBlocked(rch: true))
+                return badInitMsg;
+
             if (onrezka.invk == null)
                 return OnError("authorization error ;(", weblog: onrezka.log);
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
             var oninvk = onrezka.invk;
-            var proxyManager = new ProxyManager(init);
 
-            var cache_root = await InvokeCache<Episodes>($"rhsprem:view:serial:{id}:{t}", cacheTime(20, init: init), rch.enable ? null : proxyManager, async res =>
-            {
-                return await oninvk.SerialEmbed(id, t);
-            });
+            var cache_root = await InvokeCacheResult($"rhsprem:view:serial:{id}:{t}", 20, 
+                () => oninvk.SerialEmbed(id, t)
+            );
 
-            var cache_content = await InvokeCache<EmbedModel>($"rhsprem:{href}", cacheTime(10, init: init), rch.enable ? null : proxyManager, async res =>
-            {
-                return await oninvk.Embed(href, null);
-            });
+            var cache_content = await InvokeCacheResult($"rhsprem:{href}", 10, 
+                () => oninvk.Embed(href, null)
+            );
 
-            return ContentTo(oninvk.Serial(cache_root.Value, cache_content.Value, accsArgs(string.Empty), title, original_title, href, id, t, s, true, rjson).Replace("/rezka", "/rhsprem"));
+            if (!cache_content.IsSuccess)
+                return OnError();
+
+            if (cache_content?.Value?.IsEmpty == true)
+                return ShowError(cache_content.Value.content);
+
+            return await ContentTpl(oninvk.Serial(cache_root.Value, cache_content.Value, accsArgs(string.Empty), title, original_title, href, id, t, s, true, rjson));
         }
         #endregion
 
@@ -298,34 +291,31 @@ namespace Online.Controllers
         [Route("lite/rhsprem/movie.m3u8")]
         async public ValueTask<ActionResult> Movie(string title, string original_title, long id, int t, int director = 0, int s = -1, int e = -1, string favs = null, bool play = false)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_check: false))
                 return badInitMsg;
 
-            var onrezka = await InitRezkaInvoke(init);
             if (onrezka.invk == null)
                 return OnError("authorization error ;(", weblog: onrezka.log);
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: s == -1 ? null : -1);
-
-            if (rch.IsNotConnected())
+            if (rch != null)
             {
-                if (init.rhub_fallback && play)
-                    rch.Disabled();
-                else
+                if (rch.IsNotConnected())
+                {
+                    if (init.rhub_fallback && play)
+                        rch.Disabled();
+                    else
+                        return ContentTo(rch.connectionMsg);
+                }
+
+                if (!play && rch.IsRequiredConnected())
                     return ContentTo(rch.connectionMsg);
             }
 
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
             var oninvk = onrezka.invk;
-            var proxyManager = new ProxyManager(init);
 
-            var cache = await InvokeCache<MovieModel>($"rhsprem:view:get_cdn_series:{id}:{t}:{director}:{s}:{e}:{onrezka.cookie}", cacheTime(5, mikrotik: 1, init: init), rch.enable ? null : proxyManager, async res =>
-            {
-                return await oninvk.Movie(id, t, director, s, e, favs);
-            });
+            var cache = await InvokeCacheResult($"rhsprem:view:get_cdn_series:{id}:{t}:{director}:{s}:{e}:{onrezka.cookie}", 5, 
+                () => oninvk.Movie(id, t, director, s, e, favs)
+            );
 
             string result = oninvk.Movie(cache.Value, title, original_title, play, vast: init.vast);
             if (result == null)
@@ -342,7 +332,7 @@ namespace Online.Controllers
         #region getCookie
         static Dictionary<string, string> authCookie = new Dictionary<string, string>();
 
-        async ValueTask<(string cookie, string log)> getCookie(RezkaSettings init, WebProxy proxy = null, int timeoutError = 15)
+        async ValueTask<(string cookie, string log)> getCookie(RezkaSettings init, int timeoutError = 15)
         {
             if (!string.IsNullOrEmpty(init.cookie))
                 return ($"dle_user_taken=1; {Regex.Match(init.cookie, "(dle_user_id=[^;]+;)")} {Regex.Match(init.cookie, "(dle_password=[^;]+)")}".Trim(), null);
@@ -380,7 +370,7 @@ namespace Online.Controllers
                     {
                         client.Timeout = TimeSpan.FromSeconds(15);
 
-                        foreach (var item in apiHeaders(init, string.Empty))
+                        foreach (var item in apiHeaders(string.Empty))
                             client.DefaultRequestHeaders.Add(item.name, item.val);
 
                         var postParams = new Dictionary<string, string>

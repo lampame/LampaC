@@ -7,22 +7,39 @@ namespace Shared.Engine
     {
         #region static
         private static readonly ConcurrentDictionary<string, SemaphoreEntry> _semaphoreLocks = new();
-        private static readonly Timer _cleanupTimer = new(_ => Cleanup(), null, TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(20));
+        private static readonly Timer _cleanupTimer = new(_ => Cleanup(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 
+        public static int Stat_ContSemaphoreLocks => _semaphoreLocks.IsEmpty ? 0 : _semaphoreLocks.Count;
+
+        static int _updatingDb = 0;
         static void Cleanup()
         {
-            var threshold = DateTime.UtcNow - TimeSpan.FromMinutes(2);
+            if (Interlocked.Exchange(ref _updatingDb, 1) == 1)
+                return;
 
-            foreach (var kvp in _semaphoreLocks.ToArray())
+            try
             {
-                if (kvp.Value.LastUsed < threshold && _semaphoreLocks.TryRemove(kvp.Key, out var removed))
-                    removed.Dispose();
+                var deletes = new List<string>();
+                var threshold = DateTime.UtcNow - TimeSpan.FromSeconds(90);
+
+                foreach (var kvp in _semaphoreLocks)
+                {
+                    if (kvp.Value.LastUsed < threshold && _semaphoreLocks.TryRemove(kvp.Key, out var removed))
+                        removed.Dispose();
+                }
+            }
+            catch { }
+            finally
+            {
+                Volatile.Write(ref _updatingDb, 0);
             }
         }
         #endregion
 
         SemaphoreEntry semaphore { get; set; }
         CancellationToken cancellationToken;
+
+        bool regwait, releaseLock;
 
 
         public SemaphorManager(string key)
@@ -46,16 +63,19 @@ namespace Shared.Engine
 
         public Task WaitAsync(TimeSpan timeSpan)
         {
+            regwait = true;
             return semaphore.WaitAsync(timeSpan);
         }
 
         public Task WaitAsync(CancellationToken cancellationToken)
         {
+            regwait = true;
             return semaphore.WaitAsync(cancellationToken);
         }
 
         public Task WaitAsync()
         {
+            regwait = true;
             return semaphore.WaitAsync(cancellationToken);
         }
 
@@ -64,7 +84,11 @@ namespace Shared.Engine
         {
             try
             {
-                semaphore.Release();
+                if (regwait && releaseLock == false)
+                {
+                    releaseLock = true;
+                    semaphore.Release();
+                }
             }
             catch { }
         }

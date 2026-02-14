@@ -21,13 +21,13 @@ namespace Catalog.Controllers
             if (rch.IsNotConnected())
                 rch.Disabled();
 
-            var proxyManager = new ProxyManager(init);
+            var proxyManager = new ProxyManager(init, rch);
             var proxy = proxyManager.BaseGet();
 
             string search = query;
             string memKey = $"catalog:{plugin}:{search}:{sort}:{cat}:{page}";
 
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore(memKey, rch, async () =>
             {
                 if (!hybridCache.TryGetValue(memKey, out (List<PlaylistItem> playlists, int total_pages) cache, inmemory: false))
                 {
@@ -99,14 +99,14 @@ namespace Catalog.Controllers
 
                         html = rch.enable
                             ? await rch.Post(url.Replace("{page}", page.ToString()), data, headers, useDefaultHeaders: init.useDefaultHeaders)
-                            : await Http.Post(url.Replace("{page}", page.ToString()), httpdata, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, useDefaultHeaders: init.useDefaultHeaders);
+                            : await Http.Post(url.Replace("{page}", page.ToString()), httpdata, headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, httpversion: init.httpversion, useDefaultHeaders: init.useDefaultHeaders);
                     }
                     else
                     {
                         html = rch.enable
                             ? await rch.Get(url.Replace("{page}", page.ToString()), headers, useDefaultHeaders: init.useDefaultHeaders)
                             : init.priorityBrowser == "playwright" ? await PlaywrightBrowser.Get(init, url.Replace("{page}", page.ToString()), headers, proxy.data, cookies: init.cookies)
-                            : await Http.Get(url.Replace("{page}", page.ToString()), headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, useDefaultHeaders: init.useDefaultHeaders);
+                            : await Http.Get(url.Replace("{page}", page.ToString()), headers: headers, proxy: proxy.proxy, timeoutSeconds: init.timeout, httpversion: init.httpversion, useDefaultHeaders: init.useDefaultHeaders);
                     }
                     #endregion
 
@@ -147,8 +147,7 @@ namespace Catalog.Controllers
                         if (ModInit.IsRhubFallback(init))
                             goto reset;
 
-                        if (!rch.enable)
-                            proxyManager.Refresh();
+                        proxyManager.Refresh();
 
                         return BadRequest("playlists");
                     }
@@ -163,10 +162,9 @@ namespace Catalog.Controllers
                             cache.total_pages = _pages;
                     }
 
-                    if (!rch.enable)
-                        proxyManager.Success();
+                    proxyManager.Success();
 
-                    hybridCache.Set(memKey, cache, cacheTime(init.cache_time, init: init), inmemory: false);
+                    hybridCache.Set(memKey, cache, cacheTimeBase(init.cache_time, init: init), inmemory: false);
                 }
 
                 #region total_pages
@@ -248,7 +246,7 @@ namespace Catalog.Controllers
 
 
         #region goPlaylistJson
-        static List<PlaylistItem> goPlaylistJson(string cat, JToken json, in RequestModel requestInfo, string host, ContentParseSettings parse, CatalogSettings init, in string html, string plugin)
+        static List<PlaylistItem> goPlaylistJson(string cat, JToken json, RequestModel requestInfo, string host, ContentParseSettings parse, CatalogSettings init, string html, string plugin)
         {
             if (parse == null || json == null)
                 return null;
@@ -404,7 +402,7 @@ namespace Catalog.Controllers
         #endregion
 
         #region goPlaylist
-        static List<PlaylistItem> goPlaylist(string cat, HtmlDocument doc, in RequestModel requestInfo, string host, ContentParseSettings parse, CatalogSettings init, in string html, string plugin)
+        static List<PlaylistItem> goPlaylist(string cat, HtmlDocument doc, RequestModel requestInfo, string host, ContentParseSettings parse, CatalogSettings init, string html, string plugin)
         {
             if (parse == null || string.IsNullOrEmpty(html))
                 return null;

@@ -16,6 +16,9 @@
         #region Init
         public static List<HeadersModel> Init(string name, string val)
         {
+            if (string.IsNullOrWhiteSpace(val))
+                return new List<HeadersModel>();
+
             return new List<HeadersModel>() { new HeadersModel(name, val)};
         }
 
@@ -29,7 +32,10 @@
             var h = new List<HeadersModel>(headers.Count());
 
             foreach (var i in headers)
-                h.Add(new HeadersModel(i.name, i.val));
+            {
+                if (!string.IsNullOrWhiteSpace(i.val))
+                    h.Add(new HeadersModel(i.name, i.val));
+            }
 
             return h;
         }
@@ -41,13 +47,16 @@
 
         public static List<HeadersModel> Init(IEnumerable<KeyValuePair<string, string>> headers)
         {
-            if (headers == null || headers.Count() == 0)
+            if (headers == null || !headers.Any())
                 return new List<HeadersModel>();
 
             var h = new List<HeadersModel>(headers.Count());
 
             foreach (var i in headers)
-                h.Add(new HeadersModel(i.Key, i.Value));
+            {
+                if (!string.IsNullOrWhiteSpace(i.Value))
+                    h.Add(new HeadersModel(i.Key, i.Value));
+            }
 
             return h;
         }
@@ -83,9 +92,33 @@
 
             var result = new List<HeadersModel>(h1);
             foreach (var _h2 in h2)
-                result.Add(new HeadersModel(_h2.Key, _h2.Value));
+            {
+                if (!string.IsNullOrWhiteSpace(_h2.Value))
+                    result.Add(new HeadersModel(_h2.Key, _h2.Value));
+            }
 
             return result;
+        }
+        #endregion
+
+        #region InitOrNull
+        public static List<HeadersModel> InitOrNull(Dictionary<string, string> headers)
+        {
+            if (headers == null || headers.Count == 0)
+                return null;
+
+            var h = new List<HeadersModel>(headers.Count);
+
+            foreach (var i in headers)
+            {
+                if (!string.IsNullOrWhiteSpace(i.Value))
+                    h.Add(new HeadersModel(i.Key, i.Value));
+            }
+
+            if (h.Count == 0)
+                return null;
+
+            return h;
         }
         #endregion
     }

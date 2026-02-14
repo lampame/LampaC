@@ -8,6 +8,8 @@ namespace Shared.Models.AppConf
 
         public bool absolute { get; set; }
 
+        public bool AesGcm { get; set; }
+
         public string path { get; set; }
 
         public string eval_path { get; set; }
@@ -15,6 +17,8 @@ namespace Shared.Models.AppConf
         public bool IsAllUsersPath { get; set; }
 
         public int cacheToSeconds { get; set; }
+
+        public int configCheckIntervalSeconds { get; set; }
 
         public bool rhub_fallback { get; set; }
 
@@ -25,4 +29,13 @@ namespace Shared.Models.AppConf
 
 
     public record KitConfEvalPath(string path, string uid);
+
+
+    public class KitCacheEntry
+    {
+        public JObject init { get; set; }
+        public string infile { get; set; }
+        public DateTime lockTime { get; set; }
+        public DateTime lastWriteTimeUtc { get; set; }
+    }
 }

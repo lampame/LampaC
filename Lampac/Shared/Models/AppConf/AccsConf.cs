@@ -65,8 +65,8 @@ namespace Shared.Models.AppConf
             if (string.IsNullOrEmpty(uid))
                 return null;
 
-            uid = uid.ToLower().Trim();
-            return users.FirstOrDefault(i => (i.id != null && i.id.ToLower() == uid) || (i.ids != null && i.ids.FirstOrDefault(id => id.ToLower() == uid) != null));
+            uid = uid.ToLowerAndTrim();
+            return users.FirstOrDefault(i => (i.id != null && i.id.ToLowerAndTrim() == uid) || (i.ids != null && i.ids.FirstOrDefault(id => id.ToLowerAndTrim() == uid) != null));
         }
     }
 }

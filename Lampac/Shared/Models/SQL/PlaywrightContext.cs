@@ -1,15 +1,18 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
 namespace Shared.Models.SQL
 {
     public partial class PlaywrightContext
     {
-        public static void Initialization() 
+        public static void Initialization()
         {
+            Directory.CreateDirectory("cache");
+
             try
             {
-                var sqlDb = new PlaywrightContext();
+                using (var sqlDb = new PlaywrightContext())
                     sqlDb.Database.EnsureCreated();
             }
             catch (Exception ex)
@@ -24,9 +27,17 @@ namespace Shared.Models.SQL
     {
         public DbSet<PlaywrightSqlModel> files { get; set; }
 
+        static readonly string _connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = "cache/Playwright.sql",
+            Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 10,
+            Pooling = true
+        }.ToString();
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite("Data Source=cache/Playwright.sql");
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         }
 

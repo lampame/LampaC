@@ -1,79 +1,91 @@
-﻿using Shared.Models.SISI.Base;
-using System.Text.RegularExpressions;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.SISI.Base;
+using System.Text;
+using System.Threading;
 using System.Web;
 
 namespace Shared.Engine.SISI
 {
     public static class PorntrexTo
     {
-        public static ValueTask<string> InvokeHtml(string host, string search, string sort, string c, int pg, Func<string, ValueTask<string>> onresult)
+        static readonly ThreadLocal<StringBuilder> sbUri = new(() => new StringBuilder(PoolInvk.rentChunk));
+
+        #region Uri
+        public static string Uri(string host, string search, string sort, string c, int pg)
         {
-            string url = $"{host}/";
+            var url = sbUri.Value;
+            url.Clear();
+
+            url.Append(host);
+            url.Append("/");
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                url = $"{host}/search/{HttpUtility.UrlEncode(search)}/";
+                url.Append($"search/{HttpUtility.UrlEncode(search)}/");
 
                 if (!string.IsNullOrEmpty(sort))
-                    url += $"{sort}/";
+                    url.Append($"{sort}/");
 
-                url += $"?from_videos={pg}";
+                url.Append($"?from_videos={pg}");
             }
             else
             {
                 if (!string.IsNullOrEmpty(c))
                 {
-                    url += $"categories/{c}/";
+                    url.Append($"categories/{c}/");
 
                     if (sort == "most-popular")
-                        url += $"top-rated/";
+                        url.Append($"top-rated/");
 
-                    url += $"?from4={pg}";
+                    url.Append($"?from4={pg}");
                 }
                 else
                 {
                     if (string.IsNullOrEmpty(sort))
                     {
-                        url += $"latest-updates/{pg}/";
+                        url.Append($"latest-updates/{pg}/");
                     }
                     else
                     {
-                        url += $"{sort}/weekly/?from4={pg}";
+                        url.Append($"{sort}/weekly/?from4={pg}");
                     }
                 }
             }
 
-            return onresult.Invoke(url);
+            return url.ToString();
         }
+        #endregion
 
-        public static List<PlaylistItem> Playlist(string uri, in string html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
+        #region Playlist
+        public static List<PlaylistItem> Playlist(string uri, ReadOnlySpan<char> html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
         {
-            if (string.IsNullOrEmpty(html))
-                return new List<PlaylistItem>();
+            if (html.IsEmpty)
+                return null;
 
-            var rows = html.Split("<div class=\"video-preview-screen");
-            var playlists = new List<PlaylistItem>(rows.Length);
+            var rx = Rx.Split("<div class=\"video-preview-screen", html, 1);
+            if (rx.Count == 0)
+                return null;
 
-            foreach (string row in rows.Skip(1))
+            var playlists = new List<PlaylistItem>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
                 if (row.Contains("<span class=\"line-private\">"))
                     continue;
 
-                var g = Regex.Match(row, "<a href=\"https?://[^/]+/(video/[^\"]+)\" title=\"([^\"]+)\"").Groups;
+                var g = row.Groups("<a href=\"https?://[^/]+/(video/[^\"]+)\" title=\"([^\"]+)\"");
 
                 if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value))
                 {
-                    string quality = Regex.Match(row, "<span class=\"quality\">([^<]+)</span>").Groups[1].Value;
-                    string duration = Regex.Match(row, "<i class=\"fa fa-clock-o\"></i>([^<]+)</div>").Groups[1].Value.Trim();
-                    var img = Regex.Match(row, "data-src=\"(https?:)?//(((ptx|statics)\\.cdntrex\\.com/contents/videos_screenshots/[0-9]+/[0-9]+)[^\"]+)").Groups;
+                    var img = row.Groups("data-src=\"(https?:)?//(((ptx|statics)\\.cdntrex\\.com/contents/videos_screenshots/[0-9]+/[0-9]+)[^\"]+)");
 
                     var pl = new PlaylistItem()
                     {
                         video = $"{uri}?uri={g[1].Value}",
                         name = g[2].Value,
                         picture = $"https://{img[2].Value}",
-                        quality = !string.IsNullOrEmpty(quality) ? quality : null,
-                        time = duration,
+                        quality = row.Match("<span class=\"quality\">([^<]+)</span>"),
+                        time = row.Match("<i class=\"fa fa-clock-o\"></i>([^<]+)</div>", trim: true),
                         json = true,
                         bookmark = new Bookmark()
                         {
@@ -92,7 +104,9 @@ namespace Shared.Engine.SISI
 
             return playlists;
         }
+        #endregion
 
+        #region Menu
         public static List<MenuItem> Menu(string host, string search, string sort, string c)
         {
             host = string.IsNullOrWhiteSpace(host) ? string.Empty : $"{host}/";
@@ -619,33 +633,42 @@ namespace Shared.Engine.SISI
 
             return menu;
         }
+        #endregion
 
-        async public static ValueTask<Dictionary<string, string>> StreamLinks(string host, string uri, Func<string, ValueTask<string>> onresult)
+        #region StreamLinks
+        public static string StreamLinksUri(string host, string uri)
         {
             if (string.IsNullOrWhiteSpace(uri))
                 return null;
 
-            string html = await onresult.Invoke($"{host}/{uri}");
-            if (html == null)
+            return $"{host}/{uri}";
+        }
+
+        public static Dictionary<string, string> StreamLinks(ReadOnlySpan<char> html)
+        {
+            if (html.IsEmpty)
                 return null;
 
-            var stream_links = new Dictionary<string, string>();
-            var match = new Regex("(https?://[^/]+/get_file/[^\\.]+_([0-9]+p)\\.mp4)").Match(html);
-            while (match.Success)
+            var rx = Rx.Matches("(https?://[^/]+/get_file/[^\\.]+_([0-9]+p)\\.mp4)", html);
+
+            var stream_links = new Dictionary<string, string>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
-                stream_links.TryAdd(match.Groups[2].Value, match.Groups[1].Value);
-                match = match.NextMatch();
-                //break;
+                var g = row.Groups();
+                if (!string.IsNullOrEmpty(g[1].Value))
+                    stream_links.TryAdd(g[2].Value, g[1].Value);
             }
 
             if (stream_links.Count == 0)
             {
-                string link = Regex.Match(html, "(https?://[^/]+/get_file/[^\\.]+\\.mp4)").Groups[1].Value;
-                if (!string.IsNullOrWhiteSpace(link))
+                string link = Rx.Match(html, "(https?://[^/]+/get_file/[^\\.]+\\.mp4)");
+                if (link != null)
                     stream_links.TryAdd("auto", link);
             }
 
             return stream_links.Reverse().ToDictionary(k => k.Key, v => v.Value);
         }
+        #endregion
     }
 }

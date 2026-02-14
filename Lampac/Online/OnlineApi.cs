@@ -31,7 +31,7 @@ namespace Online.Controllers
             if (!memoryCache.TryGetValue(memKey, out (string file, string filecleaer) cache))
             {
                 cache.file = FileCache.ReadAllText("plugins/online.js", saveCache: false)
-                    .Replace("{rch_websoket}", FileCache.ReadAllText($"plugins/rch_{AppInit.conf.rch.websoket}.js", saveCache: false));
+                    .Replace("{rch_websoket}", FileCache.ReadAllText($"plugins/rch_{AppInit.conf.WebSocket.type}.js", saveCache: false));
 
                 string playerinner = FileCache.ReadAllText("plugins/player-inner.js", saveCache: false)
                        .Replace("{useplayer}", (!string.IsNullOrEmpty(AppInit.conf.playerInner)).ToString().ToLower())
@@ -147,6 +147,7 @@ namespace Online.Controllers
 
         static DateTime externalids_lastWriteTime = default, externalids_nextCheck = default;
 
+        [HttpGet]
         [Route("externalids")]
         async public ValueTask<ActionResult> Externalids(string id, string imdb_id, long kinopoisk_id, int serial)
         {
@@ -157,13 +158,16 @@ namespace Online.Controllers
                 {
                     if (externalids_nextCheck > DateTime.Now || externalids_nextCheck == default)
                     {
-                        externalids_nextCheck = DateTime.Now.AddMinutes(5);
-                        var lastWriteTime = IO.File.GetLastWriteTime("data/externalids.json");
-                        if (lastWriteTime != externalids_lastWriteTime)
+                        lock (externalids)
                         {
-                            externalids_lastWriteTime = lastWriteTime;
-                            foreach (var item in JsonConvert.DeserializeObject<Dictionary<string, string>>(IO.File.ReadAllText("data/externalids.json")))
-                                externalids.AddOrUpdate(item.Key, item.Value, (k, v) => item.Value);
+                            externalids_nextCheck = DateTime.Now.AddMinutes(5);
+                            var lastWriteTime = IO.File.GetLastWriteTime("data/externalids.json");
+                            if (lastWriteTime != externalids_lastWriteTime)
+                            {
+                                externalids_lastWriteTime = lastWriteTime;
+                                foreach (var item in JsonConvert.DeserializeObject<Dictionary<string, string>>(IO.File.ReadAllText("data/externalids.json")))
+                                    externalids.AddOrUpdate(item.Key, item.Value, (k, v) => item.Value);
+                            }
                         }
                     }
                 }
@@ -206,7 +210,7 @@ namespace Online.Controllers
             #region getAlloha / getVSDN / getTabus
             async Task<string> getAlloha(string imdb)
             {
-                var proxyManager = new ProxyManager(AppInit.conf.Alloha);
+                var proxyManager = new ProxyManager("alloha", AppInit.conf.Alloha);
                 string json = await Http.Get("https://api.alloha.tv/?token=04941a9a3ca3ac16e2b4327347bbc1&imdb=" + imdb, timeoutSeconds: 5, proxy: proxyManager.Get());
                 if (json == null)
                     return null;
@@ -230,7 +234,7 @@ namespace Online.Controllers
                 if (string.IsNullOrEmpty(AppInit.conf.VideoCDN.token) || string.IsNullOrEmpty(AppInit.conf.VideoCDN.iframehost))
                     return null;
 
-                var proxyManager = new ProxyManager(AppInit.conf.VideoCDN);
+                var proxyManager = new ProxyManager("videocdn", AppInit.conf.VideoCDN);
                 string json = await Http.Get($"{AppInit.conf.VideoCDN.iframehost}/api/short?api_token={AppInit.conf.VideoCDN.token}&imdb_id={imdb}", timeoutSeconds: 5, proxy: proxyManager.Get());
                 if (json == null)
                     return null;
@@ -244,7 +248,7 @@ namespace Online.Controllers
 
             async Task<string> getTabus(string imdb)
             {
-                var proxyManager = new ProxyManager(AppInit.conf.Collaps);
+                var proxyManager = new ProxyManager("collaps", AppInit.conf.Collaps);
                 string json = await Http.Get("https://api.bhcesh.me/franchise/details?token=d39edcf2b6219b6421bffe15dde9f1b3&imdb_id=" + imdb.Remove(0, 2), timeoutSeconds: 5, proxy: proxyManager.Get());
                 if (json == null)
                     return null;
@@ -275,15 +279,19 @@ namespace Online.Controllers
 
                 if (string.IsNullOrWhiteSpace(imdb_id) && long.TryParse(id, out long _testid) && _testid > 0)
                 {
-                    using (var sqlDb = new ExternalidsContext())
+                    using (var sqlDb = ExternalidsContext.Factory != null
+                        ? ExternalidsContext.Factory.CreateDbContext()
+                        : new ExternalidsContext())
+                    {
                         imdb_id = sqlDb.imdb.Find($"{id}_{serial}")?.value;
+                    }
 
                     if (string.IsNullOrEmpty(imdb_id))
                     {
                         string mkey = $"externalids:locktmdb:{serial}:{id}";
-                        if (!hybridCache.TryGetValue(mkey, out _))
+                        if (!memoryCache.TryGetValue(mkey, out _))
                         {
-                            hybridCache.Set(mkey, 0, DateTime.Now.AddHours(1));
+                            memoryCache.Set(mkey, 0, DateTime.Now.AddHours(1));
 
                             string cat = serial == 1 ? "tv" : "movie";
                             var header = HeadersModel.Init(("localrequest", AppInit.rootPasswd));
@@ -293,7 +301,9 @@ namespace Online.Controllers
                                 imdb_id = Regex.Match(json, "\"imdb_id\":\"(tt[0-9]+)\"").Groups[1].Value;
                                 if (!string.IsNullOrEmpty(imdb_id))
                                 {
-                                    using (var sqlDb = new ExternalidsContext())
+                                    using (var sqlDb = ExternalidsContext.Factory != null
+                                        ? ExternalidsContext.Factory.CreateDbContext()
+                                        : new ExternalidsContext())
                                     {
                                         sqlDb.Add(new ExternalidsSqlModel()
                                         {
@@ -320,16 +330,18 @@ namespace Online.Controllers
 
                 if (string.IsNullOrEmpty(kpid) || kpid == "0")
                 {
-                    using (var sqlDb = new ExternalidsContext())
+                    using (var sqlDb = ExternalidsContext.Factory != null
+                        ? ExternalidsContext.Factory.CreateDbContext()
+                        : new ExternalidsContext())
                     {
                         kpid = sqlDb.kinopoisk.Find(imdb_id)?.value;
 
                         if (string.IsNullOrEmpty(kpid) && kinopoisk_id == 0)
                         {
                             string mkey = $"externalids:lockkpid:{imdb_id}";
-                            if (!hybridCache.TryGetValue(mkey, out _))
+                            if (!memoryCache.TryGetValue(mkey, out _))
                             {
-                                hybridCache.Set(mkey, 0, DateTime.Now.AddDays(1));
+                                memoryCache.Set(mkey, 0, DateTime.Now.AddDays(1));
 
                                 switch (AppInit.conf.online.findkp ?? "all")
                                 {
@@ -381,13 +393,16 @@ namespace Online.Controllers
             #endregion
 
             kpid = kpid != null ? kpid : kinopoisk_id.ToString();
-            InvkEvent.Externalids(id, ref imdb_id, ref kpid, serial);
+
+            if (InvkEvent.IsExternalids())
+                InvkEvent.Externalids(id, ref imdb_id, ref kpid, serial);
 
             return Content($"{{\"imdb_id\":\"{imdb_id}\",\"kinopoisk_id\":\"{kpid}\"}}", "application/json; charset=utf-8");
         }
         #endregion
 
         #region WithSearch
+        [HttpGet]
         [AllowAnonymous]
         [Route("lite/withsearch")]
         public ActionResult WithSearch()
@@ -400,6 +415,7 @@ namespace Online.Controllers
         #endregion
 
         #region spider
+        [HttpGet]
         [Route("lite/spider")]
         [Route("lite/spider/anime")]
         async public Task<ActionResult> Spider(string title)
@@ -627,7 +643,7 @@ namespace Online.Controllers
 
             if (OnlineModuleEntry.onlineModulesCache != null && OnlineModuleEntry.onlineModulesCache.Count > 0)
             {
-                var args = new OnlineEventsModel(id, imdb_id, kinopoisk_id, title, original_title, original_language, year, source, rchtype, serial, life, islite, account_email, uid, token, nws_id);
+                var args = new OnlineEventsModel(id, imdb_id, kinopoisk_id, title, original_title, original_language, year, source, rchtype, serial, life, islite, account_email, uid, token, nws_id, kitconf);
 
                 foreach (var entry in OnlineModuleEntry.onlineModulesCache)
                 {
@@ -832,7 +848,7 @@ namespace Online.Controllers
                             {
                                 view = await Http.Get<JObject>($"{myinit.corsHost()}/v2/view/{vid}?token={myinit.token}", timeoutSeconds: 4);
                                 if (view != null)
-                                    hybridCache.Set($"vokino:view:{vid}", view, cacheTime(20));
+                                    hybridCache.Set($"vokino:view:{vid}", view, cacheTimeBase(20, init: conf.VoKino));
                             }
 
                             if (view != null && view.ContainsKey("online") && view["online"] is JObject onlineObj)
@@ -949,11 +965,8 @@ namespace Online.Controllers
                     send(conf.Zetflix);
             }
 
-            if (serial == -1 || serial == 0 || !string.IsNullOrEmpty(conf.FanCDN.token) || !string.IsNullOrEmpty(conf.FanCDN.overridehost) || conf.FanCDN.overridehosts?.Length > 0)
-            {
-                if (conf.FanCDN.rhub || conf.FanCDN.priorityBrowser == "http" || PlaywrightBrowser.Status != PlaywrightStatus.disabled || !string.IsNullOrEmpty(conf.FanCDN.overridehost) || conf.FanCDN.overridehosts?.Length > 0)
-                    send(conf.FanCDN);
-            }
+            if ((serial == -1 || serial == 0) && kinopoisk_id > 0)
+                send(conf.FanCDN);
 
             send(conf.VideoCDN);
 

@@ -1,61 +1,73 @@
-﻿using Shared.Models.SISI.Base;
-using System.Text.RegularExpressions;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.SISI.Base;
+using System.Text;
+using System.Threading;
 using System.Web;
 
 namespace Shared.Engine.SISI
 {
     public static class HQpornerTo
     {
-        public static ValueTask<string> InvokeHtml(string host, string search, string sort, string c, int pg, Func<string, ValueTask<string>> onresult)
+        static readonly ThreadLocal<StringBuilder> sbUri = new(() => new StringBuilder(PoolInvk.rentChunk));
+
+        #region Uri
+        public static string Uri(string host, string search, string sort, string c, int pg)
         {
-            string url = $"{host}/";
+            var url = sbUri.Value;
+            url.Clear();
+
+            url.Append(host);
+            url.Append("/");
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                url += $"?q={HttpUtility.UrlEncode(search)}&p={pg}";
+                url.Append($"?q={HttpUtility.UrlEncode(search)}&p={pg}");
             }
             else
             {
                 if (!string.IsNullOrEmpty(c))
                 {
-                    url += $"category/{c}";
+                    url.Append($"category/{c}");
                 }
                 else
                 {
                     if (!string.IsNullOrEmpty(sort))
-                        url += $"top/{sort}";
+                        url.Append($"top/{sort}");
 
                     else
-                        url += "hdporn";
+                        url.Append("hdporn");
                 }
 
-                url += $"/{pg}";
+                url.Append($"/{pg}");
             }
 
-            return onresult.Invoke(url);
+            return url.ToString();
         }
+        #endregion
 
-        public static List<PlaylistItem> Playlist(string uri, in string html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
+        #region Playlist
+        public static List<PlaylistItem> Playlist(string uri, ReadOnlySpan<char> html, Func<PlaylistItem, PlaylistItem> onplaylist = null)
         {
-            if (string.IsNullOrEmpty(html))
-                return new List<PlaylistItem>();
+            if (html.IsEmpty)
+                return null;
 
-            var rows = html.Split("<div class=\"img-container\">");
-            var playlists = new List<PlaylistItem>(rows.Length);
+            var rx = Rx.Split("<div class=\"img-container\">", html, 1);
+            if (rx.Count == 0)
+                return null;
 
-            foreach (string row in rows.Skip(1))
+            var playlists = new List<PlaylistItem>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
-                var g = Regex.Match(row, "href=\"/([^\"]+)\" class=\"atfi[^\"]+\"><img src=\"//([^\"]+)\"[^>]+ alt=\"([^\"]+)\"").Groups;
-                if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value) && !string.IsNullOrWhiteSpace(g[2].Value))
+                var g = row.Groups("href=\"/([^\"]+)\" class=\"atfi[^\"]+\"><img src=\"//([^\"]+)\"[^>]+ alt=\"([^\"]+)\"");
+                if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value) && !string.IsNullOrWhiteSpace(g[3].Value))
                 {
-                    string duration = new Regex("class=\"fa fa-clock-o\" [^>]+></i>([\n\r\t ]+)?([^<]+)<").Match(row).Groups[2].Value.Trim();
-
                     var pl = new PlaylistItem()
                     {
                         name = g[3].Value.Trim(),
                         video = $"{uri}?uri={g[1].Value}",
                         picture = "https://" + g[2].Value,
-                        time = duration,
+                        time = row.Match("class=\"fa fa-clock-o\" [^>]+></i>([\n\r\t ]+)?([^<]+)<", 2, trim: true),
                         json = true,
                         bookmark = new Bookmark()
                         {
@@ -74,7 +86,9 @@ namespace Shared.Engine.SISI
 
             return playlists;
         }
+        #endregion
 
+        #region Menu
         public static List<MenuItem> Menu(string host, string sort, string c)
         {
             host = string.IsNullOrWhiteSpace(host) ? string.Empty : $"{host}/";
@@ -457,67 +471,67 @@ namespace Shared.Engine.SISI
 
             return menu;
         }
+        #endregion
 
-        async public static ValueTask<Dictionary<string, string>> StreamLinks(string host, string uri, Func<string, ValueTask<string>> onresult, Func<string, ValueTask<string>> oniframe)
+        #region StreamLinks
+        async public static Task<Dictionary<string, string>> StreamLinks(HttpHydra http, string host, string uri)
         {
             if (string.IsNullOrWhiteSpace(uri))
                 return null;
 
-            string html = await onresult.Invoke($"{host}/{uri}");
-            if (html == null)
-                return null;
+            string uriframe = null;
 
-            string uriframe = Regex.Match(html, "<iframe src=\"//([^/]+/video/[^/]+/)\"").Groups[1].Value;
-            if (string.IsNullOrWhiteSpace(uriframe))
-                return null;
-
-            string iframeHtml = await oniframe.Invoke($"https://{uriframe}");
-            if (iframeHtml == null)
-                return null;
-
-            var stream_links = new Dictionary<string, string>();
-            var match = new Regex("src=\"//([^\"]+)\" title=\"([^\"]+)\"").Match(iframeHtml.Replace("\\", ""));
-            while (match.Success)
+            await http.GetSpan($"{host}/{uri}", html =>
             {
-                if (!string.IsNullOrWhiteSpace(match.Groups[1].Value) && !string.IsNullOrWhiteSpace(match.Groups[2].Value) && !match.Groups[2].Value.Contains("Default"))
+                uriframe = Rx.Match(html, "<iframe src=\"//([^/]+/video/[^/]+/)\"");
+            });
+
+            if (uriframe == null)
+                return null;
+
+            var stream_links = new Dictionary<string, string>(5);
+
+            await http.GetSpan($"https://{uriframe}", iframeHtml => 
+            {
+                foreach (var row in Rx.Matches("src=.\"([^\"]+)\" title=.\"([^\"]+)\"", iframeHtml).Rows())
                 {
-                    string hls = "https://" + match.Groups[1].Value;
-                    stream_links.TryAdd(match.Groups[2].Value, hls);
+                    var g = row.Groups("src=.\"([^\"]+)\" title=.\"([^\"]+)\"");
+
+                    if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value) && !g[2].Value.Contains("Default"))
+                        stream_links.TryAdd(g[2].Value.Replace("\\", ""), $"https:{g[1].Value.Replace("\\", "")}");
                 }
 
-                match = match.NextMatch();
-            }
-
-            if (stream_links.Count == 0)
-            {
-                string jw = Regex.Match(iframeHtml, "\\$\\(\"#jw\"\\)([^;]+)").Groups[1].Value;
-                if (jw.Contains("replaceAll"))
+                if (stream_links.Count == 0)
                 {
-                    var grpal = Regex.Match(iframeHtml, "replaceAll\\(\"([^\"]+)\",([^\\+]+)\\+\"pubs/\"\\+([^\\+]+)").Groups;
-
-                    string cdn = Regex.Match(iframeHtml, grpal[2].Value + "=\"([^\"]+)\"").Groups[1].Value;
-                    string hash = Regex.Match(iframeHtml, grpal[3].Value + "=\"([^\"]+)\"").Groups[1].Value;
-
-                    if (!string.IsNullOrEmpty(cdn) && !string.IsNullOrEmpty(hash))
+                    string jw = Rx.Match(iframeHtml, "\\$\\(\"#jw\"\\)([^;]+)");
+                    if (jw.Contains("replaceAll"))
                     {
-                        match = new Regex("src=\"([^\"]+[0-9]+\\.mp4)\" title=\"([^\"]+)\"").Match(iframeHtml.Replace("\\", ""));
-                        while (match.Success)
+                        var grpal = Rx.Groups(iframeHtml, "replaceAll\\(\"([^\"]+)\",([^\\+]+)\\+\"pubs/\"\\+([^\\+]+)");
+
+                        string cdn = Rx.Match(iframeHtml, grpal[2].Value + "=\"([^\"]+)\"");
+                        string hash = Rx.Match(iframeHtml, grpal[3].Value + "=\"([^\"]+)\"");
+
+                        if (!string.IsNullOrEmpty(cdn) && !string.IsNullOrEmpty(hash))
                         {
-                            if (!string.IsNullOrWhiteSpace(match.Groups[1].Value) && !string.IsNullOrWhiteSpace(match.Groups[2].Value) && !match.Groups[2].Value.Contains("Default"))
+                            foreach (var row in Rx.Matches("src=.?\"([^\"]+[0-9]+\\.mp4)\" title=.?\"([^\"]+)\"", iframeHtml).Rows())
                             {
-                                string hls = match.Groups[1].Value.Replace(grpal[1].Value, $"https:{cdn}pubs/{hash}/");
+                                var g = row.Groups("src=.?\"([^\"]+[0-9]+\\.mp4)\" title=.?\"([^\"]+)\"");
 
-                                if (hls.StartsWith("https:"))
-                                    stream_links.TryAdd(match.Groups[2].Value, hls);
+                                if (!string.IsNullOrWhiteSpace(g[1].Value) && !string.IsNullOrWhiteSpace(g[2].Value) && !g[2].Value.Contains("Default"))
+                                {
+                                    string hls = g[1].Value.Replace(grpal[1].Value, $"https:{cdn}pubs/{hash}/");
+
+                                    if (hls.StartsWith("https:"))
+                                        stream_links.TryAdd(g[2].Value.Replace("\\", ""), hls.Replace("\\", ""));
+                                }
                             }
-
-                            match = match.NextMatch();
                         }
                     }
                 }
-            }
+            });
 
             return stream_links.Reverse().ToDictionary(k => k.Key, v => v.Value);
         }
+        #endregion
     }
 }

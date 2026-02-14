@@ -1,64 +1,44 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Shared.Engine.RxEnumerate;
 
 namespace SISI.Controllers.Tizam
 {
     public class ViewController : BaseSisiController
     {
+        public ViewController() : base(AppInit.conf.Tizam) { }
+
         [Route("tizam/vidosik")]
         async public ValueTask<ActionResult> Index(string uri)
         {
-            var init = await loadKit(AppInit.conf.Tizam);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"tizam:view:{uri}";
-
-            return await InvkSemaphore(memKey, async () =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<StreamItem>($"tizam:view:{uri}", 180, async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out StreamItem stream_links))
+                string location = null;
+
+                await httpHydra.GetSpan($"{init.corsHost()}/{uri}", span => 
                 {
-                    reset:
-                    string html = rch.enable 
-                        ? await rch.Get($"{init.corsHost()}/{uri}", httpHeaders(init)) 
-                        : await Http.Get($"{init.corsHost()}/{uri}", timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init));
+                    location = Rx.Match(span, "src=\"(https?://[^\"]+\\.mp4)\" type=\"video/mp4\"");
+                });
 
-                    string location = Regex.Match(html ?? string.Empty, "src=\"(https?://[^\"]+\\.mp4)\" type=\"video/mp4\"").Groups[1].Value;
+                if (string.IsNullOrEmpty(location))
+                    return e.Fail("location", refresh_proxy: true);
 
-                    if (string.IsNullOrEmpty(location))
+                return e.Success(new StreamItem()
+                {
+                    qualitys = new Dictionary<string, string>()
                     {
-                        if (IsRhubFallback(init))
-                            goto reset;
-
-                        return OnError("location", proxyManager);
+                        ["auto"] = location
                     }
-
-                    if (!rch.enable)
-                        proxyManager.Success();
-
-                    stream_links = new StreamItem()
-                    {
-                        qualitys = new Dictionary<string, string>()
-                        {
-                            ["auto"] = location
-                        }
-                    };
-
-                    hybridCache.Set(memKey, stream_links, cacheTime(180, init: init));
-                }
-
-                return OnResult(stream_links, init, proxy);
+                });
             });
+
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
+
+            return OnResult(cache);
         }
     }
 }

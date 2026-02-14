@@ -1,12 +1,16 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using Shared;
+using Shared.Engine;
 using Shared.Models;
 using Shared.Models.AppConf;
 using System;
-using System.Linq;
+using System.Collections.Concurrent;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Lampac.Engine.Middlewares
@@ -34,6 +38,28 @@ namespace Lampac.Engine.Middlewares
             if (waf.whiteIps != null && waf.whiteIps.Contains(requestInfo.IP))
                 return _next(httpContext);
 
+            if (waf.bypassLocalIP && requestInfo.IsLocalIp)
+                return _next(httpContext);
+
+            #region BruteForce
+            if (waf.bruteForceProtection && !requestInfo.IsLocalIp)
+            {
+                var ids = memoryCache.GetOrCreate($"WAF:BruteForce:{requestInfo.IP}", entry =>
+                {
+                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
+                    return new ConcurrentDictionary<string, byte>();
+                });
+
+                ids.TryAdd(AccsDbInvk.Args(string.Empty, httpContext), 0);
+
+                if (ids.Count > 5)
+                {
+                    httpContext.Response.StatusCode = 429;
+                    return httpContext.Response.WriteAsync("Many devices for IP, set up KnownProxies to get the user's real IP", httpContext.RequestAborted);
+                }
+            }
+            #endregion
+
             #region country
             if (waf.countryAllow != null)
             {
@@ -52,6 +78,43 @@ namespace Lampac.Engine.Middlewares
                 {
                     httpContext.Response.StatusCode = 403;
                     return Task.CompletedTask;
+                }
+            }
+            #endregion
+
+            #region ASN
+            if (waf.asnAllow != null)
+            {
+                // если мы не знаем asn или точно знаем, что он не в списке разрешенных
+                if (requestInfo.ASN == -1 || !waf.asnAllow.Contains(requestInfo.ASN))
+                {
+                    httpContext.Response.StatusCode = 403;
+                    return Task.CompletedTask;
+                }
+            }
+
+            if (waf.asnDeny != null)
+            {
+                if (waf.asnDeny.Contains(requestInfo.ASN))
+                {
+                    httpContext.Response.StatusCode = 403;
+                    return Task.CompletedTask;
+                }
+            }
+            #endregion
+
+            #region ASN Range Deny
+            if (waf.asnsDeny != null && requestInfo.ASN != -1)
+            {
+                long asn = requestInfo.ASN;
+
+                foreach (var r in waf.asnsDeny)
+                {
+                    if (asn >= r.start && asn <= r.end)
+                    {
+                        httpContext.Response.StatusCode = 403;
+                        return Task.CompletedTask;
+                    }
                 }
             }
             #endregion
@@ -132,13 +195,13 @@ namespace Lampac.Engine.Middlewares
             #endregion
 
             #region limit_req
-            var (limit, pattern) = MapLimited(waf, httpContext.Request.Path.Value);
-            if (limit > 0)
+            var (pattern, map) = MapLimited(waf, httpContext.Request.Path.Value);
+            if (map.limit > 0)
             {
-                if (RateLimited(requestInfo.IP, limit, pattern))
+                if (RateLimited(httpContext, memoryCache, requestInfo.IP, map, pattern))
                 {
                     httpContext.Response.StatusCode = 429;
-                    return Task.CompletedTask;
+                    return httpContext.Response.WriteAsync("429 Too Many Requests", httpContext.RequestAborted);
                 }
             }
             #endregion
@@ -148,40 +211,67 @@ namespace Lampac.Engine.Middlewares
 
 
         #region MapLimited
-        static (int limit, string pattern) MapLimited(WafConf waf, string path)
+        static (string pattern, WafLimitMap map) MapLimited(WafConf waf, string path)
         {
             if (waf.limit_map != null)
             {
                 foreach (var pathLimit in waf.limit_map)
                 {
                     if (Regex.IsMatch(path, pathLimit.Key, RegexOptions.IgnoreCase))
-                        return (pathLimit.Value, pathLimit.Key);
+                        return (pathLimit.Key, pathLimit.Value);
                 }
             }
 
-            return (waf.limit_req, "default");
+            return ("default", new WafLimitMap() { limit = waf.limit_req });
         }
         #endregion
 
         #region RateLimited
-        bool RateLimited(string userip, int limit_req, string pattern)
+        static readonly ThreadLocal<StringBuilder> sbRateKey = new(() => new StringBuilder(PoolInvk.rentChunk));
+
+        static bool RateLimited(HttpContext httpContext, IMemoryCache cache, string userip, WafLimitMap map, string pattern)
         {
-            string memKeyLocIP = $"WAF:RateLimited:{userip}:{pattern}:{DateTime.Now.Minute}";
+            var sb = sbRateKey.Value;
+            sb.Clear();
 
-            if (memoryCache.TryGetValue(memKeyLocIP, out int req))
+            sb.Append("WAF:RateLimited:");
+            sb.Append(userip);
+            sb.Append(":");
+            sb.Append(pattern);
+            sb.Append(":");
+
+            if (map.pathId)
             {
-                if (req >= limit_req)
-                    return true;
-
-                memoryCache.Set(memKeyLocIP, req+1, DateTime.Now.AddMinutes(1));
+                sb.Append(httpContext.Request.Path.Value);
+                sb.Append(":");
             }
-            else
+
+            if (map.queryIds != null)
             {
-                memoryCache.Set(memKeyLocIP, 1, DateTime.Now.AddMinutes(1));
+                foreach(string queryId in map.queryIds)
+                {
+                    if (httpContext.Request.Query.TryGetValue(queryId, out StringValues val) && val.Count > 0)
+                    {
+                        sb.Append(val[0]);
+                        sb.Append(":");
+                    }
+                }
             }
 
-            return false;
+            var counter = cache.GetOrCreate(sb.ToString(), entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(map.second == 0 ? 60 : map.second);
+                return new Counter();
+            });
+
+            return Interlocked.Increment(ref counter.Value) > map.limit;
         }
         #endregion
+
+
+        sealed class Counter
+        {
+            public int Value;
+        }
     }
 }

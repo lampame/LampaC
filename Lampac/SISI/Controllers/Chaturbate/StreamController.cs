@@ -4,52 +4,39 @@ namespace SISI.Controllers.Chaturbate
 {
     public class StreamController : BaseSisiController
     {
+        public StreamController() : base(AppInit.conf.Chaturbate) { }
+
         [HttpGet]
         [Route("chu/potok")]
         async public ValueTask<ActionResult> Index(string baba)
         {
-            var init = await loadKit(AppInit.conf.Chaturbate);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
-
-            string memKey = $"chaturbate:stream:{baba}";
-
-            return await InvkSemaphore(memKey, async () =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<Dictionary<string, string>>($"chaturbate:stream:{baba}", 10, async e =>
             {
-                if (!hybridCache.TryGetValue(memKey, out Dictionary<string, string> stream_links))
+                string url = ChaturbateTo.StreamLinksUri(init.corsHost(), baba);
+                if (url == null)
+                    return e.Fail("baba");
+
+                Dictionary<string, string> stream_links = null;
+
+                await httpHydra.GetSpan(url, span => 
                 {
-                    reset:
-                    stream_links = await ChaturbateTo.StreamLinks(init.corsHost(), baba, url =>
-                        rch.enable ? rch.Get(init.cors(url), httpHeaders(init)) : Http.Get(init.cors(url), timeoutSeconds: 10, proxy: proxy, headers: httpHeaders(init))
-                    );
+                    stream_links = ChaturbateTo.StreamLinks(span);
+                });
 
-                    if (stream_links == null || stream_links.Count == 0)
-                    {
-                        if (IsRhubFallback(init))
-                            goto reset;
+                if (stream_links == null || stream_links.Count == 0)
+                    return e.Fail("stream_links", refresh_proxy: true);
 
-                        return OnError("stream_links", proxyManager);
-                    }
-
-                    if (!init.rhub)
-                        proxyManager.Success();
-
-                    hybridCache.Set(memKey, stream_links, cacheTime(10, init: init));
-                }
-
-                return OnResult(stream_links, init, proxy);
+                return e.Success(stream_links);
             });
+
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
+
+            return OnResult(cache);
         }
     }
 }

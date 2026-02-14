@@ -26,7 +26,7 @@ namespace Tracks.Engine
 
         readonly ConcurrentDictionary<string, TranscodingJob> _jobs = new();
         readonly Regex _safeFileNameRegex = new("^[A-Za-z0-9_.-]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-        readonly Regex _segmentFileRegex = new("^seg_(\\d+)\\.(m4s|ts)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        readonly Regex _segmentFileRegex = new("^seg_(\\d+)\\.(m4s|ts)$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         int _segmentCleanupRunning;
         readonly Timer _segmentCleanupTimer;
@@ -100,7 +100,7 @@ namespace Tracks.Engine
             #region ffprobe
             JObject ffprobe = null;
 
-            string ffprobeJson = await TracksController.FfprobeJson(null, null, new HybridCache(), request.src);
+            string ffprobeJson = await TracksController.FfprobeJson(null, null, IHybridCache.Get(null), request.src);
             if (string.IsNullOrEmpty(ffprobeJson) || ffprobeJson == "{}")
                 return (null!, "ffprobe");
 

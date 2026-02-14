@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using Shared;
 using Shared.Models;
 using System;
 using System.IO;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Lampac.Engine.Middlewares
@@ -25,31 +27,43 @@ namespace Lampac.Engine.Middlewares
 
         public Task Invoke(HttpContext httpContext)
         {
-            #region stats
-            if (AppInit.conf.openstat.enable)
-            {
-                string skey = $"stats:request:{DateTime.Now.Minute}";
-                if (!memoryCache.TryGetValue(skey, out long _req))
-                    _req = 0;
+            bool IsWsRequest = httpContext.Request.Path.StartsWithSegments("/nws", StringComparison.OrdinalIgnoreCase) || 
+                               httpContext.Request.Path.StartsWithSegments("/ws", StringComparison.OrdinalIgnoreCase);
 
-                _req++;
-                memoryCache.Set(skey, _req, DateTime.Now.AddMinutes(59));
+            #region stats
+            if (AppInit.conf.openstat.enable && !IsWsRequest)
+            {
+                var now = DateTime.UtcNow;
+                var counter = memoryCache.GetOrCreate($"stats:request:{now.Hour}:{now.Minute}", entry =>
+                {
+                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(60);
+                    return new CounterRequestInfo();
+                });
+
+                Interlocked.Increment(ref counter.Value);
             }
             #endregion
 
             bool IsLocalRequest = false;
             string cf_country = null;
             string clientIp = httpContext.Connection.RemoteIpAddress.ToString();
+            bool IsLocalIp = Shared.Engine.Utilities.IPNetwork.IsLocalIp(clientIp);
 
-            if (httpContext.Request.Headers.TryGetValue("localrequest", out var _localpasswd))
+            if (httpContext.Request.Headers.TryGetValue("localrequest", out StringValues _localpasswd) && _localpasswd.Count > 0)
             {
-                if (_localpasswd.ToString() != AppInit.rootPasswd)
+                if (!IsLocalIp && !AppInit.conf.BaseModule.allowExternalIpAccessToLocalRequest)
+                    return httpContext.Response.WriteAsync("allowExternalIpAccessToLocalRequest false", httpContext.RequestAborted);
+
+                if (_localpasswd[0] != AppInit.rootPasswd)
                     return httpContext.Response.WriteAsync("error passwd", httpContext.RequestAborted);
 
                 IsLocalRequest = true;
 
-                if (httpContext.Request.Headers.TryGetValue("x-client-ip", out var xip) && !string.IsNullOrEmpty(xip))
-                    clientIp = xip;
+                if (httpContext.Request.Headers.TryGetValue("x-client-ip", out StringValues xip) && xip.Count > 0)
+                {
+                    if (!string.IsNullOrEmpty(xip[0]))
+                        clientIp = xip[0];
+                }
             }
             else if (AppInit.conf.real_ip_cf || AppInit.conf.listen.frontend == "cloudflare")
             {
@@ -63,17 +77,26 @@ namespace Lampac.Engine.Middlewares
                         {
                             if (new System.Net.IPNetwork(cf.prefix, cf.prefixLength).Contains(clientIPAddress))
                             {
-                                if (httpContext.Request.Headers.TryGetValue("CF-Connecting-IP", out var xip) && !string.IsNullOrEmpty(xip))
-                                    clientIp = xip;
-
-                                if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Proto", out var xfp) && !string.IsNullOrEmpty(xfp))
+                                if (httpContext.Request.Headers.TryGetValue("CF-Connecting-IP", out StringValues xip) && xip.Count > 0)
                                 {
-                                    if (xfp == "http" || xfp == "https")
-                                        httpContext.Request.Scheme = xfp;
+                                    if (!string.IsNullOrEmpty(xip[0]))
+                                        clientIp = xip[0];
                                 }
 
-                                if (httpContext.Request.Headers.TryGetValue("CF-IPCountry", out var xcountry) && !string.IsNullOrEmpty(xcountry))
-                                    cf_country = xcountry;
+                                if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Proto", out StringValues xfp) && xfp.Count > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(xfp[0]))
+                                    {
+                                        if (xfp[0] == "http" || xfp[0] == "https")
+                                            httpContext.Request.Scheme = xfp;
+                                    }
+                                }
+
+                                if (httpContext.Request.Headers.TryGetValue("CF-IPCountry", out StringValues xcountry) && xcountry.Count > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(xcountry[0]))
+                                        cf_country = xcountry[0];
+                                }
 
                                 break;
                             }
@@ -84,7 +107,7 @@ namespace Lampac.Engine.Middlewares
                 #endregion
             }
             // запрос с cloudflare, запрос не в админку
-            else if (httpContext.Request.Headers.ContainsKey("CF-Connecting-IP") && !httpContext.Request.Path.Value.StartsWith("/admin"))
+            else if (httpContext.Request.Headers.ContainsKey("CF-Connecting-IP") && !httpContext.Request.Path.Value.StartsWith("/admin", StringComparison.OrdinalIgnoreCase))
             {
                 // если не указан frontend и это не первоначальная установка, тогда выводим ошибку
                 if (string.IsNullOrEmpty(AppInit.conf.listen.frontend) && File.Exists("module/manifest.json"))
@@ -94,38 +117,27 @@ namespace Lampac.Engine.Middlewares
             var req = new RequestModel()
             {
                 IsLocalRequest = IsLocalRequest,
+                IsLocalIp = IsLocalIp,
                 IP = clientIp,
                 Country = cf_country,
-                Path = httpContext.Request.Path.Value,
-                Query = httpContext.Request.QueryString.Value,
                 UserAgent = httpContext.Request.Headers.UserAgent
             };
 
+            if (httpContext.Request.Headers.TryGetValue("X-Kit-AesGcm", out StringValues aesGcmKey) && aesGcmKey.Count > 0)
+                req.AesGcmKey = aesGcmKey;
+
             #region Weblog Request
-            if (!IsLocalRequest)
+            if (!IsLocalRequest && !IsWsRequest && AppInit.conf.weblog.enable)
             {
-                string builderLog()
+                if (AppInit.conf.WebSocket.type == "signalr")
                 {
-                    var logBuilder = new System.Text.StringBuilder();
-                    logBuilder.AppendLine($"{DateTime.Now}");
-                    logBuilder.AppendLine($"IP: {clientIp} {req.Country}");
-                    logBuilder.AppendLine($"URL: {AppInit.Host(httpContext)}{httpContext.Request.Path}{httpContext.Request.QueryString}\n");
-
-                    foreach (var header in httpContext.Request.Headers)
-                        logBuilder.AppendLine($"{header.Key}: {header.Value}");
-
-                    return logBuilder.ToString();
-                }
-
-                if (AppInit.conf.rch.websoket == "signalr")
-                {
-                    if (soks.weblog_clients.Count > 0)
-                        soks.SendLog(builderLog(), "request");
+                    if (AppInit.conf.BaseModule.ws && soks.weblog_clients.Count > 0)
+                        soks.SendLog(builderLog(httpContext, req), "request");
                 }
                 else
                 {
-                    if (nws.weblog_clients.Count > 0)
-                        nws.SendLog(builderLog(), "request");
+                    if (AppInit.conf.BaseModule.nws && NativeWebSocket.weblog_clients.Count > 0)
+                        NativeWebSocket.SendLog(builderLog(httpContext, req), "request");
                 }
             }
             #endregion
@@ -146,49 +158,17 @@ namespace Lampac.Engine.Middlewares
             }
             else
             {
-                #region getuid
-                string getuid()
+                if (!IsWsRequest)
                 {
-                    if (httpContext.Request.Query.ContainsKey("token"))
-                    {
-                        string val = httpContext.Request.Query["token"].ToString();
-                        if (!string.IsNullOrEmpty(val))
-                            return val;
-                    }
+                    req.user = AppInit.conf.accsdb.findUser(httpContext, out string uid);
+                    req.user_uid = uid;
 
-                    if (httpContext.Request.Query.ContainsKey("account_email"))
-                    {
-                        string val = httpContext.Request.Query["account_email"].ToString();
-                        if (!string.IsNullOrEmpty(val))
-                            return val;
-                    }
+                    if (req.user != null)
+                        req.@params = AppInit.conf.accsdb.@params;
 
-                    if (httpContext.Request.Query.ContainsKey("uid"))
-                    {
-                        string val = httpContext.Request.Query["uid"].ToString();
-                        if (!string.IsNullOrEmpty(val))
-                            return val;
-                    }
-
-                    if (httpContext.Request.Query.ContainsKey("box_mac"))
-                    {
-                        string val = httpContext.Request.Query["box_mac"].ToString();
-                        if (!string.IsNullOrEmpty(val))
-                            return val;
-                    }
-
-                    return null;
+                    if (string.IsNullOrEmpty(req.user_uid))
+                        req.user_uid = getuid(httpContext);
                 }
-                #endregion
-
-                req.user = AppInit.conf.accsdb.findUser(httpContext, out string uid);
-                req.user_uid = uid;
-
-                if (string.IsNullOrEmpty(req.user_uid))
-                    req.user_uid = getuid();
-
-                if (req.user != null)
-                    req.@params = AppInit.conf.accsdb.@params;
 
                 httpContext.Features.Set(req);
                 return _next(httpContext);
@@ -196,7 +176,65 @@ namespace Lampac.Engine.Middlewares
         }
 
 
-        static string unknownFrontend = @"<!DOCTYPE html>
+        #region getuid
+        static readonly string[] uids = ["token", "account_email", "uid", "box_mac"];
+
+        static string getuid(HttpContext httpContext)
+        {
+            foreach (string id in uids)
+            {
+                if (httpContext.Request.Query.ContainsKey(id))
+                {
+                    StringValues val = httpContext.Request.Query[id];
+                    if (val.Count > 0 && IsValidUid(val[0]))
+                        return val[0];
+                }
+            }
+
+            return null;
+        }
+
+        static bool IsValidUid(ReadOnlySpan<char> value)
+        {
+            if (value.IsEmpty)
+                return false;
+
+            foreach (char ch in value)
+            {
+                if 
+                (
+                    (ch >= 'a' && ch <= 'z') || 
+                    (ch >= 'A' && ch <= 'Z') || 
+                    (ch >= '0' && ch <= '9') ||
+                    ch == '_' || ch == '+' || ch == '.' || ch == '-' || ch == '@' || ch == '='
+                )
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+        #endregion
+
+
+        static string builderLog(HttpContext httpContext, RequestModel req)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+            logBuilder.AppendLine($"{DateTime.Now}");
+            logBuilder.AppendLine($"IP: {req.IP} {req.Country}");
+            logBuilder.AppendLine($"URL: {AppInit.Host(httpContext)}{httpContext.Request.Path}{httpContext.Request.QueryString}\n");
+
+            foreach (var header in httpContext.Request.Headers)
+                logBuilder.AppendLine($"{header.Key}: {header.Value}");
+
+            return logBuilder.ToString();
+        }
+
+
+        static readonly string unknownFrontend = @"<!DOCTYPE html>
 <html lang='ru'>
 <head>
     <meta charset='UTF-8'>
@@ -211,12 +249,12 @@ namespace Lampac.Engine.Middlewares
                 <h5 class='card-title'>Укажите frontend для правильной обработки запроса</h5>
 				<br>
                 <p class='card-text'>Добавьте в init.conf следующий код:</p>
-                <pre style='background: #e9ecef;'><code>""listen"": {
+                <pre style='background: #e9ecef; padding: 1em;'><code>""listen"": {
   ""frontend"": ""cloudflare""
 }</code></pre>
 				<br>
                 <p class='card-text'>Либо отключите проверку CF-Connecting-IP:</p>
-                <pre style='background: #e9ecef;'><code>""listen"": {
+                <pre style='background: #e9ecef; padding: 1em;'><code>""listen"": {
   ""frontend"": ""off""
 }</code></pre>
 				<br>
@@ -226,5 +264,11 @@ namespace Lampac.Engine.Middlewares
     </div>
 </body>
 </html>";
+    }
+
+
+    public class CounterRequestInfo
+    {
+        public int Value;
     }
 }

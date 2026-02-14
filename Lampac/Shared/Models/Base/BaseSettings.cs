@@ -1,5 +1,5 @@
 ﻿using Newtonsoft.Json;
-using System.Text.RegularExpressions;
+using Shared.Engine.Utilities;
 using System.Web;
 
 namespace Shared.Models.Base
@@ -32,6 +32,8 @@ namespace Shared.Models.Base
 
         public bool IsKitConf { get; set; }
 
+        public bool IsCloneable { get; set; }
+
         public string plugin { get; set; }
 
         public int group { get; set; }
@@ -39,6 +41,8 @@ namespace Shared.Models.Base
         public bool group_hide { get; set; } = true;
 
         public bool rhub { get; set; }
+
+        public bool rhub_safety { get; set; } = true;
 
         public bool rhub_streamproxy { get; set; }
 
@@ -134,6 +138,10 @@ namespace Shared.Models.Base
 
         public string priorityBrowser { get; set; }
 
+        public int httptimeout { get; set; } = 8;
+
+        public int httpversion { get; set; } = 1;
+
 
         #region proxy
         public bool useproxy { get; set; }
@@ -151,6 +159,8 @@ namespace Shared.Models.Base
         public bool apnstream { get; set; }
 
         public string[] geostreamproxy { get; set; }
+
+        public string rchstreamproxy { get; set; }
 
         public ApnConf apn { get; set; }
 
@@ -173,7 +183,7 @@ namespace Shared.Models.Base
                 if (rhub && !rhub_streamproxy && !rhub_fallback && rhub_geo_disable == null) { }
                 else
                 {
-                    if (streamproxy || apnstream || qualitys_proxy || geostreamproxy != null)
+                    if (streamproxy || apnstream || qualitys_proxy || geostreamproxy != null || rchstreamproxy != null)
                         return null;
                 }
             }
@@ -216,10 +226,10 @@ namespace Shared.Models.Base
             if (string.IsNullOrWhiteSpace(crhost) || string.IsNullOrWhiteSpace(uri))
                 return uri;
 
-            crhost = crhost.Trim();
-
-            if (uri.Contains(Regex.Match(crhost, "https?://([^/]+)", RegexOptions.IgnoreCase).Groups[1].Value))
+            if (uri.AsSpan().Contains(IPNetwork.ExtractHost(crhost), StringComparison.OrdinalIgnoreCase))
                 return uri;
+
+            crhost = crhost.Trim();
 
             if (crhost.Contains("{encode_uri}") || crhost.Contains("{uri}"))
                 return crhost.Replace("{encode_uri}", HttpUtility.UrlEncode(uri)).Replace("{uri}", uri);
@@ -229,24 +239,21 @@ namespace Shared.Models.Base
         #endregion
 
 
-        public string Decrypt(string data)
+        public string Decrypt(ReadOnlySpan<char> data) 
+            => BaseDecrypt(data);
+
+        public static string BaseDecrypt(ReadOnlySpan<char> data)
         {
-            try
+            if (data.IsEmpty)
+                return null;
+
+            return string.Create(data.Length, data, static (span, source) =>
             {
-                if (data == null)
-                    return data;
-
-                char[] buffer = data.ToCharArray();
-                for (int i = 0; i < buffer.Length; i++)
+                for (int i = 0; i < span.Length; i++)
                 {
-                    char letter = buffer[i];
-                    letter = (char)(letter - 3);
-                    buffer[i] = letter;
+                    span[i] = (char)(source[i] - 3);
                 }
-
-                return new string(buffer);
-            }
-            catch { return null; }
+            });
         }
 
         object ICloneable.Clone()

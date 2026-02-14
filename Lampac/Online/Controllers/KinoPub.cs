@@ -1,14 +1,23 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
-using Shared.Models.Online.KinoPub;
-using System.Net;
+using Shared.Models.Online.Settings;
 
 namespace Online.Controllers
 {
-    public class KinoPub : BaseOnlineController
+    public class KinoPub : BaseOnlineController<KinoPubSettings>
     {
-        static CookieContainer cookies = new CookieContainer();
+        public KinoPub() : base(AppInit.conf.KinoPub) 
+        {
+            loadKitInitialization = (j, i, c) =>
+            {
+                if (j.ContainsKey("filetype"))
+                    i.filetype = c.filetype;
+
+                i.tokens = c.tokens;
+                return i;
+            };
+        }
 
         #region kinopubpro
         [HttpGet]
@@ -16,18 +25,15 @@ namespace Online.Controllers
         [Route("lite/kinopubpro")]
         async public Task<ActionResult> Pro(string code, string name)
         {
-            var init = AppInit.conf.KinoPub;
             var headers = httpHeaders(init);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
 
             if (string.IsNullOrWhiteSpace(code))
             {
-                var token_request = await Http.Post<JObject>($"{init.corsHost()}/oauth2/device?grant_type=device_code&client_id=xbmc&client_secret=cgg3gtifu46urtfp2zp1nqtba0k2ezxh", "", proxy: proxy, headers: httpHeaders(init), httpversion: 2);
+                string uri = $"{init.corsHost()}/oauth2/device?grant_type=device_code&client_id=xbmc&client_secret=cgg3gtifu46urtfp2zp1nqtba0k2ezxh";
+                var token_request = await Http.Post<JObject>(uri, "", httpversion: init.httpversion, proxy: proxy, headers: httpHeaders(init));
 
                 if (token_request == null)
-                    return Content($"нет доступа к {init.corsHost()}", "text/html; charset=utf-8");
+                    return ContentTo($"нет доступа к {init.corsHost()}");
 
                 string html = "1. Откройте <a href='https://kino.pub/device'>https://kino.pub/device</a> <br>";
                 html += $"2. Введите код активации <b>{token_request.Value<string>("user_code")}</b><br>";
@@ -35,25 +41,29 @@ namespace Online.Controllers
 
                 html += $"<br><br><a href='/lite/kinopubpro?code={token_request.Value<string>("code")}&name={name}'><button>Проверить активацию</button></a>";
 
-                return Content(html, "text/html; charset=utf-8");
+                return ContentTo(html);
             }
             else
             {
-                var device_token = await Http.Post<JObject>($"{init.corsHost()}/oauth2/device?grant_type=device_token&client_id=xbmc&client_secret=cgg3gtifu46urtfp2zp1nqtba0k2ezxh&code={code}", "", proxy: proxy, headers: httpHeaders(init), httpversion: 2);
+                string uri = $"{init.corsHost()}/oauth2/device?grant_type=device_token&client_id=xbmc&client_secret=cgg3gtifu46urtfp2zp1nqtba0k2ezxh&code={code}";
+                var device_token = await Http.Post<JObject>(uri, "", httpversion: init.httpversion, proxy: proxy, headers: httpHeaders(init));
                 if (device_token == null || string.IsNullOrWhiteSpace(device_token.Value<string>("access_token")))
                     return LocalRedirect("/lite/kinopubpro");
 
                 if (!string.IsNullOrEmpty(name))
-                    await Http.Post($"{init.corsHost()}/v1/device/notify?access_token={device_token.Value<string>("access_token")}", $"&title={name}", proxy: proxy, headers: httpHeaders(init), httpversion: 2);
+                {
+                    uri = $"{init.corsHost()}/v1/device/notify?access_token={device_token.Value<string>("access_token")}";
+                    await Http.Post(uri, $"&title={name}", httpversion: init.httpversion, proxy: proxy, headers: httpHeaders(init));
+                }
 
-                return Content("Добавьте в init.conf<br><br>\"KinoPub\": {<br>&nbsp;&nbsp;\"enable\": true,<br>&nbsp;&nbsp;\"token\": \"" + device_token.Value<string>("access_token") + "\"<br>}", "text/html; charset=utf-8");
+                return ContentTo("Добавьте в init.conf<br><br>\"KinoPub\": {<br>&nbsp;&nbsp;\"enable\": true,<br>&nbsp;&nbsp;\"token\": \"" + device_token.Value<string>("access_token") + "\"<br>}");
             }
         }
         #endregion
 
         [HttpGet]
         [Route("lite/kinopub")]
-        async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int clarification, int postid, int s = -1, int t = -1, string codec = null, bool origsource = false, bool rjson = false, bool similar = false, string source = null, string id = null)
+        async public Task<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int year, int clarification, int postid, int s = -1, int t = -1, string codec = null, bool rjson = false, bool similar = false, string source = null, string id = null)
         {
             if (postid == 0 && !string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(id))
             {
@@ -61,49 +71,31 @@ namespace Online.Controllers
                     int.TryParse(id, out postid);
             }
 
-            var init = await loadKit(AppInit.conf.KinoPub, (j, i, c) =>
-            {
-                if (j.ContainsKey("filetype"))
-                    i.filetype = c.filetype;
-                i.tokens = c.tokens;
-                return i;
-            });
-
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
 
             string token = init.token;
             if (init.tokens != null && init.tokens.Length > 1)
                 token = init.tokens[Random.Shared.Next(0, init.tokens.Length)];
+
+            if (string.IsNullOrWhiteSpace(token))
+                return OnError("token", statusCode: 401, gbcache: false);
 
             var oninvk = new KinoPubInvoke
             (
                host,
                init.corsHost(),
                token,
-               ongettourl => rch.enable ? rch.Get(init.cors(ongettourl), httpHeaders(init)) : 
-                                          Http.Get(init.cors(ongettourl), httpversion: 2, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init), cookieContainer: cookies),
-               (stream, filepath) => HostStreamProxy(init, stream, proxy: proxy),
-               requesterror: () => { if (!rch.enable) { proxyManager.Refresh(); } }
+               httpHydra,
+               (stream, filepath) => HostStreamProxy(stream),
+               requesterror: () => proxyManager?.Refresh()
             );
 
             if (postid == 0)
             {
-                var search = await InvokeCache<SearchResult>($"kinopub:search:{title}:{year}:{clarification}:{imdb_id}:{kinopoisk_id}", cacheTime(40, init: init), rch.enable ? null : proxyManager, async res =>
-                {
-                    return await oninvk.Search(title, original_title, year, clarification, imdb_id, kinopoisk_id);
-                });
+                var search = await InvokeCacheResult($"kinopub:search:{title}:{year}:{clarification}:{imdb_id}:{kinopoisk_id}", 40, 
+                    () => oninvk.Search(title, original_title, year, clarification, imdb_id, kinopoisk_id)
+                );
 
                 if (!search.IsSuccess)
                     return OnError(search.ErrorMsg);
@@ -113,50 +105,47 @@ namespace Online.Controllers
                     if (search.Value.similars == null)
                         return OnError();
 
-                    return ContentTo(rjson ? search.Value.similars.Value.ToJson() : search.Value.similars.Value.ToHtml());
+                    return await ContentTpl(search.Value.similars);
                 }
 
                 postid = search.Value.id;
             }
 
-            var cache = await InvokeCache<RootObject>($"kinopub:post:{postid}:{token}", cacheTime(10, init: init), rch.enable ? null : proxyManager, async res =>
-            {
-                return await oninvk.Post(postid);
-            });
+            rhubFallback:
+            var cache = await InvokeCacheResult($"kinopub:post:{postid}:{token}", 10,
+                () => oninvk.Post(postid)
+            );
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, init.filetype, title, original_title, postid, s, t, codec, vast: init.vast, rjson: rjson), origsource: origsource, gbcache: !rch.enable);
+            if (IsRhubFallback(cache, safety: true))
+                goto rhubFallback;
+
+            return await ContentTpl(cache, () => oninvk.Tpl(cache.Value, init.filetype, title, original_title, postid, s, t, codec, vast: init.vast, rjson: rjson));
         }
 
 
         [HttpGet]
         [Route("lite/kinopub/subtitles.json")]
-        async public ValueTask<ActionResult> Subtitles(int mid)
+        async public Task<ActionResult> Subtitles(int mid)
         {
-            var init = await loadKit(AppInit.conf.KinoPub, (j, i, c) =>
-            {
-                i.tokens = c.tokens;
-                return i;
-            });
-
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_check: false))
                 return badInitMsg;
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
 
             string token = init.token;
             if (init.tokens != null && init.tokens.Length > 1)
                 token = init.tokens[Random.Shared.Next(0, init.tokens.Length)];
 
+            if (string.IsNullOrWhiteSpace(token))
+                return ContentTo("[]");
+
             string uri = $"{init.corsHost()}/v1/items/media-links?mid={mid}&access_token={token}";
 
-            var root = await InvokeCache($"kinopub:media-links:{mid}:{token}", cacheTime(20, init: init), 
-                () => Http.Get<JObject>(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init))
+            var root = await InvokeCache($"kinopub:media-links:{mid}:{token}", 20, 
+                () => httpHydra.Get<JObject>(uri, safety: true)
             );
 
             if (root == null || !root.ContainsKey("subtitles"))
             {
-                proxyManager.Refresh();
+                proxyManager?.Refresh();
                 return ContentTo("[]");
             }
 
@@ -171,11 +160,10 @@ namespace Online.Controllers
             {
                 try
                 {
-                    string lang = s.Value<string>("lang");
                     string url = s.Value<string>("url");
 
                     if (!string.IsNullOrEmpty(url))
-                        tpl.Append(lang, HostStreamProxy(init, url, proxy: proxy));
+                        tpl.Append(s.Value<string>("lang"), HostStreamProxy(url));
                 }
                 catch { }
             }

@@ -24,6 +24,7 @@ namespace Shared.Engine
         string plugin;
         bool refresh;
         Iproxy conf;
+        RchClient rch;
 
         bool IsKitConf;
         string KitCurrentProxyIp;
@@ -32,6 +33,9 @@ namespace Shared.Engine
 
         public ProxyManager(string plugin, Iproxy conf, bool refresh = true, bool IsKitConf = false)
         {
+            if (conf == null)
+                return;
+
             this.IsKitConf = IsKitConf;
             this.plugin = plugin;
             this.conf = conf;
@@ -40,7 +44,14 @@ namespace Shared.Engine
         }
 
         public ProxyManager(BaseSettings conf, bool refresh = true)
+            : this(conf, null, refresh) { }
+
+        public ProxyManager(BaseSettings conf, RchClient rch, bool refresh = true)
         {
+            if (conf == null)
+                return;
+
+            this.rch = rch;
             IsKitConf = conf.IsKitConf;
             plugin = !string.IsNullOrEmpty(conf.plugin) ? conf.plugin : conf.host ?? conf.apihost;
             this.conf = conf;
@@ -54,6 +65,9 @@ namespace Shared.Engine
 
         public (WebProxy proxy, (string ip, string username, string password) data) BaseGet()
         {
+            if (conf == null)
+                return default;
+
             if (!conf.useproxy && !conf.useproxystream)
                 return default;
 
@@ -122,6 +136,9 @@ namespace Shared.Engine
             if (!refresh || IsKitConf)
                 return;
 
+            if (rch != null && rch.enable)
+                return;
+
             void update(ProxySettings p, string key)
             {
                 if (database.TryGetValue(key, out ProxyManagerModel val))
@@ -168,6 +185,9 @@ namespace Shared.Engine
         public void Success()
         {
             if (IsKitConf)
+                return;
+
+            if (rch != null && rch.enable)
                 return;
 
             foreach (string key in proxyKeys)
@@ -241,6 +261,9 @@ namespace Shared.Engine
 
         public static (WebProxy proxy, (string ip, string username, string password) data) ConfigureWebProxy(ProxySettings p, string proxyip)
         {
+            if (p == null)
+                return default;
+
             NetworkCredential credentials = null;
 
             if (proxyip.Contains("@"))

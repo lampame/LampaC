@@ -53,6 +53,9 @@ cp TorrServer/bin/Release/net9.0/publish/TorrServer.dll lpc/module/
 ./dotnet/dotnet publish Tracks -c Release
 cp Tracks/bin/Release/net9.0/publish/Tracks.dll lpc/module/
 
+mkdir -p lpc/basemod
+cp -R BaseModule/Controllers lpc/basemod/
+
 cd lpc/
 rm -f Lampac.runtimeconfig.json
 

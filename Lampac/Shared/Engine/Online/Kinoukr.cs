@@ -1,4 +1,5 @@
-﻿using Shared.Models.Base;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.Base;
 using Shared.Models.Online.Eneyida;
 using Shared.Models.Templates;
 using System.Text;
@@ -15,7 +16,7 @@ namespace Shared.Engine.Online
         static string ArrayListToNumber => "1234567890";
         public static string unic(int size = 8, bool IsNumberCode = false)
         {
-            StringBuilder array = new StringBuilder();
+            StringBuilder array = new StringBuilder(size);
             for (int i = 0; i < size; i++)
             {
                 array.Append(IsNumberCode ? ArrayListToNumber[Random.Shared.Next(0, ArrayListToNumber.Length)] : ArrayList[Random.Shared.Next(0, ArrayList.Length)]);
@@ -28,18 +29,16 @@ namespace Shared.Engine.Online
         #region KinoukrInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
-        Func<string, string, ValueTask<string>> onpost;
+        HttpHydra http;
         Func<string, string> onstreamfile;
         Func<string, string> onlog;
         Action requesterror;
 
-        public KinoukrInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string, ValueTask<string>> onpost, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public KinoukrInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
-            this.onget = onget;
-            this.onpost = onpost;
+            http = httpHydra;
             this.onstreamfile = onstreamfile;
             this.onlog = onlog;
             this.requesterror = requesterror;
@@ -47,121 +46,121 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(string original_title, int year, string href)
+        public async Task<EmbedModel> Embed(string original_title, int year, string href)
         {
             if (string.IsNullOrWhiteSpace(href) && (string.IsNullOrWhiteSpace(original_title) || year == 0))
                 return null;
 
             return null;
 
-            string link = href;
-            var result = new EmbedModel();
+            //string link = href;
+            //var result = new EmbedModel();
 
-            if (string.IsNullOrWhiteSpace(link))
-            {
-                onlog?.Invoke("search start");
-                //string? search = await onget.Invoke($"{apihost}/index.php?do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(original_title)}");
+            //if (string.IsNullOrWhiteSpace(link))
+            //{
+            //    onlog?.Invoke("search start");
+            //    //string? search = await onget.Invoke($"{apihost}/index.php?do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(original_title)}");
 
-                // $"{apihost}/index.php?do=search"
-                string search = await onpost.Invoke($"{apihost}/{unic(4, true)}-{unic(Random.Shared.Next(4, 8))}-{unic(Random.Shared.Next(5, 10))}.html", $"do=search&subaction=search&story={HttpUtility.UrlEncode(original_title)}");
-                if (search == null)
-                {
-                    requesterror?.Invoke();
-                    return null;
-                }
+            //    // $"{apihost}/index.php?do=search"
+            //    string search = await onpost.Invoke($"{apihost}/{unic(4, true)}-{unic(Random.Shared.Next(4, 8))}-{unic(Random.Shared.Next(5, 10))}.html", $"do=search&subaction=search&story={HttpUtility.UrlEncode(original_title)}");
+            //    if (search == null)
+            //    {
+            //        requesterror?.Invoke();
+            //        return null;
+            //    }
 
-                onlog?.Invoke("search ok");
+            //    onlog?.Invoke("search ok");
 
-                foreach (string row in search.Split("\"short clearfix with-mask\"").Skip(1))
-                {
-                    if (row.Contains(">Анонс</div>") || row.Contains(">Трейлер</div>"))
-                        continue;
+            //    foreach (string row in search.Split("\"short clearfix with-mask\"").Skip(1))
+            //    {
+            //        if (row.Contains(">Анонс</div>") || row.Contains(">Трейлер</div>"))
+            //            continue;
 
-                    string newslink = Regex.Match(row, "href=\"(https?://[^/]+/[^\"]+\\.html)\"").Groups[1].Value;
-                    if (string.IsNullOrWhiteSpace(newslink))
-                        continue;
+            //        string newslink = Regex.Match(row, "href=\"(https?://[^/]+/[^\"]+\\.html)\"").Groups[1].Value;
+            //        if (string.IsNullOrWhiteSpace(newslink))
+            //            continue;
 
-                    string name = Regex.Match(row, "class=\"short-title\" [^>]+>([^<]+)<").Groups[1].Value;
-                    if (result.similars == null)
-                        result.similars = new List<Similar>();
+            //        string name = Regex.Match(row, "class=\"short-title\" [^>]+>([^<]+)<").Groups[1].Value;
+            //        if (result.similars == null)
+            //            result.similars = new List<Similar>();
 
-                    result.similars.Add(new Similar() 
-                    {
-                        title = name,
-                        href = newslink
-                    });
-                }
+            //        result.similars.Add(new Similar() 
+            //        {
+            //            title = name,
+            //            href = newslink
+            //        });
+            //    }
 
-                if (result.similars == null || result.similars.Count == 0)
-                {
-                    if (search.Contains(">Пошук по сайту<"))
-                        return new EmbedModel() { IsEmpty = true };
+            //    if (result.similars == null || result.similars.Count == 0)
+            //    {
+            //        if (search.Contains(">Пошук по сайту<"))
+            //            return new EmbedModel() { IsEmpty = true };
 
-                    return null;
-                }
+            //        return null;
+            //    }
 
-                if (result.similars.Count > 1)
-                    return result;
+            //    if (result.similars.Count > 1)
+            //        return result;
 
-                link = result.similars[0].href;
-            }
+            //    link = result.similars[0].href;
+            //}
 
-            onlog?.Invoke("link: " + link);
-            string news = await onget.Invoke(link);
-            if (news == null)
-            {
-                requesterror?.Invoke();
-                return null;
-            }
+            //onlog?.Invoke("link: " + link);
+            //string news = await onget.Invoke(link);
+            //if (news == null)
+            //{
+            //    requesterror?.Invoke();
+            //    return null;
+            //}
 
-            result.quel = Regex.Match(news, "class=\"m-meta m-qual\">([^<]+)<").Groups[1].Value;
+            //result.quel = Regex.Match(news, "class=\"m-meta m-qual\">([^<]+)<").Groups[1].Value;
 
-            string iframeUri = Regex.Match(news, "src=\"(https?://tortuga\\.[a-z]+/[^\"]+)\"").Groups[1].Value;
-            if (string.IsNullOrEmpty(iframeUri))
-            {
-                iframeUri = Regex.Match(news, "src=\"(https?://ashdi\\.vip/[^\"]+)\"").Groups[1].Value;
-                if (string.IsNullOrEmpty(iframeUri))
-                    return null;
-            }
+            //string iframeUri = Regex.Match(news, "src=\"(https?://tortuga\\.[a-z]+/[^\"]+)\"").Groups[1].Value;
+            //if (string.IsNullOrEmpty(iframeUri))
+            //{
+            //    iframeUri = Regex.Match(news, "src=\"(https?://ashdi\\.vip/[^\"]+)\"").Groups[1].Value;
+            //    if (string.IsNullOrEmpty(iframeUri))
+            //        return null;
+            //}
 
-            onlog?.Invoke("iframeUri: " + iframeUri);
-            string content = await onget.Invoke(iframeUri);
-            if (content == null || !content.Contains("file:"))
-            {
-                requesterror?.Invoke();
-                return null;
-            }
+            //onlog?.Invoke("iframeUri: " + iframeUri);
+            //string content = await onget.Invoke(iframeUri);
+            //if (content == null || !content.Contains("file:"))
+            //{
+            //    requesterror?.Invoke();
+            //    return null;
+            //}
 
-            string player = StringConvert.FindLastText(content, "new Playerjs", "</script>");
-            if (player == null)
-                return null;
+            //string player = StringConvert.FindLastText(content, "new Playerjs", "</script>");
+            //if (player == null)
+            //    return null;
 
-            if (Regex.IsMatch(content, "file: ?'\\["))
-            {
-                Models.Online.Tortuga.Voice[] root = null;
+            //if (Regex.IsMatch(content, "file: ?'\\["))
+            //{
+            //    Models.Online.Tortuga.Voice[] root = null;
 
-                try
-                {
-                    root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(Regex.Match(content, "file: ?'([^\n\r]+)',").Groups[1].Value);
-                    if (root == null || root.Length == 0)
-                        return null;
-                }
-                catch { return null; }
+            //    try
+            //    {
+            //        root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(Regex.Match(content, "file: ?'([^\n\r]+)',").Groups[1].Value);
+            //        if (root == null || root.Length == 0)
+            //            return null;
+            //    }
+            //    catch { return null; }
 
-                result.serial = root;
-            }
-            else
-            {
-                result.content = player;
-                onlog?.Invoke("content: " + result.content);
-            }
+            //    result.serial = root;
+            //}
+            //else
+            //{
+            //    result.content = player;
+            //    onlog?.Invoke("content: " + result.content);
+            //}
 
-            return result;
+            //return result;
         }
         #endregion
 
         #region EmbedKurwa
-        public async ValueTask<EmbedModel> EmbedKurwa(int clarification, string title, string original_title, int year, string href)
+        public async Task<EmbedModel> EmbedKurwa(int clarification, string title, string original_title, int year, string href)
         {
             string iframeUri = href;
             var result = new EmbedModel();
@@ -172,33 +171,29 @@ namespace Shared.Engine.Online
                     ? $"name={HttpUtility.UrlEncode(title)}" 
                     : $"eng_name={HttpUtility.UrlEncode(original_title)}";
 
-                string json = await onget.Invoke("http://194.246.82.144/ukr?" + arg);
-                if (json == null)
+                var root = await http.Get<BobrKurwa[]>("http://194.246.82.144/ukr?" + arg);
+                if (root == null)
                 {
                     requesterror?.Invoke();
                     return null;
                 }
 
-                result.similars = new List<Similar>();
+                result.similars = new List<Similar>(root.Length);
 
-                try
+                foreach (var item in root)
                 {
-                    foreach (var item in JsonSerializer.Deserialize<BobrKurwa[]>(json))
+                    var model = new Similar()
                     {
-                        var model = new Similar()
-                        {
-                            href = item.tortuga ?? item.ashdi,
-                            title = $"{item.name} / {item.eng_name}",
-                            year = item.year
-                        };
+                        href = item.tortuga ?? item.ashdi,
+                        title = $"{item.name} / {item.eng_name}",
+                        year = item.year
+                    };
 
-                        if (item.year == year.ToString())
-                            result.similars.Insert(0, model);
-                        else
-                            result.similars.Add(model);
-                    }
+                    if (item.year == year.ToString())
+                        result.similars.Insert(0, model);
+                    else
+                        result.similars.Add(model);
                 }
-                catch { }
 
                 if (result.similars.Count == 0)
                     return new EmbedModel() { IsEmpty = true };
@@ -210,71 +205,67 @@ namespace Shared.Engine.Online
             }
 
             onlog?.Invoke("iframeUri: " + iframeUri);
-            string content = await onget.Invoke(iframeUri);
-            if (content == null || !content.Contains("file:"))
+
+            await http.GetSpan(iframeUri, content =>
+            {
+                if (!content.Contains("file:", StringComparison.Ordinal))
+                    return;
+
+                if (iframeUri.Contains("ashdi"))
+                {
+                    result.source_type = "ashdi";
+
+                    if (Regex.IsMatch(content, "file: ?'\\["))
+                    {
+                        try
+                        {
+                            var root = JsonSerializer.Deserialize<Models.Online.Ashdi.Voice[]>(Rx.Match(content, "file: ?'([^\n\r]+)',"));
+                            if (root != null && root.Length > 0)
+                                result.serial_ashdi = root;
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        var rx = Rx.Split("new Playerjs", content);
+                        if (1 > rx.Count)
+                            return;
+
+                        result.content = rx[1].ToString();
+                    }
+                }
+                else
+                {
+                    result.source_type = "tortuga";
+
+                    if (Regex.IsMatch(content, "file: ?'"))
+                    {
+                        try
+                        {
+                            string file = Rx.Match(content, "file: ?'([^\n\r]+)',");
+                            if (file.EndsWith("=="))
+                            {
+                                file = Regex.Replace(file, "==$", "");
+                                file = string.Join("", CrypTo.DecodeBase64(file).Reverse());
+                            }
+
+                            var root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(file);
+                            if (root != null && root.Length > 0)
+                                result.serial = root;
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        result.content = content.ToString();
+                    }
+                }
+            });
+
+            if (string.IsNullOrEmpty(result.content) && result.serial_ashdi == null && result.serial == null)
             {
                 requesterror?.Invoke();
                 return null;
-            }
-
-            if (iframeUri.Contains("ashdi"))
-            {
-                result.source_type = "ashdi";
-
-                if (Regex.IsMatch(content, "file: ?'\\["))
-                {
-                    Models.Online.Ashdi.Voice[] root = null;
-
-                    try
-                    {
-                        root = JsonSerializer.Deserialize<Models.Online.Ashdi.Voice[]>(Regex.Match(content, "file: ?'([^\n\r]+)',").Groups[1].Value);
-                        if (root == null || root.Length == 0)
-                            return null;
-                    }
-                    catch { return null; }
-
-                    result.serial_ashdi = root;
-                }
-                else
-                {
-                    result.content = content;
-                    onlog?.Invoke("content: " + result.content);
-                }
-
-                return result;
-            }
-            else
-            {
-                result.source_type = "tortuga";
-
-                if (Regex.IsMatch(content, "file: ?'"))
-                {
-                    Models.Online.Tortuga.Voice[] root = null;
-
-                    try
-                    {
-                        string file = Regex.Match(content, "file: ?'([^\n\r]+)',").Groups[1].Value;
-                        if (file.EndsWith("=="))
-                        {
-                            file = Regex.Replace(file, "==$", "");
-                            file = string.Join("", CrypTo.DecodeBase64(file).Reverse());
-                        }
-
-                        root = JsonSerializer.Deserialize<Models.Online.Tortuga.Voice[]>(file);
-                        if (root == null || root.Length == 0)
-                            return null;
-                    }
-                    catch { return null; }
-
-                    result.serial = root;
-                }
-                else
-                {
-                    string player = StringConvert.FindLastText(content, "new TortugaCore", "</script>");
-
-                    result.content = player ?? content;
-                    onlog?.Invoke("content: " + result.content);
-                }
             }
 
             return result;
@@ -282,35 +273,35 @@ namespace Shared.Engine.Online
         #endregion
 
         #region getIframeSource
-        public async ValueTask<string> getIframeSource(string link)
+        public async Task<string> getIframeSource(string link)
         {
             if (string.IsNullOrWhiteSpace(link))
                 return null;
 
-            string news = await onget.Invoke(link);
-            if (news == null)
+            string iframeUri = null;
+
+            await http.GetSpan(link, news =>
+            {
+                iframeUri = Rx.Match(news, "src=\"(https?://tortuga\\.[a-z]+/[^\"]+)\"");
+                if (string.IsNullOrEmpty(iframeUri))
+                    iframeUri = Rx.Match(news, "src=\"(https?://ashdi\\.vip/[^\"]+)\"");
+            });
+
+            if (string.IsNullOrEmpty(iframeUri))
             {
                 requesterror?.Invoke();
                 return null;
-            }
-
-            string iframeUri = Regex.Match(news, "src=\"(https?://tortuga\\.[a-z]+/[^\"]+)\"").Groups[1].Value;
-            if (string.IsNullOrEmpty(iframeUri))
-            {
-                iframeUri = Regex.Match(news, "src=\"(https?://ashdi\\.vip/[^\"]+)\"").Groups[1].Value;
-                if (string.IsNullOrEmpty(iframeUri))
-                    return null;
             }
 
             return iframeUri;
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel result, int clarification, string title, string original_title, int year, string t, int s, string href, VastConf vast = null, bool rjson = false)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel result, int clarification, string title, string original_title, int year, string t, int s, string href, VastConf vast = null, bool rjson = false)
         {
             if (result == null || result.IsEmpty)
-                return string.Empty;
+                return default;
 
             string enc_title = HttpUtility.UrlEncode(title);
             string enc_original_title = HttpUtility.UrlEncode(original_title);
@@ -330,16 +321,16 @@ namespace Shared.Engine.Online
                         stpl.Append(similar.title, similar.year, string.Empty, link);
                     }
 
-                    return rjson ? stpl.ToJson() : stpl.ToHtml();
+                    return stpl;
                 }
 
-                return string.Empty;
+                return default;
             }
             #endregion
 
             if (result.source_type == "ashdi")
             {
-                var invk = new AshdiInvoke(host, apihost, onget, onstreamfile, onlog: onlog, requesterror: requesterror);
+                var invk = new AshdiInvoke(host, apihost, http, onstreamfile, requesterror: requesterror);
                 int.TryParse(t, out int _t);
 
                 var md = new Models.Online.Ashdi.EmbedModel()
@@ -348,7 +339,7 @@ namespace Shared.Engine.Online
                     serial = result.serial_ashdi
                 };
 
-                return invk.Html(md, 0, title, original_title, _t, s, vast, rjson, host + $"lite/kinoukr?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}");
+                return invk.Tpl(md, 0, title, original_title, _t, s, vast, rjson, host + $"lite/kinoukr?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}");
             }
 
             if (result.content != null)
@@ -365,7 +356,7 @@ namespace Shared.Engine.Online
                     hls = string.Join("", CrypTo.DecodeBase64(base64).Reverse());
 
                     if (string.IsNullOrWhiteSpace(hls))
-                        return string.Empty;
+                        return default;
                 }
 
                 #region subtitle
@@ -385,7 +376,7 @@ namespace Shared.Engine.Online
 
                 mtpl.Append(string.IsNullOrEmpty(result.quel) ? "По умолчанию" : result.quel, onstreamfile.Invoke(hls), subtitles: subtitles, vast: vast);
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -405,38 +396,35 @@ namespace Shared.Engine.Online
                             tpl.Append(season.title, link, season.season);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                         #endregion
                     }
                     else
                     {
+                        string sArhc = s.ToString();
+                        var episodes = result.serial.First(i => i.season == sArhc).folder;
+
                         #region Перевод
                         var vtpl = new VoiceTpl();
-                        var hashVoice = new HashSet<string>();
+                        var hashVoice = new HashSet<string>(20);
 
-                        foreach (var season in result.serial)
+                        foreach (var episode in episodes)
                         {
-                            foreach (var episode in season.folder)
+                            foreach (var voice in episode.folder)
                             {
-                                foreach (var voice in episode.folder)
-                                {
-                                    if (hashVoice.Contains(voice.title))
-                                        continue;
-                                    hashVoice.Add(voice.title);
+                                if (!hashVoice.Add(voice.title))
+                                    continue;
 
-                                    if (string.IsNullOrEmpty(t))
-                                        t = voice.title;
+                                if (string.IsNullOrEmpty(t))
+                                    t = voice.title;
 
-                                    string link = host + $"lite/kinoukr?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={s}&t={voice.title}";
-                                    vtpl.Append(voice.title, t == voice.title, link);
-                                }
+                                string link = host + $"lite/kinoukr?rjson={rjson}&clarification={clarification}&title={enc_title}&original_title={enc_original_title}&year={year}&href={enc_href}&s={s}&t={voice.title}";
+                                vtpl.Append(voice.title, t == voice.title, link);
                             }
                         }
                         #endregion
 
-                        string sArhc = s.ToString();
-                        var episodes = result.serial.First(i => i.season == sArhc).folder;
-                        var etpl = new EpisodeTpl(episodes.Length);
+                        var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                         foreach (var episode in episodes)
                         {
@@ -462,15 +450,12 @@ namespace Shared.Engine.Online
                             etpl.Append(episode.title, title ?? original_title, sArhc, episode.number, file, subtitles: subtitles, vast: vast);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

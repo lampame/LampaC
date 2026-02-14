@@ -5,72 +5,65 @@ using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.Playwright;
 using Newtonsoft.Json;
 using Shared.Models.CSharpGlobals;
-using Shared.PlaywrightCore;
-using System.Net;
 using Shared.Models.SISI.NextHUB;
+using Shared.PlaywrightCore;
 
 namespace SISI.Controllers.NextHUB
 {
-    public class ViewController : BaseSisiController
+    public class ViewController : BaseSisiController<NxtSettings>
     {
+        public ViewController() : base(default) { }
+
         [HttpGet]
         [Route("nexthub/vidosik")]
-        async public ValueTask<ActionResult> Index(string uri, bool related)
+        async public Task<ActionResult> Index(string uri, bool related)
         {
             if (!AppInit.conf.sisi.NextHUB)
-                return OnError("disabled");
+                return OnError("disabled", rcache: false);
 
             string plugin = uri.Split("_-:-_")[0];
             string url = uri.Split("_-:-_")[1];
 
-            var init = Root.goInit(plugin);
-            if (init == null)
-                return OnError("init not found");
+            var _nxtInit = Root.goInit(plugin);
+            if (_nxtInit == null)
+                return OnError("init not found", rcache: false);
 
-            init = await loadKit(init);
-
-            if (await IsBadInitialization(init, rch: init.rch_access != null))
+            if (await IsRequestBlocked(_nxtInit, rch: _nxtInit.rch_access != null))
                 return badInitMsg;
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return OnError(rch_error);
 
             if (init.view.initUrlEval != null)
                 url = CSharpEval.Execute<string>(init.view.initUrlEval, new NxtUrlRequest(init.corsHost(), plugin, url, HttpContext.Request.Query, related));
 
-            return await InvkSemaphore($"nexthub:InvkSemaphore:{url}", async () =>
+            return await SemaphoreResult($"nexthub:InvkSemaphore:{url}", async e =>
             {
-                var proxyManager = new ProxyManager(init);
-                var proxy = proxyManager.BaseGet();
-
                 (string file, List<HeadersModel> headers, List<PlaylistItem> recomends) video = default;
 
                 if ((init.view.priorityBrowser ?? init.priorityBrowser) == "http" && init.view.viewsource &&
                     (init.view.nodeFile != null || init.view.eval != null || init.view.regexMatch != null) &&
                      init.view.routeEval == null && init.cookies == null && init.view.evalJS == null)
                 {
-                    reset: video = await goVideoToHttp(rch, plugin, init.cors(url), init, proxyManager, proxy.proxy);
+                    reset:
+                    if (rch == null || rch.enable == false)
+                        await e.semaphore.WaitAsync();
+
+                    video = await goVideoToHttp(plugin, init.cors(url), init);
                     if (string.IsNullOrEmpty(video.file))
                     {
-                        if (IsRhubFallback(init))
+                        if (IsRhubFallback())
                             goto reset;
 
-                        return OnError("file", rcache: !rch.enable);
+                        return OnError("file", rcache: !init.debug);
                     }
                 }
                 else
                 {
-                    if (rch.enable)
-                        return OnError("rch not supported");
+                    if (rch?.enable == true)
+                        return OnError("rch not supported", rcache: false);
 
-                    video = await goVideoToBrowser(plugin, init.cors(url), init, proxyManager, proxy.data);
+                    await e.semaphore.WaitAsync();
+                    video = await goVideoToBrowser(plugin, init.cors(url), init);
                     if (string.IsNullOrEmpty(video.file))
-                        return OnError("file");
+                        return OnError("file", rcache: !init.debug);
                 }
 
                 var stream_links = new StreamItem()
@@ -83,15 +76,15 @@ namespace SISI.Controllers.NextHUB
                 };
 
                 if (related)
-                    return OnResult(stream_links?.recomends, null, plugin: plugin, total_pages: 1);
+                    return await PlaylistResult(stream_links?.recomends, false, null, total_pages: 1);
 
-                return OnResult(stream_links, init, proxy.proxy, headers_stream: httpHeaders(init.host, init.headers_stream != null ? init.headers_stream : init.headers_stream));
+                return OnResult(stream_links);
             });
         }
 
 
         #region goVideoToBrowser
-        async ValueTask<(string file, List<HeadersModel> headers, List<PlaylistItem> recomends)> goVideoToBrowser(string plugin, string url, NxtSettings init, ProxyManager proxyManager, (string ip, string username, string password) proxy)
+        async ValueTask<(string file, List<HeadersModel> headers, List<PlaylistItem> recomends)> goVideoToBrowser(string plugin, string url, NxtSettings init)
         {
             if (string.IsNullOrEmpty(url))
                 return default;
@@ -99,14 +92,14 @@ namespace SISI.Controllers.NextHUB
             try
             {
                 string memKey = $"nexthub:view18:goVideo:{url}";
-                if (init.view.bindingToIP)
+                if (init.view.bindingToIP && proxyManager != null)
                     memKey += $":{proxyManager.CurrentProxyIp}";
 
                 if (!hybridCache.TryGetValue(memKey, out (string file, List<HeadersModel> headers, List<PlaylistItem> recomends) cache))
                 {
                     using (var browser = new PlaywrightBrowser(init.view.priorityBrowser ?? init.priorityBrowser))
                     {
-                        var page = await browser.NewPageAsync(init.plugin, httpHeaders(init).ToDictionary(), proxy, keepopen: init.view.keepopen, deferredDispose: init.view.playbtn != null).ConfigureAwait(false);
+                        var page = await browser.NewPageAsync(init.plugin, httpHeaders(init).ToDictionary(), proxy_data, keepopen: init.view.keepopen, deferredDispose: init.view.playbtn != null).ConfigureAwait(false);
                         if (page == default)
                             return default;
 
@@ -127,7 +120,7 @@ namespace SISI.Controllers.NextHUB
                             {
                                 if (browser.IsCompleted || (init.view.patternAbort != null && Regex.IsMatch(route.Request.Url, init.view.patternAbort, RegexOptions.IgnoreCase)))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                     return;
                                 }
@@ -156,7 +149,7 @@ namespace SISI.Controllers.NextHUB
                                         if (response != null)
                                             result = await response.TextAsync().ConfigureAwait(false);
 
-                                        PlaywrightBase.ConsoleLog($"\nPlaywright: {result}\n");
+                                        PlaywrightBase.ConsoleLog(() => $"\nPlaywright: {result}\n");
                                         browser.SetPageResult(result);
                                     }
                                     else
@@ -193,12 +186,12 @@ namespace SISI.Controllers.NextHUB
                                             if (setUri.StartsWith("//"))
                                                 setUri = $"{(init.host.StartsWith("https") ? "https" : "http")}:{setUri}";
 
-                                            PlaywrightBase.ConsoleLog($"\nPlaywright: SET {setUri}\n{JsonConvert.SerializeObject(cache.headers.ToDictionary(), Formatting.Indented)}\n");
+                                            PlaywrightBase.ConsoleLog(() => $"\nPlaywright: SET {setUri}\n{JsonConvert.SerializeObject(cache.headers.ToDictionary(), Formatting.Indented)}\n");
                                             browser.SetPageResult(setUri);
                                         }
                                         else
                                         {
-                                            PlaywrightBase.ConsoleLog($"\nPlaywright: SET {route.Request.Url}\n{JsonConvert.SerializeObject(cache.headers.ToDictionary(), Formatting.Indented)}\n");
+                                            PlaywrightBase.ConsoleLog(() => $"\nPlaywright: SET {route.Request.Url}\n{JsonConvert.SerializeObject(cache.headers.ToDictionary(), Formatting.Indented)}\n");
                                             browser.SetPageResult(route.Request.Url);
                                             await route.AbortAsync();
                                         }
@@ -211,7 +204,7 @@ namespace SISI.Controllers.NextHUB
                                 #region patternAbortEnd
                                 if (init.view.patternAbortEnd != null && Regex.IsMatch(route.Request.Url, init.view.patternAbortEnd, RegexOptions.IgnoreCase))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                     return;
                                 }
@@ -220,7 +213,7 @@ namespace SISI.Controllers.NextHUB
                                 #region patternWhiteRequest
                                 if (init.view.patternWhiteRequest != null && route.Request.Url != url && !Regex.IsMatch(route.Request.Url, init.view.patternWhiteRequest, RegexOptions.IgnoreCase))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                     return;
                                 }
@@ -234,7 +227,7 @@ namespace SISI.Controllers.NextHUB
                                 }
                                 else
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: {route.Request.Method} {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: {route.Request.Method} {route.Request.Url}");
                                 }
                                 #endregion
 
@@ -316,7 +309,7 @@ namespace SISI.Controllers.NextHUB
                                     if (!string.IsNullOrEmpty(cache.file))
                                         break;
 
-                                    PlaywrightBase.ConsoleLog("ContentAsync: " + (i + 1));
+                                    PlaywrightBase.ConsoleLog(() => "ContentAsync: " + (i + 1));
                                     await Task.Delay(800).ConfigureAwait(false);
                                 }
                             }
@@ -325,7 +318,7 @@ namespace SISI.Controllers.NextHUB
                                 cache.file = goFile(html);
                             }
 
-                            PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                            PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                             #endregion
                         }
                         else if (init.view.regexMatch != null)
@@ -342,7 +335,7 @@ namespace SISI.Controllers.NextHUB
                                     if (!string.IsNullOrEmpty(cache.file))
                                         break;
 
-                                    PlaywrightBase.ConsoleLog("ContentAsync: " + (i + 1));
+                                    PlaywrightBase.ConsoleLog(() => "ContentAsync: " + (i + 1));
                                     await Task.Delay(800).ConfigureAwait(false);
                                 }
                             }
@@ -353,7 +346,7 @@ namespace SISI.Controllers.NextHUB
                                     cache.file = init.view.regexMatch.format.Replace("{value}", cache.file).Replace("{host}", init.host);
                             }
 
-                            PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                            PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                             #endregion
                         }
                         else if (string.IsNullOrEmpty(init.view.eval ?? init.view.evalJS))
@@ -402,7 +395,7 @@ namespace SISI.Controllers.NextHUB
                                     if (!string.IsNullOrEmpty(cache.file))
                                         break;
 
-                                    PlaywrightBase.ConsoleLog("ContentAsync: " + (i + 1));
+                                    PlaywrightBase.ConsoleLog(() => "ContentAsync: " + (i + 1));
                                     await Task.Delay(800).ConfigureAwait(false);
                                 }
                             }
@@ -411,13 +404,13 @@ namespace SISI.Controllers.NextHUB
                                 cache.file = await goFile(html).ConfigureAwait(false);
                             }
 
-                            PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                            PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                         }
                         #endregion
 
                         if (string.IsNullOrEmpty(cache.file))
                         {
-                            proxyManager.Refresh();
+                            proxyManager?.Refresh();
                             return default;
                         }
 
@@ -443,8 +436,8 @@ namespace SISI.Controllers.NextHUB
                         #endregion
                     }
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, cache, cacheTime(init.view.cache_time, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(memKey, cache, cacheTime(init.view.cache_time));
                 }
 
                 return cache;
@@ -460,7 +453,7 @@ namespace SISI.Controllers.NextHUB
         #endregion
 
         #region goVideoToHttp
-        async ValueTask<(string file, List<HeadersModel> headers, List<PlaylistItem> recomends)> goVideoToHttp(RchClient rch, string plugin, string url, NxtSettings init, ProxyManager proxyManager, WebProxy proxy)
+        async ValueTask<(string file, List<HeadersModel> headers, List<PlaylistItem> recomends)> goVideoToHttp(string plugin, string url, NxtSettings init)
         {
             if (string.IsNullOrEmpty(url))
                 return default;
@@ -470,14 +463,12 @@ namespace SISI.Controllers.NextHUB
                 string memKey = $"nexthub:view18:goVideo:{url}";
 
                 if (init.view.bindingToIP)
-                    memKey = rch.ipkey(memKey, proxyManager);
+                    memKey = ipkey(memKey);
 
                 if (!hybridCache.TryGetValue(memKey, out (string file, List<HeadersModel> headers, List<PlaylistItem> recomends) cache))
                 {
                     resetGotoAsync:
-                    string html = rch.enable 
-                        ? await rch.Get(url, httpHeaders(init)) 
-                        : await Http.Get(url, headers: httpHeaders(init), proxy: proxy, timeoutSeconds: 8);
+                    string html = await httpHydra.Get(url);
 
                     if (string.IsNullOrEmpty(html))
                         return default;
@@ -510,7 +501,7 @@ namespace SISI.Controllers.NextHUB
 
                         cache.file = goFile(html);
 
-                        PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                        PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                         #endregion
                     }
                     else if (init.view.regexMatch != null)
@@ -520,7 +511,7 @@ namespace SISI.Controllers.NextHUB
                         if (!string.IsNullOrEmpty(cache.file) && init.view.regexMatch.format != null)
                             cache.file = init.view.regexMatch.format.Replace("{value}", cache.file).Replace("{host}", init.host);
 
-                        PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                        PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                         #endregion
                     }
 
@@ -532,15 +523,13 @@ namespace SISI.Controllers.NextHUB
                         var nxt = new NxtEvalView(init, HttpContext.Request.Query, html, plugin, url, cache.file, cache.headers, proxyManager);
                         cache.file = await CSharpEval.ExecuteAsync<string>(goEval(init.view.eval), nxt, Root.evalOptionsFull).ConfigureAwait(false);
 
-                        PlaywrightBase.ConsoleLog($"Playwright: SET {cache.file}");
+                        PlaywrightBase.ConsoleLog(() => $"Playwright: SET {cache.file}");
                     }
                     #endregion
 
                     if (string.IsNullOrEmpty(cache.file))
                     {
-                        if (!rch.enable)
-                            proxyManager.Refresh();
-
+                        proxyManager?.Refresh();
                         return default;
                     }
 
@@ -553,10 +542,9 @@ namespace SISI.Controllers.NextHUB
                     if (init.view.related && cache.recomends == null)
                         cache.recomends = ListController.goPlaylist(requestInfo, host, init.view.relatedParse ?? init.contentParse, init, html, plugin);
 
-                    if (!rch.enable)
-                        proxyManager.Success();
+                    proxyManager?.Success();
 
-                    hybridCache.Set(memKey, cache, cacheTime(init.view.cache_time, init: init));
+                    hybridCache.Set(memKey, cache, cacheTime(init.view.cache_time));
                 }
 
                 return cache;

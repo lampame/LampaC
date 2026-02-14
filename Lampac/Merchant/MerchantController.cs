@@ -41,7 +41,7 @@ namespace Merchant
                         ex = DateTime.UtcNow.AddDays(days);
                         AppInit.conf.accsdb.users.Add(new AccsUser() 
                         {
-                            id = email.ToLower().Trim(),
+                            id = email.ToLowerAndTrim(),
                             expires = ex,
                             group = AppInit.conf.Merchant.defaultGroup
                         });
@@ -61,16 +61,16 @@ namespace Merchant
                         ex = DateTime.UtcNow.AddMonths(AppInit.conf.Merchant.accessForMonths);
                         AppInit.conf.accsdb.users.Add(new AccsUser()
                         {
-                            id = email.ToLower().Trim(),
+                            id = email.ToLowerAndTrim(),
                             expires = ex,
                             group = AppInit.conf.Merchant.defaultGroup
                         });
                     }
                 }
 
-                System.IO.File.AppendAllText("merchant/users.txt", $"{email.ToLower().Trim()},{ex.ToFileTimeUtc()},{merch},{order}\n");
+                System.IO.File.AppendAllText("merchant/users.txt", $"{email.ToLowerAndTrim()},{ex.ToFileTimeUtc()},{merch},{order}\n");
 
-                _users += $"{email.ToLower().Trim()},{ex.ToFileTimeUtc()},{merch},{order}\n";
+                _users += $"{email.ToLowerAndTrim()},{ex.ToFileTimeUtc()},{merch},{order}\n";
                 LastWriteTimeUsers = System.IO.File.GetLastWriteTime("merchant/users.txt");
             }
         }
@@ -91,7 +91,7 @@ namespace Merchant
             if (string.IsNullOrEmpty(email))
                 return null;    
 
-            return HttpUtility.UrlDecode(email.ToLower().Trim());
+            return HttpUtility.UrlDecode(email.ToLowerAndTrim());
         }
     }
 }

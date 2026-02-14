@@ -1,32 +1,23 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.RxEnumerate;
 using Shared.Models.Online.Kinotochka;
 
 namespace Online.Controllers
 {
     public class Kinotochka : BaseOnlineController
     {
+        public Kinotochka() : base(AppInit.conf.Kinotochka) { }
+
         [HttpGet]
         [Route("lite/kinotochka")]
-        async public ValueTask<ActionResult> Index(long kinopoisk_id, string title, string original_title, int serial, string newsuri, int s = -1, bool rjson = false)
+        async public Task<ActionResult> Index(long kinopoisk_id, string title, string original_title, int serial, string newsuri, int s = -1)
         {
-            var init = await loadKit(AppInit.conf.Kinotochka);
-            if (await IsBadInitialization(init, rch: true))
-                return badInitMsg;
-
             if (string.IsNullOrWhiteSpace(title))
                 return OnError();
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
+            if (await IsRequestBlocked(rch: true))
+                return badInitMsg;
 
             // enable 720p
             string cookie = init.cookie;
@@ -36,17 +27,18 @@ namespace Online.Controllers
                 if (s == -1)
                 {
                     #region Сезоны
-                    reset:
-                    var cache = await InvokeCache<List<(string name, string uri, string season)>>($"kinotochka:seasons:{title}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
+                    rhubFallback:
+
+                    var cache = await InvokeCacheResult<List<(string name, string uri, string season)>>($"kinotochka:seasons:{title}", 30, async e =>
                     {
                         List<(string, string, string)> links = null;
 
                         if (kinopoisk_id > 0) // https://kinovibe.co/embed.html
                         {
-                            string uri = $"{init.corsHost()}/api/find-by-kinopoisk.php?kinopoisk={kinopoisk_id}";
-                            var root = rch.enable ? await rch.Get<JArray>(uri, httpHeaders(init)) : await Http.Get<JArray>(uri, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
+                            var root = await httpHydra.Get<JArray>($"{init.corsHost()}/api/find-by-kinopoisk.php?kinopoisk={kinopoisk_id}");
+
                             if (root == null || root.Count == 0)
-                                return res.Fail("find-by-kinopoisk");
+                                return e.Fail("find-by-kinopoisk", refresh_proxy: true);
 
                             links = new List<(string, string, string)>(root.Count);
                             foreach (var item in root)
@@ -58,92 +50,84 @@ namespace Online.Controllers
                             }
 
                             if (links.Count == 0)
-                                return res.Fail("links");
+                                return e.Fail("links");
                         }
                         else
                         {
+                            bool reqOk = false;
                             string data = $"do=search&subaction=search&search_start=0&full_search=0&result_from=1&story={HttpUtility.UrlEncode(title)}";
-                            string search = rch.enable ? await rch.Post($"{init.corsHost()}/index.php?do=search", data, httpHeaders(init)) : await Http.Post($"{init.corsHost()}/index.php?do=search", data, timeoutSeconds: 8, proxy: proxy, headers: httpHeaders(init));
-                            if (search == null)
+
+                            await httpHydra.PostSpan($"{init.corsHost()}/index.php?do=search", data, search => 
                             {
-                                if (!rch.enable)
-                                    proxyManager.Refresh();
+                                reqOk = search.Contains(">Поиск по сайту<", StringComparison.OrdinalIgnoreCase);
 
-                                return res.Fail("search");
-                            }
+                                var rx = Rx.Split("sres-wrap clearfix", search, 1);
+                                links = new List<(string, string, string)>(rx.Count);
 
-                            var rows = search.Split("sres-wrap clearfix");
-                            links = new List<(string, string, string)>(rows.Length);
+                                string stitle = StringConvert.SearchName(title);
 
-                            string stitle = StringConvert.SearchName(title);
-
-                            foreach (string row in rows.Skip(1).Reverse())
-                            {
-                                var gname = Regex.Match(row, "<h2>([^<]+) (([0-9]+) Сезон) \\([0-9]{4}\\)</h2>", RegexOptions.IgnoreCase).Groups;
-
-                                if (StringConvert.SearchName(gname[1].Value) == stitle)
+                                foreach (var row in rx.Rows())
                                 {
-                                    string uri = Regex.Match(row, "href=\"(https?://[^\"]+\\.html)\"").Groups[1].Value;
-                                    if (string.IsNullOrWhiteSpace(uri))
-                                        continue;
+                                    var gname = row.Groups("<h2>([^<]+) (([0-9]+) Сезон) \\([0-9]{4}\\)</h2>", RegexOptions.IgnoreCase);
 
-                                    links.Add((gname[2].Value.ToLower(), $"{host}/lite/kinotochka?title={HttpUtility.UrlEncode(title)}&serial={serial}&s={gname[3].Value}&newsuri={HttpUtility.UrlEncode(uri)}", gname[3].Value));
+                                    if (StringConvert.SearchName(gname[1].Value) == stitle)
+                                    {
+                                        string uri = row.Match("href=\"(https?://[^\"]+\\.html)\"");
+                                        if (string.IsNullOrWhiteSpace(uri))
+                                            continue;
+
+                                        links.Add((gname[2].Value.ToLower(), $"{host}/lite/kinotochka?title={HttpUtility.UrlEncode(title)}&serial={serial}&s={gname[3].Value}&newsuri={HttpUtility.UrlEncode(uri)}", gname[3].Value));
+                                    }
                                 }
-                            }
+                            });
 
-                            if (links.Count == 0 && !search.Contains(">Поиск по сайту<"))
-                                return res.Fail("links");
+                            if (links == null || links.Count == 0)
+                                return e.Fail("links", refresh_proxy: !reqOk);
                         }
 
-                        return links;
+                        links.Reverse();
+                        return e.Success(links);
                     });
 
-                    if (IsRhubFallback(cache, init))
-                        goto reset;
+                    if (IsRhubFallback(cache))
+                        goto rhubFallback;
 
-                    return OnResult(cache, () =>
+                    return await ContentTpl(cache, () =>
                     {
                         var tpl = new SeasonTpl(cache.Value.Count);
 
                         foreach (var l in cache.Value)
                             tpl.Append(l.name, l.uri, l.season);
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
-
-                    }, gbcache: !rch.enable);
+                        return tpl;
+                    });
                     #endregion
                 }
                 else
                 {
                     #region Серии
-                    reset: 
-                    var cache = await InvokeCache<List<(string name, string uri)>>($"kinotochka:playlist:{newsuri}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
+                    rhubFallback:
+
+                    var cache = await InvokeCacheResult<List<(string name, string uri)>>($"kinotochka:playlist:{newsuri}", 30, async e =>
                     {
-                        string news = rch.enable ? await rch.Get(newsuri, httpHeaders(init)) : await Http.Get(newsuri, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
-                        if (news == null)
+                        string filetxt = null;
+
+                        await httpHydra.GetSpan(newsuri, addheaders: HeadersModel.Init("cookie", cookie), safety: !string.IsNullOrEmpty(cookie), spanAction: news => 
                         {
-                            if (!rch.enable)
-                                proxyManager.Refresh();
+                            filetxt = Rx.Match(news, "file:\"(https?://[^\"]+\\.txt)\"");
+                        });
 
-                            return res.Fail("news");
-                        }
-
-                        string filetxt = Regex.Match(news, "file:\"(https?://[^\"]+\\.txt)\"").Groups[1].Value;
                         if (string.IsNullOrEmpty(filetxt))
-                            return res.Fail("filetxt");
+                            return e.Fail("filetxt", refresh_proxy: true);
 
-                        var root = rch.enable ? await rch.Get<JObject>(filetxt, httpHeaders(init)) : await Http.Get<JObject>(filetxt, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
+                        var root = await httpHydra.Get<JObject>(filetxt, addheaders: HeadersModel.Init("cookie", cookie), safety: !string.IsNullOrEmpty(cookie));
+
                         if (root == null)
-                        {
-                            if (!rch.enable)
-                                proxyManager.Refresh();
-
-                            return res.Fail("root");
-                        }
+                            return e.Fail("root", refresh_proxy: true);
 
                         var playlist = root.Value<JArray>("playlist");
                         if (playlist == null)
-                            return res.Fail("playlist");
+                            return e.Fail("playlist");
 
                         var links = new List<(string name, string uri)>(playlist.Count);
 
@@ -161,24 +145,23 @@ namespace Online.Controllers
                         }
 
                         if (links.Count == 0)
-                            return res.Fail("links");
+                            return e.Fail("links");
 
-                        return links;
+                        return e.Success(links);
                     });
 
-                    if (IsRhubFallback(cache, init))
-                        goto reset;
+                    if (IsRhubFallback(cache, safety: !string.IsNullOrEmpty(cookie)))
+                        goto rhubFallback;
 
-                    return OnResult(cache, () =>
+                    return await ContentTpl(cache, () =>
                     {
                         var etpl = new EpisodeTpl(cache.Value.Count);
 
                         foreach (var l in cache.Value)
-                            etpl.Append(l.name, title, s.ToString(), Regex.Match(l.name, "^([0-9]+)").Groups[1].Value, HostStreamProxy(init, l.uri, proxy: proxy), vast: init.vast);
+                            etpl.Append(l.name, title, s.ToString(), Regex.Match(l.name, "^([0-9]+)").Groups[1].Value, HostStreamProxy(l.uri), vast: init.vast);
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
-
-                    }, gbcache: !rch.enable);
+                        return etpl;
+                    });
                     #endregion
                 }
             }
@@ -188,46 +171,43 @@ namespace Online.Controllers
                 if (kinopoisk_id == 0)
                     return OnError();
 
-                reset:
-                var cache = await InvokeCache<EmbedModel>($"kinotochka:view:{kinopoisk_id}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
+                rhubFallback:
+                var cache = await InvokeCacheResult<EmbedModel>($"kinotochka:view:{kinopoisk_id}", 30, async e =>
                 {
-                    string uri = $"{init.corsHost()}/embed/kinopoisk/{kinopoisk_id}";
-                    string embed = rch.enable ? await rch.Get(uri, httpHeaders(init)) : await Http.Get(uri, timeoutSeconds: 8, proxy: proxy, cookie: cookie, headers: httpHeaders(init));
-                    if (embed == null)
+                    string file = null;
+
+                    await httpHydra.GetSpan($"{init.corsHost()}/embed/kinopoisk/{kinopoisk_id}", addheaders: HeadersModel.Init("cookie", cookie), safety: !string.IsNullOrEmpty(cookie), spanAction: embed => 
                     {
-                        if (!rch.enable)
-                            proxyManager.Refresh();
+                        file = Rx.Match(embed, "id:\"playerjshd\", file:\"(https?://[^\"]+)\"");
+                        if (string.IsNullOrEmpty(file))
+                            return;
 
-                        return res.Fail("embed");
-                    }
+                        foreach (string f in file.Split(",").Reverse())
+                        {
+                            if (string.IsNullOrWhiteSpace(f))
+                                continue;
 
-                    string file = Regex.Match(embed, "id:\"playerjshd\", file:\"(https?://[^\"]+)\"").Groups[1].Value;
+                            file = f;
+                            break;
+                        }
+                    });
+
                     if (string.IsNullOrEmpty(file))
-                        return res.Fail("file");
+                        return e.Fail("file", refresh_proxy: true);
 
-                    foreach (string f in file.Split(",").Reverse())
-                    {
-                        if (string.IsNullOrWhiteSpace(f))
-                            continue;
-
-                        file = f;
-                        break;
-                    }
-
-                    return new EmbedModel() { content = file };
+                    return e.Success(new EmbedModel() { content = file });
                 });
 
-                if (IsRhubFallback(cache, init))
-                    goto reset;
+                if (IsRhubFallback(cache, safety: !string.IsNullOrEmpty(cookie)))
+                    goto rhubFallback;
 
-                return OnResult(cache, () => 
+                return await ContentTpl(cache, () => 
                 {
                     var mtpl = new MovieTpl(title, original_title, 1);
-                    mtpl.Append("По умолчанию", HostStreamProxy(init, cache.Value.content, proxy: proxy), vast: init.vast);
+                    mtpl.Append("По умолчанию", HostStreamProxy(cache.Value.content), vast: init.vast);
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
-
-                }, gbcache: !rch.enable);
+                    return mtpl;
+                });
                 #endregion
             }
         }

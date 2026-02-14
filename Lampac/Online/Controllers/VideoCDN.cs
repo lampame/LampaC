@@ -4,24 +4,20 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Shared.Models.Online.Lumex;
 using Shared.Models.Online.Settings;
-using System.Net;
 using System.Text;
 
 namespace Online.Controllers
 {
-    public class VideoCDN : BaseOnlineController
+    public class VideoCDN : BaseOnlineController<LumexSettings>
     {
         static VideoCDN() 
         { 
             Directory.CreateDirectory("cache/logs/VideoCDN");
-
-            //Lumex.FixHostEvent();
         }
 
-        #region Initialization
-        async ValueTask<LumexSettings> Initialization()
+        public VideoCDN() : base(AppInit.conf.VideoCDN) 
         {
-            var init = await loadKit(AppInit.conf.VideoCDN, (j, i, c) =>
+            loadKitInitialization = (j, i, c) =>
             {
                 if (j.ContainsKey("log"))
                     i.log = c.log;
@@ -31,41 +27,37 @@ namespace Online.Controllers
                 i.password = c.password;
                 i.domain = Regex.Replace(c.domain ?? "bwa", "^https?://", "").Split(".")[0];
                 i.corseu = false;
-                i.rhub = !i.disable_protection;
 
                 return i;
-            });
+            };
 
-            init.rhub = !init.disable_protection;
-            return init;
+            requestInitialization = () =>
+            {
+                init.rhub = !init.disable_protection;
+            };
         }
-        #endregion
 
         [HttpGet]
         [Route("lite/videocdn")]
-        async public ValueTask<ActionResult> Index(long content_id, string content_type, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int clarification, bool similar = false, int s = -1, int serial = -1, bool rjson = false, bool checksearch = false)
+        async public Task<ActionResult> Index(long content_id, string content_type, string imdb_id, long kinopoisk_id, string title, string original_title, string t, int clarification, bool similar = false, int s = -1, int serial = -1, bool rjson = false, bool checksearch = false)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.username) || string.IsNullOrEmpty(init.password))
                 return OnError();
 
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
             if (content_id == 0)
             {
-                var search = await InvokeCache($"videocdn:search:{imdb_id}:{kinopoisk_id}:{title ?? original_title}:{clarification}:{similar}", TimeSpan.FromHours(1),
-                    () => Search(init, imdb_id, kinopoisk_id, title, original_title, serial, clarification, similar, proxy)
+                var search = await InvokeCache($"videocdn:search:{imdb_id}:{kinopoisk_id}:{title ?? original_title}:{clarification}:{similar}", 60,
+                    () => Search(imdb_id, kinopoisk_id, title, original_title, serial, clarification, similar)
                 );
 
-                if (search.content_type == null && search.similar.data == null)
+                if (search.content_type == null && search.similar?.data == null)
                     return OnError();
 
-                if (search.similar.data != null)
-                    return ContentTo(rjson ? search.similar.ToJson() : search.similar.ToHtml());
+                if (search.similar?.data != null)
+                    return await ContentTpl(search.similar);
 
                 content_id = search.content_id;
                 content_type = search.content_type;
@@ -77,19 +69,11 @@ namespace Online.Controllers
             if (checksearch)
                 return Content("data-json=");
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: serial == 0 ? null : -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            string accessToken = await getToken(proxy);
+            string accessToken = await getToken();
             if (string.IsNullOrEmpty(accessToken))
                 return OnError();
 
-            var player = await getPlayer(content_id, content_type, accessToken, proxy);
+            var player = await getPlayer(content_id, content_type, accessToken);
             if (player == null)
                 return OnError();
 
@@ -107,7 +91,7 @@ namespace Online.Controllers
                     mtpl.Append(media.translation_name, link, "call", streamlink, quality: media.max_quality?.ToString());
                 }
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return await ContentTpl(mtpl);
                 #endregion
             }
             else
@@ -126,7 +110,7 @@ namespace Online.Controllers
                         tpl.Append($"{media.season_id} сезон", link, media.season_id);
                     }
 
-                    return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                    return await ContentTpl(tpl);
                 }
                 else
                 {
@@ -160,8 +144,7 @@ namespace Online.Controllers
                     if (string.IsNullOrEmpty(t))
                         t = "0";
 
-                    var etpl = new EpisodeTpl();
-                    string sArhc = s.ToString();
+                    var etpl = new EpisodeTpl(vtpl);
 
                     foreach (var media in player.media)
                     {
@@ -179,15 +162,12 @@ namespace Online.Controllers
                                 string link = accsArgs($"{host}/lite/videocdn/video?content_id={content_id}&content_type={content_type}&playlist={HttpUtility.UrlEncode(voice.playlist)}&max_quality={voice.max_quality}&s={s}&e={episode.episode_id}&translation_id={voice.translation_id}&hash={hash}&serial=true");
                                 string streamlink = link.Replace("/videocdn/video", "/videocdn/video.m3u8") + "&play=true";
 
-                                etpl.Append($"{episode.episode_id} серия", title ?? original_title, sArhc, episode.episode_id.ToString(), link, "call", streamlink: streamlink);
+                                etpl.Append($"{episode.episode_id} серия", title ?? original_title, s.ToString(), episode.episode_id.ToString(), link, "call", streamlink: streamlink);
                             }
                         }
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return await ContentTpl(etpl);
                 }
                 #endregion
             }
@@ -202,30 +182,27 @@ namespace Online.Controllers
         [Route("lite/videocdn/video.m3u8")]
         async public ValueTask<ActionResult> Video(string hash, long content_id, string content_type, string playlist, int max_quality, bool play, bool serial, int s, int e, int translation_id)
         {
-            var init = await Initialization();
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_check: false))
                 return badInitMsg;
 
             if (hash != CrypTo.md5($"{init.clientId}:{content_type}:{content_id}:{playlist}:{requestInfo.IP}"))
                 return OnError("hash", gbcache: false);
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: serial ? -1 : null);
-
-            if (rch.IsNotConnected())
+            if (rch != null)
             {
-                if (init.rhub_fallback && play)
-                    rch.Disabled();
-                else
+                if (rch.IsNotConnected())
+                {
+                    if (init.rhub_fallback && play)
+                        rch.Disabled();
+                    else
+                        return ContentTo(rch.connectionMsg);
+                }
+
+                if (!play && rch.IsRequiredConnected())
                     return ContentTo(rch.connectionMsg);
             }
 
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
-
-            string accessToken = await getToken(proxy);
+            string accessToken = await getToken();
             if (string.IsNullOrEmpty(accessToken))
                 return OnError("token", gbcache: false);
 
@@ -257,7 +234,7 @@ namespace Online.Controllers
             string clientIP = init.verifyip ? requestInfo.IP : "::1";
             string memkey = $"videocdn/video:{playlist}:{(init.streamproxy ? "" : clientIP)}";
 
-            return await InvkSemaphore(init, memkey, async () =>
+            return await InvkSemaphore(memkey, async () =>
             {
                 if (!hybridCache.TryGetValue(memkey, out string hls))
                 {
@@ -266,8 +243,7 @@ namespace Online.Controllers
                     if (!init.streamproxy)
                         headers.Add(new("X-LAMPA-CLIENT-IP", clientIP));
 
-                    var result = rch.enable ? await rch.Post<JObject>(init.apihost + playlist, "{}", headers: headers) :
-                                              await Http.Post<JObject>(init.apihost + playlist, "{}", headers: headers, proxy: proxy);
+                    var result = await httpHydra.Post<JObject>(init.apihost + playlist, "{}", addheaders: headers);
 
                     if (result == null || !result.ContainsKey("url"))
                         return OnError(null, gbcache: false);
@@ -285,9 +261,9 @@ namespace Online.Controllers
                 }
 
                 if (play)
-                    return Redirect(HostStreamProxy(init, hls));
+                    return Redirect(HostStreamProxy(hls));
 
-                var player = await getPlayer(content_id, content_type, accessToken, proxy);
+                var player = await getPlayer(content_id, content_type, accessToken);
                 VastConf vast = requestInfo.user != null ? null : new VastConf() { url = player?.tag_url, msg = init?.vast?.msg };
                 if (init.disable_ads)
                     vast = null;
@@ -341,7 +317,7 @@ namespace Online.Controllers
                     foreach (int q in new int[] { 1080, 720, 480, 360, 240 })
                     {
                         if (max_quality >= q)
-                            streamquality.Append(HostStreamProxy(init, Regex.Replace(hls, "/hls\\.m3u8$", $"/{q}.mp4")), $"{q}p");
+                            streamquality.Append(HostStreamProxy(Regex.Replace(hls, "/hls\\.m3u8$", $"/{q}.mp4")), $"{q}p");
                     }
 
                     if (!streamquality.Any())
@@ -351,17 +327,15 @@ namespace Online.Controllers
                     return ContentTo(VideoTpl.ToJson("play", first.link, first.quality, streamquality: streamquality, subtitles: subtitles, vast: vast));
                 }
 
-                return ContentTo(VideoTpl.ToJson("play", HostStreamProxy(init, hls), "auto", subtitles: subtitles, vast: vast));
+                return ContentTo(VideoTpl.ToJson("play", HostStreamProxy(hls), "auto", subtitles: subtitles, vast: vast));
             });
         }
         #endregion
 
 
         #region getToken
-        async ValueTask<string> getToken(WebProxy proxy)
+        async ValueTask<string> getToken()
         {
-            var init = await Initialization();
-
             #region refreshToken
             string memKey = $"videocdn:refreshToken:{init.username}";
             if (!hybridCache.TryGetValue(memKey, out string refreshToken))
@@ -387,7 +361,7 @@ namespace Online.Controllers
                 var headers = init.streamproxy ? null : HeadersModel.Init(("X-LAMPA-CLIENT-IP", clientIP));
 
                 var data = new System.Net.Http.StringContent($"{{\"token\":\"{refreshToken}\"}}", Encoding.UTF8, "application/json");
-                var job = await Http.Post<JObject>($"{init.apihost}/refresh", data, timeoutSeconds: 5, useDefaultHeaders: false, headers: headers, proxy: proxy);
+                var job = await Http.Post<JObject>($"{init.apihost}/refresh", data, useDefaultHeaders: false, headers: headers, proxy: proxy);
                 if (job == null || !job.ContainsKey("accessToken"))
                     return null;
 
@@ -403,15 +377,14 @@ namespace Online.Controllers
         #endregion
 
         #region getPlayer
-        async ValueTask<EmbedModel> getPlayer(long content_id, string content_type, string accessToken, WebProxy proxy)
+        async ValueTask<EmbedModel> getPlayer(long content_id, string content_type, string accessToken)
         {
             if (content_id == 0 || string.IsNullOrEmpty(content_type))
                 return null;
 
-            var init = await Initialization();
             string clientIP = init.verifyip ? requestInfo.IP : "::1";
 
-            return await InvokeCache($"videocdn:{content_id}:{content_type}:{accessToken}:{(init.streamproxy ? "" : clientIP)}", TimeSpan.FromMinutes(5), async () =>
+            return await InvokeCache($"videocdn:{content_id}:{content_type}:{accessToken}:{(init.streamproxy ? "" : clientIP)}", 5, async () =>
             {
                 var headers = HeadersModel.Init(
                     ("Authorization", $"Bearer {accessToken}"),
@@ -421,7 +394,7 @@ namespace Online.Controllers
                 if (!init.streamproxy)
                     headers.Add(new("X-LAMPA-CLIENT-IP", clientIP));
 
-                string json = await Http.Get($"{init.apihost}/stream?clientId={init.clientId}&contentType={content_type}&contentId={content_id}&domain={init.domain}", useDefaultHeaders: false, timeoutSeconds: 8, headers: headers, proxy: proxy);
+                string json = await httpHydra.Get($"{init.apihost}/stream?clientId={init.clientId}&contentType={content_type}&contentId={content_id}&domain={init.domain}", useDefaultHeaders: false, addheaders: headers);
                 if (string.IsNullOrEmpty(json))
                     return null;
 
@@ -436,27 +409,54 @@ namespace Online.Controllers
         #endregion
 
         #region Search
-        async ValueTask<(long content_id, string content_type, SimilarTpl similar)> Search(LumexSettings init, string imdb_id, long kinopoisk_id, string title, string original_title, int serial, int clarification, bool similar, WebProxy proxy)
+        async Task<(long content_id, string content_type, SimilarTpl similar)> Search(string imdb_id, long kinopoisk_id, string title, string original_title, int serial, int clarification, bool similar)
         {
-            async Task<JToken> searchId(string imdb_id, long kinopoisk_id)
+            #region database search
+            if (similar == false && (!string.IsNullOrEmpty(imdb_id) || kinopoisk_id > 0))
             {
-                if (string.IsNullOrEmpty(init.token))
-                    return null;
+                var item = Lumex.database.FirstOrDefault(i =>
+                {
+                    if (string.IsNullOrEmpty(imdb_id) && i.imdb_id == imdb_id)
+                        return true;
 
-                if (string.IsNullOrEmpty(imdb_id) && kinopoisk_id == 0)
-                    return null;
+                    if (kinopoisk_id > 0 && i.kinopoisk_id == kinopoisk_id)
+                        return true;
 
-                string arg = kinopoisk_id > 0 ? $"&kinopoisk_id={kinopoisk_id}" : $"&imdb_id={imdb_id}";
-                var job = await Http.Get<JObject>($"{init.iframehost}/api/short?api_token={init.token}" + arg, timeoutSeconds: 8, proxy: proxy);
-                if (job == null || !job.ContainsKey("data"))
-                    return null;
+                    return false;
+                });
 
-                var result = job["data"]?.First;
-                if (result == null)
-                    return null;
+                if (item.id > 0)
+                {
+                    string type = null;
+                    switch (item.content_type)
+                    {
+                        case "tv series":
+                        case "tv-series":
+                        case "tv_series":
+                        case "tvseries":
+                            type = "tv-series";
+                            break;
+                        case "anime tv series":
+                        case "animetvseries":
+                        case "anime_tv_series":
+                        case "anime-tv-series":
+                            type = "anime-tv-series";
+                            break;
+                        case "show tv series":
+                        case "showtvseries":
+                        case "show-tv-series":
+                        case "show_tv_series":
+                            type = "show-tv-series";
+                            break;
+                        default:
+                            type = item.content_type;
+                            break;
+                    }
 
-                return result;
+                    return (item.id, type, default);
+                }
             }
+            #endregion
 
             var movie = similar ? null : (await searchId(imdb_id, 0) ?? await searchId(null, kinopoisk_id));
             if (movie != null)
@@ -469,7 +469,7 @@ namespace Online.Controllers
                     return default;
 
                 string uri = $"{init.iframehost}/api/short?api_token={init.token}&title={HttpUtility.UrlEncode(clarification == 1 ? title : (original_title ?? title))}";
-                string json = await Http.Get(uri, timeoutSeconds: 8, proxy: proxy);
+                string json = await httpHydra.Get(uri, safety: true);
                 if (json == null)
                     return default;
 
@@ -509,7 +509,7 @@ namespace Online.Controllers
                     string year = item.add?.Split("-")?[0] ?? string.Empty;
                     string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.orig_title) ? $"{item.title} / {item.orig_title}" : (item.title ?? item.orig_title);
 
-                    string details = $"imdb: {item.imdb_id} {stpl.OnlineSplit} kinopoisk: {item.kp_id}";
+                    string details = $"imdb: {item.imdb_id} {SimilarTpl.OnlineSplit} kinopoisk: {item.kp_id}";
 
                     string img = PosterApi.Find(item.kp_id, item.imdb_id);
                     stpl.Append(name, year, details, $"{host}/lite/videocdn?title={enc_title}&original_title={enc_original_title}&content_id={item.id}&content_type={item.content_type}", img);
@@ -519,6 +519,27 @@ namespace Online.Controllers
 
                 return (0, null, stpl);
             }
+        }
+
+
+        async Task<JToken> searchId(string imdb_id, long kinopoisk_id)
+        {
+            if (string.IsNullOrEmpty(init.token))
+                return null;
+
+            if (string.IsNullOrEmpty(imdb_id) && kinopoisk_id == 0)
+                return null;
+
+            string arg = kinopoisk_id > 0 ? $"&kinopoisk_id={kinopoisk_id}" : $"&imdb_id={imdb_id}";
+            var job = await httpHydra.Get<JObject>($"{init.iframehost}/api/short?api_token={init.token}" + arg, safety: true);
+            if (job == null || !job.ContainsKey("data"))
+                return null;
+
+            var result = job["data"]?.First;
+            if (result == null)
+                return null;
+
+            return result;
         }
         #endregion
     }

@@ -6,13 +6,14 @@ namespace Online.Controllers
 {
     public class BaseENGController : BaseOnlineController
     {
-        async public ValueTask<ActionResult> ViewTmdb(OnlinesSettings _init, bool checksearch, long id, long tmdb_id, string imdb_id, string title, string original_title, int serial, int s = -1, bool rjson = false, bool mp4 = false, string method = "play", int? hls_manifest_timeout = null, string extension = "m3u8")
+        public BaseENGController(OnlinesSettings init) : base(init) { }
+
+        async public Task<ActionResult> ViewTmdb(bool checksearch, long id, long tmdb_id, string imdb_id, string title, string original_title, int serial, int s = -1, bool rjson = false, bool mp4 = false, string method = "play", int? hls_manifest_timeout = null, string extension = "m3u8")
         {
             if (checksearch)
                 return Content("data-json=");
 
-            var init = await loadKit(_init);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
 
             if (tmdb_id > 0)
@@ -24,14 +25,14 @@ namespace Online.Controllers
             if (serial == 1)
             {
                 #region Сериал
-                var tmdb = await InvokeCache<JToken>($"tmdb:seasons:{id}", cacheTime(40, init: init), async res =>
+                var tmdb = await InvokeCacheResult<JToken>($"tmdb:seasons:{id}", 40, async e =>
                 {
                     var root = await Http.Get<JObject>($"{AppInit.conf.cub.scheme}://tmdb.{AppInit.conf.cub.mirror}/3/tv/{id}?api_key={AppInit.conf.tmdb.api_key}");
 
                     if (root == null || !root.ContainsKey("seasons"))
-                        return res.Fail("seasons");
+                        return e.Fail("seasons");
 
-                    return root["seasons"];
+                    return e.Success(root["seasons"]);
                 });
 
                 if (!tmdb.IsSuccess)
@@ -52,7 +53,7 @@ namespace Online.Controllers
                         tpl.Append($"{number} сезон", link, number);
                     }
 
-                    return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                    return await ContentTpl(tpl);
                     #endregion
                 }
                 else
@@ -78,7 +79,7 @@ namespace Online.Controllers
                         }
                     }
 
-                    return ContentTo(rjson ? etpl.ToJson() : etpl.ToHtml());
+                    return await ContentTpl(etpl);
                     #endregion
                 }
                 #endregion
@@ -97,7 +98,7 @@ namespace Online.Controllers
 
                 mtpl.Append("English", uri, method, stream: stream, vast: init.vast, hls_manifest_timeout: hls_manifest_timeout);
 
-                return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                return await ContentTpl(mtpl);
                 #endregion
             }
         }

@@ -1,4 +1,5 @@
-﻿using Shared.Models.Base;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.Base;
 using Shared.Models.Online.Ashdi;
 using Shared.Models.Templates;
 using System.Text.Json;
@@ -12,71 +13,86 @@ namespace Shared.Engine.Online
         #region AshdiInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
+        HttpHydra httpHydra;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
         Action requesterror;
 
-        public AshdiInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string> onstreamfile, Func<string, string> onlog = null, Action requesterror = null)
+        public AshdiInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, string> onstreamfile, Action requesterror = null)
         {
             this.host = host != null ? $"{host}/" : null;
             this.apihost = apihost;
-            this.onget = onget;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
             this.requesterror = requesterror;
         }
         #endregion
 
         #region Embed
-        public async ValueTask<EmbedModel> Embed(long kinopoisk_id)
+        public async Task<EmbedModel> Embed(long kinopoisk_id)
         {
-            string product = await onget.Invoke($"{apihost}/api/product/read_api.php?kinopoisk={kinopoisk_id}");
-            if (product == null)
+            string iframeuri = null;
+            EmbedModel embed = null;
+
+            await httpHydra.GetSpan($"{apihost}/api/product/read_api.php?kinopoisk={kinopoisk_id}", product =>
             {
-                requesterror?.Invoke();
-                return null;
-            }
+                if (product.Contains("Product does not exist", StringComparison.OrdinalIgnoreCase))
+                {
+                    embed = new EmbedModel() { IsEmpty = true };
+                    return;
+                }
 
-            if (product.Contains("Product does not exist"))
-                return new EmbedModel() { IsEmpty = true };
+                iframeuri = Rx.Match(product, "src=\"(https?://[^\"]+)\"");
 
-            string iframeuri = Regex.Match(product, "src=\"(https?://[^\"]+)\"").Groups[1].Value;
+            }, statusCodeOK: false);
+
             if (string.IsNullOrWhiteSpace(iframeuri))
-            {
-                requesterror?.Invoke();
                 return null;
-            }
 
-            string content = await onget.Invoke(iframeuri);
-            if (content == null || !content.Contains("Playerjs"))
+
+            await httpHydra.GetSpan(iframeuri, content =>
             {
+                if (!content.Contains("new Playerjs", StringComparison.Ordinal))
+                    return;
+
+                if (!Regex.IsMatch(content, "file:([\t ]+)?'\\[\\{"))
+                {
+                    var rx = Rx.Split("new Playerjs", content);
+                    if (1 > rx.Count)
+                        return;
+
+                    embed = new EmbedModel()
+                    {
+                        content = rx[1].ToString()
+                    };
+
+                    return;
+                }
+                else
+                {
+                    try
+                    {
+                        var root = JsonSerializer.Deserialize<Voice[]>(Rx.Match(content, "file:([\t ]+)?'([^\n\r]+)',", 2));
+                        if (root != null && root.Length > 0)
+                            embed = new EmbedModel() { serial = root };
+                    }
+                    catch { }
+                }
+            });
+
+
+
+            if (embed == null)
                 requesterror?.Invoke();
-                return null;
-            }
 
-            if (!Regex.IsMatch(content, "file:([\t ]+)?'\\[\\{"))
-                return new EmbedModel() { content = content };
-
-            Voice[] root = null;
-
-            try
-            {
-                root = JsonSerializer.Deserialize<Voice[]>(Regex.Match(content, "file:([\t ]+)?'([^\n\r]+)',").Groups[2].Value);
-                if (root == null || root.Length == 0)
-                    return null;
-            }
-            catch { return null; }
-
-            return new EmbedModel() { serial = root };
+            return embed;
         }
         #endregion
 
-        #region Html
-        public string Html(EmbedModel md, long kinopoisk_id, string title, string original_title, int t, int s, VastConf vast = null, bool rjson = false, string mybaseurl = null)
+        #region Tpl
+        public ITplResult Tpl(EmbedModel md, long kinopoisk_id, string title, string original_title, int t, int s, VastConf vast = null, bool rjson = false, string mybaseurl = null)
         {
             if (md == null || md.IsEmpty || (string.IsNullOrEmpty(md.content) && md.serial == null))
-                return string.Empty;
+                return default;
 
             string fixStream(string _l) => _l.Replace("0yql3tj", "oyql3tj");
 
@@ -87,7 +103,7 @@ namespace Shared.Engine.Online
 
                 string hls = Regex.Match(md.content, "file:([\t ]+)?(\"|')([\t ]+)?(?<hls>https?://[^\"'\n\r\t ]+/index.m3u8)").Groups["hls"].Value;
                 if (string.IsNullOrEmpty(hls))
-                    return string.Empty;
+                    return default;
 
                 #region subtitle
                 SubtitleTpl? subtitles = null;
@@ -108,7 +124,7 @@ namespace Shared.Engine.Online
 
                 mtpl.Append("По умолчанию", onstreamfile.Invoke(fixStream(hls)), subtitles: subtitles, vast: vast);
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
                 #endregion
             }
             else
@@ -122,7 +138,7 @@ namespace Shared.Engine.Online
                     if (s == -1)
                     {
                         var tpl = new SeasonTpl();
-                        var hashseason = new HashSet<string>();
+                        var hashseason = new HashSet<string>(20);
 
                         foreach (var voice in md.serial)
                         {
@@ -143,7 +159,7 @@ namespace Shared.Engine.Online
                             }
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -168,7 +184,7 @@ namespace Shared.Engine.Online
                         string sArch = s.ToString();
                         var episodes = md.serial[t].folder.First(i => i.title.EndsWith($" {s}")).folder;
 
-                        var etpl = new EpisodeTpl(episodes.Length);
+                        var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                         foreach (var episode in episodes)
                         {
@@ -192,15 +208,12 @@ namespace Shared.Engine.Online
                             etpl.Append(episode.title, title ?? original_title, sArch, Regex.Match(episode.title, "([0-9]+)$").Groups[1].Value, file, subtitles: subtitles, vast: vast);
                         }
 
-                        if (rjson)
-                            return etpl.ToJson(vtpl);
-
-                        return vtpl.ToHtml() + etpl.ToHtml();
+                        return etpl;
                     }
                 }
                 catch
                 {
-                    return string.Empty;
+                    return default;
                 }
                 #endregion
             }

@@ -3,7 +3,7 @@ using Shared.Models.Base;
 
 namespace Shared.Models
 {
-    public struct RequestModel
+    public class RequestModel
     {
         public RequestModel()
         {
@@ -11,13 +11,13 @@ namespace Shared.Models
 
         public bool IsLocalRequest { get; set; }
 
+        public bool IsLocalIp { get; set; }
+
         public bool IsAnonymousRequest { get; set; }
 
+        public string AesGcmKey { get; set; }
+
         public string IP { get; set; }
-
-        public string Path { get; set; }
-
-        public string Query { get; set; }
 
         public string UserAgent { get; set; }
 
@@ -46,6 +46,22 @@ namespace Shared.Models
             {
                 if (!string.IsNullOrEmpty(value))
                     _countryCode = value;
+            }
+        }
+        #endregion
+
+        #region ASN
+        private long? _asn = null;
+        public long ASN
+        {
+            get
+            {
+                if (_asn != null)
+                    return _asn.Value;
+
+                _asn = GeoIP2.ASN(IP);
+
+                return _asn.Value;
             }
         }
         #endregion

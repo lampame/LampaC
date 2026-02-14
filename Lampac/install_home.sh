@@ -17,9 +17,9 @@ chmod 755 dotnet-install.sh
 ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
 
 # Download zip
-mkdir $DEST -p 
+mkdir $DEST -p
 cd $DEST
-if ! curl -L -k -o publish.zip https://github.com/immisterio/Lampac/releases/latest/download/publish.zip; then
+if ! curl -L -k -o publish.zip https://github.com/lampac-talks/lampac/releases/latest/download/publish.zip; then
    echo "Failed to download publish.zip. Exiting."
    exit 1
 fi
@@ -28,7 +28,7 @@ unzip -o publish.zip
 rm -f publish.zip
 
 # automatic updates
-curl -k -s https://api.github.com/repos/immisterio/Lampac/releases/latest | grep tag_name | sed s/[^0-9]//g > $DEST/data/vers.txt
+curl -k -s https://api.github.com/repos/lampac-talks/lampac/releases/latest | grep tag_name | sed s/[^0-9]//g > $DEST/data/vers.txt
 curl -k -s https://raw.githubusercontent.com/immisterio/lampac/main/update.sh > $DEST/update.sh
 chmod 755 $DEST/update.sh
 #crontab -l | { cat; echo "$(shuf -i 10-55 -n 1) * * * * /bin/bash $DEST/update.sh"; } | crontab -

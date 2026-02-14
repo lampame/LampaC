@@ -1,9 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Playwright;
-using Shared.Models.Online.Settings;
+using Shared.Engine.RxEnumerate;
 using Shared.Models.Online.VDBmovies;
 using Shared.PlaywrightCore;
-using System.Net;
 
 namespace Online.Controllers
 {
@@ -16,32 +15,30 @@ namespace Online.Controllers
         {
             get
             {
-                if (AppInit.conf.multiaccess || databaseCache != null)
-                    return databaseCache ??= JsonHelper.ListReader<MovieDB>("data/cdnmovies.json", 105000);
+                if (AppInit.conf.multiaccess)
+                    return databaseCache ??= JsonHelper.ListReader<MovieDB>("data/cdnmovies.json", 130_000);
 
                 return JsonHelper.IEnumerableReader<MovieDB>("data/cdnmovies.json");
             }
         }
         #endregion
 
+        public VDBmovies() : base(AppInit.conf.VDBmovies) { }
+
         static string referer = CrypTo.DecodeBase64("aHR0cHM6Ly9tb3ZpZWJvb20uc3RvcmUv");
 
         [HttpGet]
         [Route("lite/vdbmovies")]
-        async public ValueTask<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, bool similar, string t, int sid, int s = -1, bool origsource = false, bool rjson = false)
+        async public Task<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, bool similar, string t, int sid, int s = -1, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.VDBmovies);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.BaseGet();
 
             var oninvk = new VDBmoviesInvoke
             (
                host,
                init.hls,
-               streamfile => HostStreamProxy(init, streamfile, proxy: proxy.proxy)
+               streamfile => HostStreamProxy(streamfile)
             );
 
             #region поиск
@@ -105,68 +102,71 @@ namespace Online.Controllers
                 }
 
                 if (similar || string.IsNullOrEmpty(orid))
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return await ContentTpl(stpl);
             }
             #endregion
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            reset: 
-            var cache = await InvokeCache<EmbedModel>(rch.ipkey($"vdbmovies:{orid}:{kinopoisk_id}", proxyManager), cacheTime(20, rhub: 2, init: init), proxyManager, async res =>
+            rhubFallback: 
+            var cache = await InvokeCacheResult<EmbedModel>(ipkey($"vdbmovies:{orid}:{kinopoisk_id}"), 20, async e =>
             {
                 string uri = $"{init.corsHost()}/kinopoisk/{kinopoisk_id}/iframe";
                 if (!string.IsNullOrEmpty(orid))
                     uri = $"{init.corsHost()}/content/{orid}/iframe";
 
-                string html = await black_magic(rch, uri, referer, init, proxy);
+                string file = null, forbidden_quality = null, default_quality = null;
 
-                if (html == null)
-                    return res.Fail("html");
+                void parseHtml(ReadOnlySpan<char> html)
+                {
+                    file = Rx.Match(html, "file:([\t ]+)?'#.([^']+)", 2);
+                    if (string.IsNullOrEmpty(file))
+                        return;
 
-                string file = Regex.Match(html, "file:([\t ]+)?'(#[^']+)").Groups[2].Value;
+                    forbidden_quality = Rx.Groups(html, "forbidden_quality:([\t ]+)?(\"|')(?<forbidden>[^\"']+)(\"|')")["forbidden"].Value;
+                    default_quality = Rx.Groups(html, "default_quality:([\t ]+)?(\"|')(?<quality>[^\"']+)(\"|')")["quality"].Value;
+                }
+
+                if (rch?.enable == true || init.priorityBrowser == "http")
+                {
+                    var headers = httpHeaders(init, HeadersModel.Init(
+                        ("sec-fetch-dest", "iframe"),
+                        ("sec-fetch-mode", "navigate"),
+                        ("sec-fetch-site", "cross-site"),
+                        ("referer", referer)
+                    ));
+
+                    await httpHydra.GetSpan(uri, newheaders: headers, spanAction: html => 
+                    {
+                        parseHtml(html);
+                    });
+                }
+                else
+                {
+                    string html = await black_magic(uri, referer);
+                    parseHtml(html);
+                }
+
                 if (string.IsNullOrEmpty(file))
-                    return res.Fail("file");
+                    return e.Fail("file", refresh_proxy: true);
 
-                string forbidden_quality = Regex.Match(html, "forbidden_quality:([\t ]+)?(\"|')(?<forbidden>[^\"']+)(\"|')").Groups["forbidden"].Value;
-                string default_quality = Regex.Match(html, "default_quality:([\t ]+)?(\"|')(?<quality>[^\"']+)(\"|')").Groups["quality"].Value;
-
-                return oninvk.Embed(oninvk.DecodeEval(file), forbidden_quality, default_quality);
+                return e.Success(oninvk.Embed(oninvk.DecodeEval(file), forbidden_quality, default_quality));
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache))
+                goto rhubFallback;
 
-            return OnResult(cache, () => oninvk.Html(cache.Value, orid, imdb_id, kinopoisk_id, title, original_title, t, s, sid, vast: init.vast, rjson: rjson), origsource: origsource, gbcache: !rch.enable);
+            return await ContentTpl(cache, 
+                () => oninvk.Tpl(cache.Value, orid, imdb_id, kinopoisk_id, title, original_title, t, s, sid, vast: init.vast, rjson: rjson)
+            );
         }
 
-
         #region black_magic
-        async Task<string> black_magic(RchClient rch, string uri, string referer, OnlinesSettings init, (WebProxy proxy, (string ip, string username, string password) data) baseproxy)
+        async Task<string> black_magic(string uri, string referer)
         {
             try
             {
-                var headers = httpHeaders(init, HeadersModel.Init(
-                    ("sec-fetch-dest", "iframe"),
-                    ("sec-fetch-mode", "navigate"),
-                    ("sec-fetch-site", "cross-site"),
-                    ("referer", referer)
-                ));
-
-                if (rch.enable)
-                    return await rch.Get(init.cors(uri), headers);
-
-                if (init.priorityBrowser == "http")
-                    return await Http.Get(init.cors(uri), httpversion: 2, timeoutSeconds: 8, proxy: baseproxy.proxy, headers: headers);
-
                 using (var browser = new PlaywrightBrowser(init.priorityBrowser))
                 {
-                    var page = await browser.NewPageAsync(init.plugin, init.headers, proxy: baseproxy.data, imitationHuman: init.imitationHuman).ConfigureAwait(false);
+                    var page = await browser.NewPageAsync(init.plugin, init.headers, proxy: proxy_data, imitationHuman: init.imitationHuman).ConfigureAwait(false);
                     if (page == null)
                         return null;
 
@@ -193,14 +193,14 @@ namespace Online.Controllers
                                     html = await response.TextAsync();
 
                                 browser.SetPageResult(html);
-                                PlaywrightBase.WebLog(route.Request, response, html, baseproxy.data);
+                                PlaywrightBase.WebLog(route.Request, response, html, proxy_data);
                                 return;
                             }
                             else
                             {
                                 if (!init.imitationHuman || route.Request.Url.EndsWith(".m3u8") || route.Request.Url.Contains("/cdn-cgi/challenge-platform/"))
                                 {
-                                    PlaywrightBase.ConsoleLog($"Playwright: Abort {route.Request.Url}");
+                                    PlaywrightBase.ConsoleLog(() => $"Playwright: Abort {route.Request.Url}");
                                     await route.AbortAsync();
                                 }
                                 else

@@ -1,22 +1,18 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Shared.Engine.RxEnumerate;
 
 namespace Online.Controllers
 {
     public class AniMedia : BaseOnlineController
     {
+        public AniMedia() : base(AppInit.conf.AniMedia) { }
+
         [HttpGet]
         [Route("lite/animedia")]
-        async public ValueTask<ActionResult> Index(string title, string news, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Index(string title, string news, bool rjson = false, bool similar = false)
         {
-            var init = await loadKit(AppInit.conf.AniMedia);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
 
             if (string.IsNullOrEmpty(news))
             {
@@ -24,44 +20,47 @@ namespace Online.Controllers
                     return OnError();
 
                 #region Поиск
-                string memkey = $"animedia:search:{title}:{similar}";
-
-                return await InvkSemaphore(init, memkey, async () =>
+                return await InvkSemaphore($"animedia:search:{title}:{similar}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memkey, out List<(string title, string url, string img)> catalog, inmemory: false))
+                    bool reqOk = false;
+                    List<(string title, string url, string img)> catalog = null;
+
+                    if (!hybridCache.TryGetValue(key, out catalog, inmemory: false))
                     {
-                        string search = await Http.Post($"{init.corsHost()}/index.php?do=search", $"do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title)}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
-                        if (search == null)
-                            return OnError(proxyManager);
-
-                        var rows = search.Split("</article>")[1].Split("grid-item d-flex fd-column");
-
-                        catalog = new List<(string title, string url, string img)>(rows.Length);
-
-                        foreach (string row in rows.Skip(1))
+                        await httpHydra.PostSpan($"{init.corsHost()}/index.php?do=search", $"do=search&subaction=search&from_page=0&story={HttpUtility.UrlEncode(title)}", search => 
                         {
-                            var g = Regex.Match(row, "<a href=\"https?://[^/]+/([^\"]+)\" class=\"poster__link\"><h3 class=\"poster__title line-clamp\">([^<]+)</h3></a>").Groups;
+                            reqOk = search.Contains("id=\"dosearch\"", StringComparison.Ordinal);
 
-                            if (!string.IsNullOrEmpty(g[1].Value) && !string.IsNullOrEmpty(g[2].Value))
+                            var article = Rx.Split("</article>", search);
+                            if (article.Count > 1)
                             {
-                                string img = Regex.Match(row, "<img src=\"([^\"]+)\"").Groups[1].Value;
-                                if (!string.IsNullOrEmpty(img))
-                                    img = init.host + img;
+                                var rx = Rx.Split("grid-item d-flex fd-column", article[1].Span, 1);
 
-                                if (similar || StringConvert.SearchName(g[2].Value).Contains(StringConvert.SearchName(title)))
-                                    catalog.Add((g[2].Value, g[1].Value, img));
+                                catalog = new List<(string title, string url, string img)>(rx.Count);
+
+                                foreach (var row in rx.Rows())
+                                {
+                                    var g = row.Groups("<a href=\"https?://[^/]+/([^\"]+)\" class=\"poster__link\"><h3 class=\"poster__title line-clamp\">([^<]+)</h3></a>");
+
+                                    if (!string.IsNullOrEmpty(g[1].Value) && !string.IsNullOrEmpty(g[2].Value))
+                                    {
+                                        string img = row.Match("<img src=\"([^\"]+)\"");
+                                        if (img != null)
+                                            img = init.host + img;
+
+                                        if (similar || StringConvert.SearchName(g[2].Value).Contains(StringConvert.SearchName(title)))
+                                            catalog.Add((g[2].Value, g[1].Value, img));
+                                    }
+                                }
                             }
-                        }
+                        });
 
-                        if (catalog.Count == 0 && !search.Contains("id=\"dosearch\""))
-                            return OnError();
+                        if (catalog == null || catalog.Count == 0)
+                            return OnError(refresh_proxy: !reqOk);
 
-                        proxyManager.Success();
-                        hybridCache.Set(memkey, catalog, cacheTime(40, init: init), inmemory: false);
+                        proxyManager?.Success();
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
-
-                    if (catalog.Count == 0)
-                        return OnError();
 
                     if (!similar && catalog.Count == 1)
                         return LocalRedirect(accsArgs($"/lite/animedia?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&news={HttpUtility.UrlEncode(catalog[0].url)}"));
@@ -74,96 +73,93 @@ namespace Online.Controllers
                         stpl.Append(res.title, string.Empty, string.Empty, uri, PosterApi.Size(res.img));
                     }
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return await ContentTpl(stpl);
                 });
                 #endregion
             }
             else 
             {
                 #region Серии
-                string memKey = $"animedia:{news}";
-
-                return await InvkSemaphore(init, memKey, async () =>
+                return await InvkSemaphore($"animedia:{news}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memKey, out List<(int episode, string s, string vod)> links, inmemory: false))
+                    List<(int episode, string s, string vod)> links = null;
+
+                    if (!hybridCache.TryGetValue(key, out links, inmemory: false))
                     {
-                        string html = await Http.Get($"{init.corsHost()}/{news}", timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
-                        if (html == null)
-                            return OnError(proxyManager);
-
-                        var match = Regex.Match(html, "data-vid=\"([0-9]+)\"[\t ]+data-vlnk=\"([^\"]+)\"");
-                        links = new List<(int episode, string s, string vod)>(match.Length);
-
-                        string pmovie = Regex.Match(html, "class=\"pmovie__main-info ws-nowrap\">([^<]+)<").Groups[1].Value;
-                        string s = Regex.Match(pmovie, "Season[\t ]+([0-9]+)", RegexOptions.IgnoreCase).Groups[1].Value;
-                        if (string.IsNullOrEmpty(s))
-                            s = "1";
-
-                        while (match.Success)
+                        await httpHydra.GetSpan($"{init.corsHost()}/{news}", html =>
                         {
-                            string vod = match.Groups[2].Value;
-                            if (!string.IsNullOrEmpty(match.Groups[1].Value) && !string.IsNullOrEmpty(vod) && vod.Contains("/vod/"))
+                            var rx = Rx.Matches("data-vid=\"([0-9]+)\"[\t ]+data-vlnk=\"([^\"]+)\"", html);
+                            if (rx.Count == 0)
+                                return;
+
+                            links = new List<(int episode, string s, string vod)>(rx.Count);
+
+                            string pmovie = Rx.Match(html, "class=\"pmovie__main-info ws-nowrap\">([^<]+)<");
+                            string s = Rx.Match(pmovie, "Season[\t ]+([0-9]+)", 1, RegexOptions.IgnoreCase);
+                            if (string.IsNullOrEmpty(s))
+                                s = "1";
+
+                            foreach (var row in rx.Rows())
                             {
-                                if (int.TryParse(match.Groups[1].Value, out int episode) && episode > 0)
+                                var g = row.Groups();
+
+                                string vod = g[2].Value;
+                                if (!string.IsNullOrEmpty(g[1].Value) && !string.IsNullOrEmpty(vod) && vod.Contains("/vod/"))
                                 {
-                                    if (links.FirstOrDefault(i => i.episode == episode).vod == null)
-                                        links.Add((episode, s, vod));
+                                    if (int.TryParse(g[1].Value, out int episode) && episode > 0)
+                                    {
+                                        if (links.FirstOrDefault(i => i.episode == episode).vod == null)
+                                            links.Add((episode, s, vod));
+                                    }
                                 }
                             }
+                        });
 
-                            match = match.NextMatch();
-                        }
+                        if (links == null || links.Count == 0)
+                            return OnError(refresh_proxy: true);
 
-                        if (links.Count == 0)
-                            return OnError();
+                        links = links.OrderBy(i => i.episode).ToList();
 
-                        proxyManager.Success();
-                        hybridCache.Set(memKey, links, cacheTime(30, init: init), inmemory: false);
+                        proxyManager?.Success();
+                        hybridCache.Set(key, links, cacheTime(30), inmemory: false);
                     }
 
                     var etpl = new EpisodeTpl(links.Count);
 
-                    foreach (var l in links.OrderBy(i => i.episode))
+                    foreach (var l in links)
                         etpl.Append($"{l.episode} серия", title, l.s, l.episode.ToString(), accsArgs($"{host}/lite/animedia/video.m3u8?vod={HttpUtility.UrlEncode(l.vod)}"), vast: init.vast);
 
-                    return ContentTo(rjson ? etpl.ToJson() : etpl.ToHtml());
+                    return await ContentTpl(etpl);
                 });
                 #endregion
             }
         }
-
 
         #region Video
         [HttpGet]
         [Route("lite/animedia/video.m3u8")]
         async public ValueTask<ActionResult> Video(string vod)
         {
-            var init = await loadKit(AppInit.conf.AniMedia);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false, rch_check: false))
                 return badInitMsg;
 
-            string memKey = $"animedia:{vod}";
-
-            return await InvkSemaphore(init, memKey, async () =>
+            return await InvkSemaphore($"animedia:{vod}", async key =>
             {
-                var proxyManager = new ProxyManager(init);
-
-                if (!hybridCache.TryGetValue(memKey, out string hls))
+                if (!hybridCache.TryGetValue(key, out string hls))
                 {
-                    string embed = await Http.Get(vod, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: httpHeaders(init));
+                    await httpHydra.GetSpan(vod, embed => 
+                    {
+                        hls = Rx.Match(embed, "file:\"([^\"]+)\"");
+                    });
 
-                    if (string.IsNullOrEmpty(embed))
-                        return OnError(proxyManager);
-
-                    hls = Regex.Match(embed, "file:\"([^\"]+)\"").Groups[1].Value;
                     if (string.IsNullOrEmpty(hls))
-                        return OnError(proxyManager);
+                        return OnError(refresh_proxy: true);
 
-                    proxyManager.Success();
-                    hybridCache.Set(memKey, hls, cacheTime(180, init: init));
+                    proxyManager?.Success();
+                    hybridCache.Set(key, hls, cacheTime(180));
                 }
 
-                return Redirect(HostStreamProxy(init, hls, proxy: proxyManager.Get()));
+                return Redirect(HostStreamProxy(hls));
             });
         }
         #endregion

@@ -2,14 +2,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Shared.Models.Online.Settings;
-using System.Net;
 using System.Text;
 
 namespace Online.Controllers
 {
     public class IptvOnline : BaseOnlineController
     {
+        public IptvOnline() : base(AppInit.conf.IptvOnline) { }
+
         #region Bind
         [HttpGet]
         [AllowAnonymous]
@@ -27,52 +27,41 @@ namespace Online.Controllers
                 html = "Добавьте в init.conf<br><br>\"IptvOnline\": {<br>&nbsp;&nbsp;\"enable\": true,<br>&nbsp;&nbsp;\"token\": \"" + $"{ID}:{KEY}" + "\"<br>}";
             }
 
-            return Content(html, "text/html; charset=utf-8");
+            return ContentTo(html);
         }
         #endregion
 
         [HttpGet]
         [Route("lite/iptvonline")]
-        async public ValueTask<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int serial = -1, int s = -1, bool rjson = false, bool origsource = false)
+        async public Task<ActionResult> Index(string imdb_id, long kinopoisk_id, string title, string original_title, int serial = -1, int s = -1, bool rjson = false)
         {
-            var init = await loadKit(AppInit.conf.IptvOnline);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
 
             if (string.IsNullOrEmpty(init.token))
-                return OnError();
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-            var proxy = proxyManager.Get();
+                return OnError("token", statusCode: 401, gbcache: false);
 
             #region AUTH
             if (!hybridCache.TryGetValue($"iptvonline:auth:{init.token}", out string codeauth))
             {
-                var auth = await Http.Post<JObject>($"{init.host}/v1/api/auth", "", timeoutSeconds: 8, proxy: proxy, useDefaultHeaders: false, headers: HeadersModel.Init(
+                var auth = await httpHydra.Post<JObject>($"{init.host}/v1/api/auth", "", useDefaultHeaders: false, safety: true, addheaders: HeadersModel.Init(
                     ("X-API-KEY", init.token.Split(":")[1]),
                     ("X-API-ID", init.token.Split(":")[0])
                 ));
 
                 if (auth == null)
-                {
-                    proxyManager.Refresh();
-                    return null;
-                }
+                    return OnError(refresh_proxy: true);
 
                 string code = auth.Value<string>("code");
                 if (string.IsNullOrEmpty(code))
-                    return null;
+                    return OnError(refresh_proxy: true);
 
                 codeauth = code;
                 hybridCache.Set($"iptvonline:auth:{init.token}", codeauth, DateTime.Now.AddHours(2));
             }
             #endregion
 
-            var data = await search(init, proxyManager, proxy, codeauth, serial, imdb_id, kinopoisk_id, title, original_title);
+            var data = await search(codeauth, serial, imdb_id, kinopoisk_id, title, original_title);
             if (data == null)
                 return OnError();
 
@@ -81,38 +70,37 @@ namespace Online.Controllers
 
             #region media
             string id = data.Value<string>("id");
-            var cache = await InvokeCache<JToken>($"IptvOnline:{id}:{init.token}", cacheTime(20, init: init), proxyManager, async res =>
+            var cache = await InvokeCacheResult<JToken>($"IptvOnline:{id}:{init.token}", 20, async e =>
             {
-                var header = httpHeaders(init, HeadersModel.Init(
+                string uri = $"{init.host}/v1/api/media/{(serial == 1 ? "serials" : "movies")}/{id}/";
+
+                var root = await httpHydra.Get<JObject>(uri, useDefaultHeaders: false, safety: true, addheaders: HeadersModel.Init(
                     ("X-API-AUTH", codeauth),
                     ("X-API-ID", init.token.Split(":")[0])
                 ));
 
-                string uri = $"{init.host}/v1/api/media/{(serial == 1 ? "serials" : "movies")}/{id}/";
-                var root = await Http.Get<JObject>(init.cors(uri), timeoutSeconds: 8, proxy: proxy, headers: header, useDefaultHeaders: false);
-
                 if (root == null || !root.ContainsKey("data"))
-                    return res.Fail("data");
+                    return e.Fail("data", refresh_proxy: true);
 
-                return root["data"];
+                return e.Success(root["data"]);
             });
             #endregion
 
-            return OnResult(cache, () =>
+            return await ContentTpl(cache, () =>
             {
                 if (cache.Value.Value<string>("category") == "movie")
                 {
                     #region Фильм
                     var mtpl = new MovieTpl(title, original_title, 1);
 
-                    string stream = HostStreamProxy(init, cache.Value["medias"].First.Value<string>("url") + "#.m3u8", proxy: proxy);
+                    string stream = HostStreamProxy(cache.Value["medias"].First.Value<string>("url") + "#.m3u8");
                     string quality = cache.Value.Value<int?>("quality")?.ToString();
                     if (quality != null)
                         quality += "p";
 
                     mtpl.Append(quality ?? title, stream, vast: init.vast);
 
-                    return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                    return mtpl;
                     #endregion
                 }
                 else
@@ -136,7 +124,7 @@ namespace Online.Controllers
                             tpl.Append($"{season} сезон", link, season);
                         }
 
-                        return rjson ? tpl.ToJson() : tpl.ToHtml();
+                        return tpl;
                     }
                     else
                     {
@@ -151,21 +139,19 @@ namespace Online.Controllers
                             if (string.IsNullOrEmpty(file))
                                 continue;
 
-                            string stream = HostStreamProxy(init, file, proxy: proxy);
+                            string stream = HostStreamProxy(file);
                             etpl.Append(name ?? $"{episode.Value<int>("episode")} серия", title ?? original_title, sArhc, episode.Value<int>("episode").ToString(), stream, vast: init.vast);
                         }
 
-                        return rjson ? etpl.ToJson() : etpl.ToHtml();
+                        return etpl;
                     }
                     #endregion
                 }
-
-            }, origsource: origsource);
+            });
         }
 
-
         #region search
-        async ValueTask<JToken> search(OnlinesSettings init, ProxyManager proxyManager, WebProxy proxy, string codeauth, int serial, string imdb_id, long kinopoisk_id, string title, string original_title)
+        async ValueTask<JToken> search(string codeauth, int serial, string imdb_id, long kinopoisk_id, string title, string original_title)
         {
             string memKey = $"iptvonline:view:{kinopoisk_id}:{imdb_id}:{title}:{original_title}";
 
@@ -179,19 +165,17 @@ namespace Online.Controllers
                     if (string.IsNullOrEmpty(search))
                         return null;
 
-                    var header = httpHeaders(init, HeadersModel.Init(
-                        ("X-API-AUTH", codeauth),
-                        ("X-API-ID", init.token.Split(":")[0])
-                    ));
-
                     string uri = $"{init.host}/v1/api/media/{(serial == 1 ? "serials" : "movies")}";
                     var data = new System.Net.Http.StringContent(JsonConvert.SerializeObject(new { search }), Encoding.UTF8, "application/json");
 
-                    var video = await Http.Get<JObject>(uri, body: data, timeoutSeconds: 8, proxy: proxy, headers: header, useDefaultHeaders: false);
+                    var video = await Http.Get<JObject>(uri, body: data, timeoutSeconds: init.httptimeout, proxy: proxy, useDefaultHeaders: false, headers: httpHeaders(init, HeadersModel.Init(
+                        ("X-API-AUTH", codeauth),
+                        ("X-API-ID", init.token.Split(":")[0])
+                    )));
 
                     if (video == null)
                     {
-                        proxyManager.Refresh();
+                        proxyManager?.Refresh();
                         return null;
                     }
 
@@ -238,8 +222,8 @@ namespace Online.Controllers
                 if (data == null)
                     return null;
 
-                proxyManager.Success();
-                hybridCache.Set(memKey, data, cacheTime(30, init: init));
+                proxyManager?.Success();
+                hybridCache.Set(memKey, data, cacheTime(30));
             }
 
             return data;

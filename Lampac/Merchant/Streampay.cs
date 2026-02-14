@@ -1,16 +1,17 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Chaos.NaCl;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Shared;
 using System;
-using IO = System.IO.File;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Chaos.NaCl;
 using System.Text.RegularExpressions;
-using System.Linq;
-using Microsoft.Extensions.Caching.Memory;
-using Shared;
+using System.Threading.Tasks;
+using IO = System.IO.File;
 
 namespace Merchant.Controllers
 {
@@ -20,6 +21,7 @@ namespace Merchant.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("streampay/new")]
         async public Task<ActionResult> Index(string email)
         {
@@ -91,6 +93,7 @@ namespace Merchant.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("streampay/callback")]
         public ActionResult Callback()
         {

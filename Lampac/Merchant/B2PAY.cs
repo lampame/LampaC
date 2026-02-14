@@ -1,15 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Microsoft.AspNetCore.Http;
-using System.Text;
-using IO = System.IO.File;
-using System.IO;
 using Shared;
 using Shared.Engine;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+using IO = System.IO.File;
 
 namespace Merchant.Controllers
 {
@@ -22,6 +23,7 @@ namespace Merchant.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("b2pay/new")]
         async public Task<ActionResult> Index(string email)
         {
@@ -61,6 +63,7 @@ namespace Merchant.Controllers
 
 
         [HttpPost]
+        [AllowAnonymous]
         [Route("b2pay/callback")]
         async public Task<ActionResult> Callback()
         {

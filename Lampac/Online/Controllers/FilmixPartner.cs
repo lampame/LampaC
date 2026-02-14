@@ -1,42 +1,42 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
 using Shared.Models.Online.Filmix;
+using Shared.Models.Online.Settings;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace Online.Controllers
 {
-    public class FilmixPartner : BaseOnlineController
+    public class FilmixPartner : BaseOnlineController<FilmixSettings>
     {
+        public FilmixPartner() : base(AppInit.conf.FilmixPartner) { }
+
         [HttpGet]
         [Route("lite/fxapi")]
-        async public ValueTask<ActionResult> Index(long kinopoisk_id, bool checksearch, string title, string original_title, int year, int postid, int t = -1, int s = -1, bool rjson = false, bool similar = false, string source = null, string id = null)
+        async public Task<ActionResult> Index(long kinopoisk_id, bool checksearch, string title, string original_title, int year, int postid, int t = -1, int s = -1, bool rjson = false, bool similar = false, string source = null, string id = null)
         {
             if (postid == 0 && !string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(id))
             {
-                if (source.ToLower() is "filmix" or "filmixapp")
+                if (source.Contains("filmix", StringComparison.OrdinalIgnoreCase) ||
+                    source.Contains("filmixapp", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!int.TryParse(id, out postid))
                         int.TryParse(Regex.Match(id, "/([0-9]+)-").Groups[1].Value, out postid);
                 }
             }
 
-            var init = await loadKit(AppInit.conf.FilmixPartner);
-            if (await IsBadInitialization(init, rch: false))
+            if (await IsRequestBlocked(rch: false))
                 return badInitMsg;
-
-            var rch = new RchClient(HttpContext, host, init, requestInfo);
-            if (rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
 
             if (postid == 0)
             {
-                var res = await InvokeCache($"fxapi:search:{title}:{original_title}:{similar}", cacheTime(40, init: init), () => Search(proxyManager, title, original_title, year, similar));
+                var res = await InvokeCache($"fxapi:search:{title}:{original_title}:{similar}", 40, 
+                    () => Search(title, original_title, year, similar)
+                );
+
                 if (similar)
-                    return ContentTo(rjson ? res.similars.Value.ToJson() : res.similars.Value.ToHtml());
+                    return await ContentTpl(res.similars);
 
                 if (res != null)
                     postid = res.id;
@@ -46,7 +46,7 @@ namespace Online.Controllers
                     postid = await searchKp(kinopoisk_id);
 
                 if (postid == 0 && res?.similars != null)
-                    return ContentTo(rjson ? res.similars.Value.ToJson() : res.similars.Value.ToHtml());
+                    return await ContentTpl(res.similars);
             }
 
             if (postid == 0)
@@ -60,7 +60,7 @@ namespace Online.Controllers
 
             string videoKey = $"fxapi:{postid}:{(string.IsNullOrEmpty(hashfimix) ? requestInfo.IP : "")}";
 
-            return await InvkSemaphore(init, videoKey, async () =>
+            return await InvkSemaphore(videoKey, async () =>
             {
                 #region video_links
                 if (!hybridCache.TryGetValue(videoKey, out JArray root))
@@ -109,13 +109,13 @@ namespace Online.Controllers
                             if (!string.IsNullOrEmpty(hashfimix))
                                 url = Regex.Replace(url, "/s/[^/]+/", $"/s/{hashfimix}/");
 
-                            streamquality.Append(HostStreamProxy(init, url), $"{q}p");
+                            streamquality.Append(HostStreamProxy(url), $"{q}p");
                         }
 
                         mtpl.Append(movie.Value<string>("name"), streamquality.Firts().link, streamquality: streamquality, vast: init.vast);
                     }
 
-                    return ContentTo(rjson ? mtpl.ToJson() : mtpl.ToHtml());
+                    return await ContentTpl(mtpl);
                     #endregion
                 }
                 else
@@ -143,7 +143,7 @@ namespace Online.Controllers
                             }
                         }
 
-                        return ContentTo(rjson ? tpl.ToJson() : tpl.ToHtml());
+                        return await ContentTpl(tpl);
                         #endregion
                     }
                     else
@@ -174,8 +174,7 @@ namespace Online.Controllers
                         #endregion
 
                         #region Серии
-                        var etpl = new EpisodeTpl();
-                        string sArhc = s.ToString();
+                        var etpl = new EpisodeTpl(vtpl);
 
                         foreach (var episode in root[t].Value<JArray>("seasons").FirstOrDefault(i => i.Value<int>("season") == s).Value<JObject>("episodes").ToObject<Dictionary<string, JObject>>().Values)
                         {
@@ -188,20 +187,17 @@ namespace Online.Controllers
                                 if (!string.IsNullOrEmpty(hashfimix))
                                     url = Regex.Replace(url, "/s/[^/]+/", $"/s/{hashfimix}/");
 
-                                string l = HostStreamProxy(init, url);
+                                string l = HostStreamProxy(url);
 
                                 streamquality.Append(l, $"{q}p");
                             }
 
                             int e = episode.Value<int>("episode");
-                            etpl.Append($"{e} серия", title ?? original_title, sArhc, e.ToString(), streamquality.Firts().link, streamquality: streamquality, vast: init.vast);
+                            etpl.Append($"{e} серия", title ?? original_title, s.ToString(), e.ToString(), streamquality.Firts().link, streamquality: streamquality, vast: init.vast);
                         }
                         #endregion
 
-                        if (rjson)
-                            return ContentTo(etpl.ToJson(vtpl));
-
-                        return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                        return await ContentTpl(etpl);
                     }
                     #endregion
                 }
@@ -210,6 +206,7 @@ namespace Online.Controllers
 
 
         [HttpGet]
+        [AllowAnonymous]
         [Route("lite/fxapi/lowlevel/{*uri}")]
         async public Task<ActionResult> LowlevelApi(string uri)
         {
@@ -244,7 +241,7 @@ namespace Online.Controllers
                 if (string.IsNullOrWhiteSpace(XFXTOKEN))
                     return 0;
 
-                var root = await Http.Get<JObject>($"{AppInit.conf.FilmixPartner.corsHost()}/film/by-kp/{kinopoisk_id}", headers: httpHeaders(AppInit.conf.FilmixPartner, HeadersModel.Init("X-FX-TOKEN", XFXTOKEN)));
+                var root = await Http.Get<JObject>($"{init.corsHost()}/film/by-kp/{kinopoisk_id}", proxy: proxy, headers: httpHeaders(init, HeadersModel.Init("X-FX-TOKEN", XFXTOKEN)));
 
                 if (root == null || !root.ContainsKey("id"))
                     return 0;
@@ -261,35 +258,24 @@ namespace Online.Controllers
         }
 
 
-        async ValueTask<SearchResult> Search(ProxyManager proxyManager, string title, string original_title, int year, bool similar)
+        async Task<SearchResult> Search(string title, string original_title, int year, bool similar)
         {
             if (string.IsNullOrWhiteSpace(title ?? original_title))
                 return null;
 
-            var proxy = proxyManager.Get();
+            string uri = $"{AppInit.conf.Filmix.corsHost()}/api/v2/search?story={HttpUtility.UrlEncode(title)}&user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token={init.token}&user_dev_vendor=Xiaomi";
 
-            string uri = $"{AppInit.conf.Filmix.corsHost()}/api/v2/search?story={HttpUtility.UrlEncode(title)}&user_dev_apk=2.0.1&user_dev_id=&user_dev_name=Xiaomi&user_dev_os=11&user_dev_token={AppInit.conf.Filmix.token}&user_dev_vendor=Xiaomi";
-
-            string json = await Http.Get(AppInit.conf.Filmix.cors(uri), timeoutSeconds: 7, proxy: proxy, useDefaultHeaders: false, headers: HeadersModel.Init(
+            var root = await Http.Get<List<SearchModel>>(init.cors(uri), timeoutSeconds: 7, proxy: proxy, useDefaultHeaders: false, headers: HeadersModel.Init(
                 ("Accept-Encoding", "gzip")
             ));
 
-            if (json == null)
-            {
-                proxyManager.Refresh();
-                return await Search2(title, original_title, year);
-            }
-
-            List<SearchModel> root = null;
-
-            try
-            {
-                root = JsonConvert.DeserializeObject<List<SearchModel>>(json);
-            }
-            catch { }
-
             if (root == null || root.Count == 0)
+            {
+                if (root == null)
+                    proxyManager?.Refresh();
+
                 return await Search2(title, original_title, year);
+            }
 
             var ids = new List<int>();
             var stpl = new SimilarTpl(root.Count);
@@ -324,31 +310,21 @@ namespace Online.Controllers
         }
 
 
-        async Task<SearchResult> Search2(string? title, string? original_title, int year)
+        async Task<SearchResult> Search2(string title, string original_title, int year)
         {
-            async Task<List<SearchModel>> gosearch(string? story)
+            async Task<List<SearchModel>> gosearch(string story)
             {
                 if (string.IsNullOrEmpty(story))
                     return null;
 
-                string uri = $"https://api.filmix.tv/api-fx/list?search={HttpUtility.UrlEncode(story)}&limit=48";
+                string uri = $"{AppInit.conf.FilmixTV.corsHost()}/api-fx/list?search={HttpUtility.UrlEncode(story)}&limit=48";
 
-                string json = await Http.Get(uri, timeoutSeconds: 5);
-                if (string.IsNullOrEmpty(json) || !json.Contains("\"status\":\"ok\""))
+                var root = await Http.Get<JObject>(uri, proxy: proxy, timeoutSeconds: 5);
+
+                if (root == null || !root.ContainsKey("items"))
                     return null;
 
-                List<SearchModel> root = null;
-
-                try
-                {
-                    root = JsonConvert.DeserializeObject<List<SearchModel>>(json);
-                }
-                catch { }
-
-                if (root == null || root.Count == 0)
-                    return null;
-
-                return root;
+                return root["items"].ToObject<List<SearchModel>>();
             }
 
             var result = await gosearch(original_title);
@@ -361,8 +337,8 @@ namespace Online.Controllers
             var ids = new List<int>();
             var stpl = new SimilarTpl(result.Count);
 
-            string? enc_title = HttpUtility.UrlEncode(title);
-            string? enc_original_title = HttpUtility.UrlEncode(original_title);
+            string enc_title = HttpUtility.UrlEncode(title);
+            string enc_original_title = HttpUtility.UrlEncode(original_title);
 
             string stitle = StringConvert.SearchName(title);
             string sorigtitle = StringConvert.SearchName(original_title);
@@ -372,7 +348,7 @@ namespace Online.Controllers
                 if (item == null)
                     continue;
 
-                string? name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_title) ? $"{item.title} / {item.original_title}" : (item.title ?? item.original_title);
+                string name = !string.IsNullOrEmpty(item.title) && !string.IsNullOrEmpty(item.original_title) ? $"{item.title} / {item.original_title}" : (item.title ?? item.original_title);
 
                 stpl.Append(name, item.year.ToString(), string.Empty, host + $"lite/filmix?postid={item.id}&title={enc_title}&original_title={enc_original_title}", PosterApi.Size(item.poster));
 
@@ -439,7 +415,7 @@ namespace Online.Controllers
 
             string token = SHA1(init.APISECRET + init.APIKEY + CrypTo.md5(array_sum(serverip) + salt.Value<string>("salt")));
 
-            var xtk = await Http.Post<JObject>($"{init.host}/request-token", $"user_name={init.user_name}&user_passw={init.user_passw}&key={init.APIKEY}&token={token}", headers: httpHeaders(init, HeadersModel.Init("User-Id", userid.ToString())));
+            var xtk = await Http.Post<JObject>($"{init.host}/request-token", $"user_name={init.user_name}&user_passw={init.user_passw}&key={init.APIKEY}&token={token}", proxy: proxy, headers: httpHeaders(init, HeadersModel.Init("User-Id", userid.ToString())));
 
             if (xtk != null && !string.IsNullOrWhiteSpace(xtk.Value<string>("token")))
                 return xtk.Value<string>("token");

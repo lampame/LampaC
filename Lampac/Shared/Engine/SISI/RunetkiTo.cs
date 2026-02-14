@@ -1,49 +1,50 @@
-﻿using Shared.Models.SISI.Base;
-using System.Text.RegularExpressions;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models.SISI.Base;
 
 namespace Shared.Engine.SISI
 {
     public static class RunetkiTo
     {
-        public static ValueTask<string> InvokeHtml(string host, string sort, int pg, Func<string, ValueTask<string>> onresult)
+        public static string Uri(string host, string sort, int pg)
         {
-            string url = host + $"/tools/listing_v3.php?livetab={sort ?? "all"}&offset={(pg > 1 ? ((pg-1) * 72) : 0)}&limit=72";
-
-            return onresult.Invoke(url);
+            return $"{host}/tools/listing_v3.php?livetab={sort ?? "all"}&offset={(pg > 1 ? ((pg - 1) * 72) : 0)}&limit=72";
         }
 
-        public static List<PlaylistItem> Playlist(in string html, out int total_pages, Func<PlaylistItem, PlaylistItem> onplaylist = null)
+        public static List<PlaylistItem> Playlist(ReadOnlySpan<char> html, out int total_pages, Func<PlaylistItem, PlaylistItem> onplaylist = null)
         {
             total_pages = 0;
 
-            if (string.IsNullOrEmpty(html))
-                return new List<PlaylistItem>();
+            if (html.IsEmpty)
+                return null;
 
-            var rows = html.Split("\"gender\"");
-            var playlists = new List<PlaylistItem>(rows.Length);
+            var rx = Rx.Split("\"gender\"", html, 1);
+            if (rx.Count == 0)
+                return null;
 
-            foreach (string row in rows.Skip(1))
+            var playlists = new List<PlaylistItem>(rx.Count);
+
+            foreach (var row in rx.Rows())
             {
-                string baba = Regex.Match(row, "\"username\":\"([^\"]+)\"").Groups[1].Value;
+                string baba = row.Match("\"username\":\"([^\"]+)\"");
                 if (string.IsNullOrEmpty(baba))
                     continue;
 
-                string esid = Regex.Match(row, "\"esid\":\"([^\"]+)\"").Groups[1].Value;
+                string esid = row.Match("\"esid\":\"([^\"]+)\"");
                 if (string.IsNullOrEmpty(esid))
                     continue;
 
-                string img = Regex.Match(row, "\"thumb_image\":\"([^\"]+)\"").Groups[1].Value;
+                string img = row.Match("\"thumb_image\":\"([^\"]+)\"");
                 if (string.IsNullOrEmpty(img))
                     continue;
 
-                string title = Regex.Match(row, "\"display_name\":\"([^\"]+)\"").Groups[1].Value;
+                string title = row.Match("\"display_name\":\"([^\"]+)\"");
                 if (string.IsNullOrEmpty(title))
                     title = baba;
 
                 var pl = new PlaylistItem()
                 {
                     name = title,
-                    quality = Regex.Match(row, "\"vq\":\"([^\"]+)\"").Groups[1].Value,
+                    quality = row.Match("\"vq\":\"([^\"]+)\""),
                     video = $"https://{esid}.bcvcdn.com/hls/stream_{baba}/playlist.m3u8",
                     picture = $"https:{img.Replace("\\", "").Replace("{ext}", "jpg")}"
                 };
@@ -54,8 +55,8 @@ namespace Shared.Engine.SISI
                 playlists.Add(pl);
             }
 
-            string total_count = Regex.Match(html, "\"total_count\":([0-9]+),").Groups[1].Value;
-            if (int.TryParse(total_count, out int total) && total > 0)
+            string total_count = Rx.Match(html, "\"total_count\":([0-9]+),");
+            if (total_count != null && int.TryParse(total_count, out int total) && total > 0)
             {
                 if (72 >= total)
                     total_pages = 1;

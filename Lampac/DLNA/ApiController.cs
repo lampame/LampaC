@@ -632,6 +632,7 @@ namespace DLNA.Controllers
         #endregion
 
         #region Stream
+        [HttpGet]
         [Route("dlna/stream")]
         public ActionResult Stream(string path)
         {
@@ -643,7 +644,7 @@ namespace DLNA.Controllers
             if (path.EndsWith(".jpg"))
                 contentType = "image/jpeg";
 
-            return File(IO.File.OpenRead($"{dlna_path}/" + path), contentType, true);
+            return File(IO.File.OpenRead($"{dlna_path}/{path}"), contentType, true);
         }
         #endregion
 
@@ -657,13 +658,13 @@ namespace DLNA.Controllers
 
             try
             {
-                IO.File.Delete($"{dlna_path}/" + path);
+                IO.File.Delete($"{dlna_path}/{path}");
             }
             catch { }
 
             try
             {
-                Directory.Delete($"{dlna_path}/" + path, true);
+                Directory.Delete($"{dlna_path}/{path}", true);
             }
             catch { }
 
@@ -772,10 +773,9 @@ namespace DLNA.Controllers
                 if (data.IsEmpty)
                     return Json(new { error = "DownloadMetadata" });
 
-                var array = data.Span.ToArray();
-                IO.File.WriteAllBytes($"cache/torrent/{hash}", array);
+                IO.File.WriteAllBytes($"cache/torrent/{hash}", data.Span);
 
-                return Json(Torrent.Load(array).Files.Select(i => new { i.Path }));
+                return Json(Torrent.Load(data.Span).Files.Select(i => new { i.Path }));
             }
             catch (Exception ex)
             {
@@ -829,9 +829,9 @@ namespace DLNA.Controllers
 
                                 string uri = Regex.Replace(thumb, "^https?://[^/]+/", "");
 
-                                var array = await Http.Download($"https://image.tmdb.org/{uri}", timeoutSeconds: 8);
+                                var array = await Http.Download($"https://image.tmdb.org/{uri}", timeoutSeconds: 10);
                                 if (array == null || !IsValidImg(array))
-                                    array = await Http.Download($"https://imagetmdb.{AppInit.conf.cub.mirror}/{uri}");
+                                    array = await Http.Download($"https://imagetmdb.{AppInit.conf.cub.mirror}/{uri}", timeoutSeconds: 10);
 
                                 if (array != null && IsValidImg(array))
                                 {

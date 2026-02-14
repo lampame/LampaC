@@ -1,4 +1,5 @@
-﻿using YamlDotNet.Serialization;
+﻿using System.Globalization;
+using YamlDotNet.Serialization;
 
 namespace Catalog
 {
@@ -14,9 +15,10 @@ namespace Catalog
             if (string.IsNullOrEmpty(site))
                 return null;
 
-            site = site.Trim().ToLowerInvariant();
+            site = site.ToLowerAndTrim();
+            site = Regex.Replace(site, "[^a-z0-9\\-]", "", RegexOptions.IgnoreCase);
 
-            var hybridCache = new HybridCache();
+            var hybridCache = IHybridCache.Get(null);
 
             string memKey = $"catalog:goInit:{site}";
             if (!hybridCache.TryGetValue(memKey, out CatalogSettings init))
@@ -104,7 +106,7 @@ namespace Catalog
                         var dict = deserializer.Deserialize<Dictionary<object, object>>(yaml);
                         if (dict != null && dict.TryGetValue("displayname", out var dnObj) && dnObj != null)
                         {
-                            var dn = dnObj.ToString().Trim().ToLowerInvariant();
+                            var dn = dnObj.ToString().ToLowerAndTrim();
                             if (dn == site)
                                 return Path.GetFileNameWithoutExtension(file);
                         }
@@ -154,7 +156,12 @@ namespace Catalog
                     }
                     else
                     {
-                        value = node.GetAttributeValue(nd.attribute, null);
+                        if ("innerhtml".Equals(nd.attribute, StringComparison.OrdinalIgnoreCase))
+                            value = node.InnerHtml;
+                        else if ("outerhtml".Equals(nd.attribute, StringComparison.OrdinalIgnoreCase))
+                            value = node.OuterHtml;
+                        else
+                            value = node.GetAttributeValue(nd.attribute, null);
                     }
                 }
                 else
@@ -176,7 +183,19 @@ namespace Catalog
                         }
                         else
                         {
-                            value = (!string.IsNullOrEmpty(nd.attribute) ? inNode.GetAttributeValue(nd.attribute, null) : inNode.InnerText)?.Trim();
+                            if (!string.IsNullOrEmpty(nd.attribute))
+                            {
+                                if ("innerhtml".Equals(nd.attribute, StringComparison.OrdinalIgnoreCase))
+                                    value = inNode.InnerHtml;
+                                else if ("outerhtml".Equals(nd.attribute, StringComparison.OrdinalIgnoreCase))
+                                    value = inNode.OuterHtml;
+                                else
+                                    value = inNode.GetAttributeValue(nd.attribute, null)?.Trim();
+                            }
+                            else
+                            {
+                                value = inNode.InnerText?.Trim();
+                            }
                         }
                     }
                 }
@@ -276,7 +295,7 @@ namespace Catalog
                 if (arg.name_arg is "kp_rating" or "imdb_rating")
                 {
                     string rating = val?.ToString()?.Trim();
-                    if (!string.IsNullOrEmpty(rating) && rating != "0" && rating != "0.0" && double.TryParse(rating.Replace(".", ","), out _))
+                    if (!string.IsNullOrEmpty(rating) && rating != "0" && rating != "0.0" && double.TryParse(rating, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                     {
                         rating = rating.Length > 3 ? rating.Substring(0, 3) : rating;
                         if (rating.Length == 1)
@@ -287,8 +306,8 @@ namespace Catalog
                 }
                 else if (arg.name_arg is "vote_average")
                 {
-                    string value = val?.ToString()?.Trim()?.Replace(".", ",");
-                    if (!string.IsNullOrEmpty(value) && double.TryParse(value, out double _v) && _v > 0)
+                    string value = val?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(value) && double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out double _v) && _v > 0)
                         jo[arg.name_arg] = JToken.FromObject(_v);
                 }
                 else if (arg.name_arg is "runtime" or "PG")
@@ -324,6 +343,10 @@ namespace Catalog
                             array.Add(new JObject() { ["name"] = clearText(item.ToString()) });
 
                         jo[arg.name_arg] = array;
+                    }
+                    else if (val is JToken token && token.Type == JTokenType.Array)
+                    {
+                        jo[arg.name_arg] = token;
                     }
                 }
                 else if (val is string && (arg.name_arg is "origin_country" or "languages"))

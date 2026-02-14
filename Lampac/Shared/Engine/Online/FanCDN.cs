@@ -1,4 +1,5 @@
-﻿using Shared.Models;
+﻿using Shared.Engine.RxEnumerate;
+using Shared.Models;
 using Shared.Models.Base;
 using Shared.Models.Online.FanCDN;
 using Shared.Models.Templates;
@@ -13,21 +14,21 @@ namespace Shared.Engine.Online
         #region FanCDNInvoke
         string host;
         string apihost;
-        Func<string, ValueTask<string>> onget;
+        HttpHydra httpHydra;
+        Func<string, Task<string>> onget;
         Func<string, string> onstreamfile;
-        Func<string, string> onlog;
 
-        public FanCDNInvoke(string host, string apihost, Func<string, ValueTask<string>> onget, Func<string, string> onstreamfile, Func<string, string> onlog = null)
+        public FanCDNInvoke(string host, string apihost, HttpHydra httpHydra, Func<string, Task<string>> onget, Func<string, string> onstreamfile)
         {
             this.host = host != null ? $"{host}/" : null; this.apihost = apihost;
             this.onget = onget;
+            this.httpHydra = httpHydra;
             this.onstreamfile = onstreamfile;
-            this.onlog = onlog;
         }
         #endregion
 
         #region EmbedSearch
-        async public ValueTask<EmbedModel> EmbedSearch(string title, string original_title, int year, int serial)
+        async public Task<EmbedModel> EmbedSearch(string title, string original_title, int year, int serial)
         {
             if (serial == 1)
             {
@@ -44,9 +45,15 @@ namespace Shared.Engine.Online
 
                 string href = null;
 
-                foreach (string itemsearch in search.Split("item-search-serial"))
+                var rx = Rx.Split("item-search-serial", search);
+
+                foreach (var row in rx.Rows())
                 {
-                    string info = itemsearch.Split("torrent-link")?[0];
+                    var item_search = Rx.Split("item-search-serial", row.Span);
+                    if (item_search.Count == 0)
+                        continue;
+
+                    string info = item_search[0].ToString();
                     if (!string.IsNullOrEmpty(info) && (info.Contains($"({year - 1}") || info.Contains($"({year}") || info.Contains($"({year + 1}")))
                     {
                         string _info = StringConvert.SearchName(info);
@@ -85,7 +92,7 @@ namespace Shared.Engine.Online
         #endregion
 
         #region EmbedToken
-        async public ValueTask<EmbedModel> EmbedToken(long kinopoisk_id, string token)
+        async public Task<EmbedModel> EmbedToken(long kinopoisk_id, string token)
         {
             if (kinopoisk_id == 0)
                 return null;
@@ -94,8 +101,24 @@ namespace Shared.Engine.Online
         }
         #endregion
 
+        #region EmbedFilms
+        async public Task<EmbedModel> EmbedFilms(string host, long kinopoisk_id)
+        {
+            if (kinopoisk_id == 0)
+                return null;
+
+            string iframe_url = $"{host}/films.php?kp={kinopoisk_id}";
+
+            var movies = await httpHydra.Get<Episode[]>(iframe_url);
+            if (movies == null || movies.Length == 0)
+                return null;
+
+            return new EmbedModel() { movies = movies };
+        }
+        #endregion
+
         #region Embed
-        async public ValueTask<EmbedModel> Embed(string iframe_url)
+        async public Task<EmbedModel> Embed(string iframe_url)
         {
             if (string.IsNullOrEmpty(iframe_url))
                 return null;
@@ -136,10 +159,10 @@ namespace Shared.Engine.Online
         #endregion
 
         #region Html
-        public string Html(EmbedModel root, string imdb_id, long kinopoisk_id, string title, string original_title, int t = -1, int s = -1, bool rjson = false, VastConf vast = null, List<HeadersModel> headers = null)
+        public ITplResult Tpl(EmbedModel root, string imdb_id, long kinopoisk_id, string title, string original_title, int t = -1, int s = -1, bool rjson = false, VastConf vast = null, List<HeadersModel> headers = null)
         {
             if (root == null)
-                return string.Empty;
+                return default;
 
             if (root.movies != null)
             {
@@ -169,7 +192,7 @@ namespace Shared.Engine.Online
                     mtpl.Append(m.title, onstreamfile.Invoke(m.file), subtitles: subtitles, vast: vast, headers: headers);
                 }
 
-                return rjson ? mtpl.ToJson() : mtpl.ToHtml();
+                return mtpl;
             }
             else
             {
@@ -181,7 +204,7 @@ namespace Shared.Engine.Online
                 {
                     #region Сезоны
                     var tpl = new SeasonTpl();
-                    var hash = new HashSet<int>();
+                    var hash = new HashSet<int>(20);
 
                     foreach (var voice in root.serial.OrderBy(i => i.seasons))
                     {
@@ -194,7 +217,7 @@ namespace Shared.Engine.Online
                         tpl.Append($"{voice.seasons} сезон", link, voice.seasons);
                     }
 
-                    return rjson ? tpl.ToJson() : tpl.ToHtml();
+                    return tpl;
                     #endregion
                 }
                 else
@@ -219,16 +242,13 @@ namespace Shared.Engine.Online
 
                     var episodes = root.serial.First(i => i.id == t).folder[s.ToString()].folder;
 
-                    var etpl = new EpisodeTpl(episodes.Count);
+                    var etpl = new EpisodeTpl(vtpl, episodes.Count);
                     string sArhc = s.ToString();
 
                     foreach (var episode in episodes)
                         etpl.Append($"{episode.Key} серия", title ?? original_title, sArhc, episode.Key, onstreamfile.Invoke(episode.Value.file), vast: vast, headers: headers);
 
-                    if (rjson)
-                        return etpl.ToJson(vtpl);
-
-                    return vtpl.ToHtml() + etpl.ToHtml();
+                    return etpl;
                 }
                 #endregion
             }

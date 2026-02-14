@@ -13,12 +13,19 @@ namespace Lampac.Engine.Middlewares
 {
     public class Accsdb
     {
+        static readonly Regex rexJac = new Regex("^/(api/v2.0/indexers|api/v1.0/|toloka|rutracker|rutor|torrentby|nnmclub|kinozal|bitru|selezen|megapeer|animelayer|anilibria|anifilm|toloka|lostfilm|bigfangroup|mazepa)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexStaticAssets = new Regex("\\.(js|css|ico|png|svg|jpe?g|woff|webmanifest)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexProxyPath = new Regex("/(proxy|proxyimg([^/]+)?)/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexTmdbPath = new Regex("^/tmdb/[^/]+/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex rexLockBypass = new Regex("^/(testaccsdb|proxy/|proxyimg|lifeevents|externalids|sisi/(bookmarks|historys)|(ts|transcoding|dlna|storage|bookmark|tmdb|cub)/|timecode)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         static Accsdb() 
         {
             Directory.CreateDirectory("cache/logs/accsdb");
         }
 
         private readonly RequestDelegate _next;
+        static bool manifestInitial = false;
         IMemoryCache memoryCache;
 
         public Accsdb(RequestDelegate next, IMemoryCache mem)
@@ -30,22 +37,27 @@ namespace Lampac.Engine.Middlewares
         public Task Invoke(HttpContext httpContext)
         {
             var requestInfo = httpContext.Features.Get<RequestModel>();
-            if (requestInfo.IsLocalRequest || requestInfo.IsAnonymousRequest)
-                return _next(httpContext);
 
-            #region manifest / admin
-            if (httpContext.Request.Path.Value.StartsWith("/admin/") || httpContext.Request.Path.Value == "/admin")
+            #region manifest/install
+            if (!manifestInitial)
+            {
+                if (!File.Exists("module/manifest.json"))
+                {
+                    if (httpContext.Request.Path.Value.StartsWith("/admin/manifest/install", StringComparison.OrdinalIgnoreCase))
+                        return _next(httpContext);
+
+                    httpContext.Response.Redirect("/admin/manifest/install");
+                    return Task.CompletedTask;
+                }
+                else { manifestInitial = true; }
+            }
+            #endregion
+
+            #region admin
+            if (httpContext.Request.Path.Value.StartsWith("/admin", StringComparison.OrdinalIgnoreCase))
             {
                 if (httpContext.Request.Cookies.TryGetValue("passwd", out string passwd))
                 {
-                    if (passwd == AppInit.rootPasswd)
-                    {
-                        if (httpContext.Request.Path.Value.StartsWith("/admin/auth"))
-                            return _next(httpContext);
-
-                        return _next(httpContext);
-                    }
-
                     string ipKey = $"Accsdb:auth:IP:{requestInfo.IP}";
                     if (!memoryCache.TryGetValue(ipKey, out ConcurrentDictionary<string, byte> passwds))
                     {
@@ -57,9 +69,12 @@ namespace Lampac.Engine.Middlewares
 
                     if (passwds.Count > 10)
                         return httpContext.Response.WriteAsync("Too many attempts, try again tomorrow.", httpContext.RequestAborted);
+
+                    if (passwd == AppInit.rootPasswd)
+                        return _next(httpContext);
                 }
 
-                if (httpContext.Request.Path.Value.StartsWith("/admin/auth"))
+                if (httpContext.Request.Path.Value.StartsWith("/admin/auth", StringComparison.OrdinalIgnoreCase))
                     return _next(httpContext);
 
                 httpContext.Response.Redirect("/admin/auth");
@@ -67,37 +82,29 @@ namespace Lampac.Engine.Middlewares
             }
             #endregion
 
-            #region ws / nws
-            if (httpContext.Request.Path.Value.StartsWith("/ws") || httpContext.Request.Path.Value.StartsWith("/nws"))
-            {
-                if (AppInit.conf.weblog.enable || AppInit.conf.rch.enable || AppInit.conf.storage.enable || AppInit.conf.sync_user.enable)
-                    return _next(httpContext);
-
-                return httpContext.Response.WriteAsync("disabled", httpContext.RequestAborted);
-            }
-            #endregion
+            if (requestInfo.IsLocalRequest || requestInfo.IsAnonymousRequest)
+                return _next(httpContext);
 
             #region jacred
-            string jacpattern = "^/(api/v2.0/indexers|api/v1.0/|toloka|rutracker|rutor|torrentby|nnmclub|kinozal|bitru|selezen|megapeer|animelayer|anilibria|anifilm|toloka|lostfilm|bigfangroup|mazepa)";
-
-            if (!string.IsNullOrEmpty(AppInit.conf.apikey))
+            if (rexJac.IsMatch(httpContext.Request.Path.Value))
             {
-                if (Regex.IsMatch(httpContext.Request.Path.Value, jacpattern))
+                if (!string.IsNullOrEmpty(AppInit.conf.apikey))
                 {
                     if (AppInit.conf.apikey != httpContext.Request.Query["apikey"])
                         return Task.CompletedTask;
                 }
+
+                return _next(httpContext);
             }
             #endregion
 
-            if (AppInit.conf.accsdb.enable)
+            if (AppInit.conf.accsdb.enable || (!requestInfo.IsLocalIp && !AppInit.conf.WAF.allowExternalIpAccess))
             {
                 var accsdb = AppInit.conf.accsdb;
 
-                if (httpContext.Request.Path.Value.StartsWith("/testaccsdb") && accsdb.shared_passwd != null && requestInfo.user_uid == accsdb.shared_passwd)
+                if (httpContext.Request.Path.Value.StartsWith("/testaccsdb", StringComparison.OrdinalIgnoreCase) && accsdb.shared_passwd != null && requestInfo.user_uid == accsdb.shared_passwd)
                 {
                     requestInfo.IsLocalRequest = true;
-                    httpContext.Features.Set(requestInfo);
                     return _next(httpContext);
                 }
 
@@ -107,12 +114,8 @@ namespace Lampac.Engine.Middlewares
                 if (!string.IsNullOrEmpty(accsdb.whitepattern) && Regex.IsMatch(httpContext.Request.Path.Value, accsdb.whitepattern, RegexOptions.IgnoreCase))
                 {
                     requestInfo.IsAnonymousRequest = true;
-                    httpContext.Features.Set(requestInfo);
                     return _next(httpContext);
                 }
-
-                if (Regex.IsMatch(httpContext.Request.Path.Value, jacpattern))
-                    return _next(httpContext);
 
                 bool limitip = false;
 
@@ -123,26 +126,32 @@ namespace Lampac.Engine.Middlewares
 
                 string uri = httpContext.Request.Path.Value + httpContext.Request.QueryString.Value;
 
-                if (IsLockHostOrUser(requestInfo.user_uid, requestInfo.IP, uri, out limitip) || user == null || user.ban || DateTime.UtcNow > user.expires)
+                if (IsLockHostOrUser(memoryCache, requestInfo.user_uid, requestInfo.IP, uri, out limitip) 
+                    || user == null 
+                    || user.ban 
+                    || DateTime.UtcNow > user.expires)
                 {
-                    if (httpContext.Request.Path.Value.StartsWith("/proxy/") || httpContext.Request.Path.Value.StartsWith("/proxyimg"))
+                    if (httpContext.Request.Path.Value.StartsWith("/proxy/", StringComparison.OrdinalIgnoreCase) || 
+                        httpContext.Request.Path.Value.StartsWith("/proxyimg", StringComparison.OrdinalIgnoreCase))
                     {
-                        string hash = Regex.Replace(httpContext.Request.Path.Value, "/(proxy|proxyimg([^/]+)?)/", "");
+                        string hash = rexProxyPath.Replace(httpContext.Request.Path.Value, "");
                         if (AppInit.conf.serverproxy.encrypt || ProxyLink.Decrypt(hash, requestInfo.IP)?.uri != null)
                             return _next(httpContext);
                     }
 
-                    if (uri.StartsWith("/tmdb/api.themoviedb.org/") || uri.StartsWith("/tmdb/api/"))
+                    if (uri.StartsWith("/tmdb/api.themoviedb.org/", StringComparison.OrdinalIgnoreCase) || 
+                        uri.StartsWith("/tmdb/api/", StringComparison.OrdinalIgnoreCase))
                     {
-                        httpContext.Response.Redirect("https://api.themoviedb.org/" + Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/[^/]+/", ""));
+                        httpContext.Response.Redirect("https://api.themoviedb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                         return Task.CompletedTask;
                     }
 
-                    if (Regex.IsMatch(httpContext.Request.Path.Value, "\\.(js|css|ico|png|svg|jpe?g|woff|webmanifest)"))
+                    if (rexStaticAssets.IsMatch(httpContext.Request.Path.Value))
                     {
-                        if (uri.StartsWith("/tmdb/image.tmdb.org/") || uri.StartsWith("/tmdb/img/"))
+                        if (uri.StartsWith("/tmdb/image.tmdb.org/", StringComparison.OrdinalIgnoreCase) || 
+                            uri.StartsWith("/tmdb/img/", StringComparison.OrdinalIgnoreCase))
                         {
-                            httpContext.Response.Redirect("https://image.tmdb.org/" + Regex.Replace(httpContext.Request.Path.Value, "^/tmdb/[^/]+/", ""));
+                            httpContext.Response.Redirect("https://image.tmdb.org/" + rexTmdbPath.Replace(httpContext.Request.Path.Value, ""));
                             return Task.CompletedTask;
                         }
 
@@ -162,7 +171,12 @@ namespace Lampac.Engine.Middlewares
                             msg = user.ban_msg ?? "Вы заблокированы";
 
                         else if (DateTime.UtcNow > user.expires)
-                            msg = accsdb.expiresMesage.Replace("{account_email}", requestInfo.user_uid).Replace("{user_uid}", requestInfo.user_uid).Replace("{expires}", user.expires.ToString("dd.MM.yyyy"));
+                        {
+                            msg = accsdb.expiresMesage
+                                .Replace("{account_email}", requestInfo.user_uid)
+                                .Replace("{user_uid}", requestInfo.user_uid)
+                                .Replace("{expires}", user.expires.ToString("dd.MM.yyyy"));
+                        }
                     }
                     #endregion
 
@@ -175,7 +189,12 @@ namespace Lampac.Engine.Middlewares
                             denymsg = user.ban_msg ?? "Вы заблокированы";
 
                         else if (DateTime.UtcNow > user.expires)
-                            denymsg = accsdb.expiresMesage.Replace("{account_email}", requestInfo.user_uid).Replace("{user_uid}", requestInfo.user_uid).Replace("{expires}", user.expires.ToString("dd.MM.yyyy"));
+                        {
+                            denymsg = accsdb.expiresMesage
+                                .Replace("{account_email}", requestInfo.user_uid)
+                                .Replace("{user_uid}", requestInfo.user_uid)
+                                .Replace("{expires}", user.expires.ToString("dd.MM.yyyy"));
+                        }
                     }
                     #endregion
 
@@ -188,9 +207,7 @@ namespace Lampac.Engine.Middlewares
 
 
         #region IsLock
-        static string logsLock = string.Empty;
-
-        bool IsLockHostOrUser(string account_email, string userip, string uri, out bool islock)
+        static bool IsLockHostOrUser(IMemoryCache memoryCache, string account_email, string userip, string uri, out bool islock)
         {
             if (string.IsNullOrEmpty(account_email))
             {
@@ -198,52 +215,17 @@ namespace Lampac.Engine.Middlewares
                 return islock;
             }
 
-            if (Regex.IsMatch(uri, "^/(testaccsdb|proxy/|proxyimg|lifeevents|externalids|sisi/(bookmarks|historys)|(ts|transcoding|dlna|storage|bookmark|tmdb|cub)/|timecode)"))
+            if (rexLockBypass.IsMatch(uri))
             {
                 islock = false;
                 return islock;
             }
 
-            #region setLogs
-            void setLogs(string name)
+            if (IsLockIpHour(memoryCache, account_email, userip, out islock, out ConcurrentDictionary<string, byte> ips) | 
+                IsLockReqHour(memoryCache, account_email, uri, out islock, out ConcurrentDictionary<string, byte> urls))
             {
-                string logFile = $"cache/logs/accsdb/{DateTime.Now:dd-MM-yyyy}.lock.txt";
-                if (logsLock != string.Empty && !File.Exists(logFile))
-                    logsLock = string.Empty;
-
-                string line = $"{name} / {account_email} / {CrypTo.md5(account_email)}.*.log";
-
-                if (!logsLock.Contains(line))
-                {
-                    logsLock += $"{DateTime.Now}: {line}\n";
-                    File.WriteAllText(logFile, logsLock);
-                }
-            }
-            #endregion
-
-            #region countlock_day
-            int countlock_day(bool update)
-            {
-                string key = $"Accsdb:lock_day:{account_email}:{DateTime.Now.Day}";
-
-                if (!memoryCache.TryGetValue(key, out ConcurrentDictionary<int, byte> lockhour))
-                {
-                    lockhour = new ConcurrentDictionary<int, byte>();
-                    memoryCache.Set(key, lockhour, DateTime.Now.AddDays(1));
-                }
-
-                if (update)
-                    lockhour.TryAdd(DateTime.Now.Hour, 0);
-
-                return lockhour.Count;
-            }
-            #endregion
-
-            if (IsLockIpHour(account_email, userip, out islock, out ConcurrentDictionary<string, byte> ips) | 
-                IsLockReqHour(account_email, uri, out islock, out ConcurrentDictionary<string, byte> urls))
-            {
-                setLogs("lock_hour");
-                countlock_day(update: true);
+                setLogs("lock_hour", account_email);
+                countlock_day(memoryCache, true, account_email);
 
                 File.WriteAllLines($"cache/logs/accsdb/{CrypTo.md5(account_email)}.ips.log", ips.Keys);
                 File.WriteAllLines($"cache/logs/accsdb/{CrypTo.md5(account_email)}.urls.log", urls.Keys);
@@ -251,19 +233,19 @@ namespace Lampac.Engine.Middlewares
                 return islock;
             }
 
-            if (countlock_day(update: false) > AppInit.conf.accsdb.maxlock_day)
+            if (countlock_day(memoryCache, false, account_email) > AppInit.conf.accsdb.maxlock_day)
             {
                 if (AppInit.conf.accsdb.blocked_hour != -1)
                     memoryCache.Set($"Accsdb:blocked_hour:{account_email}", 0, DateTime.Now.AddHours(AppInit.conf.accsdb.blocked_hour));
 
-                setLogs("lock_day");
+                setLogs("lock_day", account_email);
                 islock = true;
                 return islock;
             }
 
             if (memoryCache.TryGetValue($"Accsdb:blocked_hour:{account_email}", out _))
             {
-                setLogs("blocked");
+                setLogs("blocked", account_email);
                 islock = true;
                 return islock;
             }
@@ -273,15 +255,13 @@ namespace Lampac.Engine.Middlewares
         }
 
 
-        bool IsLockIpHour(string account_email, string userip, out bool islock, out ConcurrentDictionary<string, byte> ips)
+        static bool IsLockIpHour(IMemoryCache memoryCache, string account_email, string userip, out bool islock, out ConcurrentDictionary<string, byte> ips)
         {
-            string memKeyLocIP = $"Accsdb:IsLockIpHour:{account_email}:{DateTime.Now.Hour}";
-
-            if (!memoryCache.TryGetValue(memKeyLocIP, out ips))
+            ips = memoryCache.GetOrCreate($"Accsdb:IsLockIpHour:{account_email}:{DateTime.Now.Hour}", entry =>
             {
-                ips = new ConcurrentDictionary<string, byte>();
-                memoryCache.Set(memKeyLocIP, ips, DateTime.Now.AddHours(1));
-            }
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return new ConcurrentDictionary<string, byte>();
+            });
 
             ips.TryAdd(userip, 0);
 
@@ -295,15 +275,13 @@ namespace Lampac.Engine.Middlewares
             return islock;
         }
 
-        bool IsLockReqHour(string account_email, string uri, out bool islock, out ConcurrentDictionary<string, byte> urls)
+        static bool IsLockReqHour(IMemoryCache memoryCache, string account_email, string uri, out bool islock, out ConcurrentDictionary<string, byte> urls)
         {
-            string memKeyLocIP = $"Accsdb:IsLockReqHour:{account_email}:{DateTime.Now.Hour}";
-
-            if (!memoryCache.TryGetValue(memKeyLocIP, out urls))
+            urls = memoryCache.GetOrCreate($"Accsdb:IsLockReqHour:{account_email}:{DateTime.Now.Hour}", entry =>
             {
-                urls = new ConcurrentDictionary<string, byte>();
-                memoryCache.Set(memKeyLocIP, urls, DateTime.Now.AddHours(1));
-            }
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return new ConcurrentDictionary<string, byte>();
+            });
 
             urls.TryAdd(uri, 0);
 
@@ -315,6 +293,42 @@ namespace Lampac.Engine.Middlewares
 
             islock = false;
             return islock;
+        }
+        #endregion
+
+
+        #region setLogs
+        static string logsLock = string.Empty;
+
+        static void setLogs(string name, string account_email)
+        {
+            string logFile = $"cache/logs/accsdb/{DateTime.Now:dd-MM-yyyy}.lock.txt";
+            if (logsLock != string.Empty && !File.Exists(logFile))
+                logsLock = string.Empty;
+
+            string line = $"{name} / {account_email} / {CrypTo.md5(account_email)}.*.log";
+
+            if (!logsLock.Contains(line))
+            {
+                logsLock += $"{DateTime.Now}: {line}\n";
+                File.WriteAllText(logFile, logsLock);
+            }
+        }
+        #endregion
+
+        #region countlock_day
+        static int countlock_day(IMemoryCache memoryCache, bool update, string account_email)
+        {
+            var lockhour = memoryCache.GetOrCreate($"Accsdb:lock_day:{account_email}:{DateTime.Now.Day}", entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(1);
+                return new ConcurrentDictionary<int, byte>();
+            });
+
+            if (update)
+                lockhour.TryAdd(DateTime.Now.Hour, 0);
+
+            return lockhour.Count;
         }
         #endregion
     }

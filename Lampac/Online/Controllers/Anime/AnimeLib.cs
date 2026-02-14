@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Shared.Engine.Utilities;
 using Shared.Models.Online.AnimeLib;
-using Shared.Models.Online.Settings;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -11,31 +11,23 @@ namespace Online.Controllers
 {
     public class AnimeLib : BaseOnlineController
     {
+        public AnimeLib() : base(AppInit.conf.AnimeLib) { }
+
         static readonly SemaphoreSlim TokenSemaphore = new SemaphoreSlim(1, 1);
 
         [HttpGet]
         [Route("lite/animelib")]
-        async public ValueTask<ActionResult> Index(string title, string original_title, int year, string uri, string t, bool rjson = false, bool similar = false)
+        async public Task<ActionResult> Index(string title, string original_title, int year, string uri, string t, bool rjson = false, bool similar = false)
         {
-            var init = await loadKit(AppInit.conf.AnimeLib);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true))
                 return badInitMsg;
 
-            await EnsureAnimeLibToken(init);
+            await EnsureAnimeLibToken();
 
             if (string.IsNullOrEmpty(init.token))
-                return OnError();
+                return OnError("token", statusCode: 401, gbcache: false);
 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected() || rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            if (rch.IsNotSupport(out string rch_error))
-                return ShowError(rch_error);
-
-            var proxyManager = new ProxyManager(init);
-            var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
+            var bearer = HeadersModel.Init("authorization", $"Bearer {init.token}");
 
             if (string.IsNullOrWhiteSpace(uri))
             {
@@ -43,11 +35,9 @@ namespace Online.Controllers
                 if (string.IsNullOrWhiteSpace(title))
                     return OnError();
 
-                string memkey = $"animelib:search:{title}:{original_title}";
-
-                return await InvkSemaphore(init, memkey, async () =>
+                return await InvkSemaphore($"animelib:search:{title}:{original_title}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memkey, out List<(string title, string year, string uri, bool coincidence, string cover)> catalog, inmemory: false))
+                    if (!hybridCache.TryGetValue(key, out List<(string title, string year, string uri, bool coincidence, string cover)> catalog, inmemory: false))
                     {
                         async Task<DataSearch[]> goSearch(string q)
                         {
@@ -55,8 +45,8 @@ namespace Online.Controllers
                                 return null;
 
                             string req_uri = $"{init.corsHost()}/api/anime?fields[]=rate_avg&fields[]=rate&fields[]=releaseDate&q={HttpUtility.UrlEncode(q)}";
-                            var result = rch.enable ? await rch.Get<JObject>(req_uri, headers) :
-                                                      await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: headers);
+
+                            var result = await httpHydra.Get<JObject>(req_uri, addheaders: bearer, safety: true);
 
                             if (result == null || !result.ContainsKey("data"))
                                 return null;
@@ -70,7 +60,7 @@ namespace Online.Controllers
                             search = await goSearch(title);
 
                         if (search == null || search.Length == 0)
-                            return OnError(proxyManager, refresh_proxy: !rch.enable);
+                            return OnError(refresh_proxy: true);
 
                         string stitle = StringConvert.SearchName(title);
                         catalog = new List<(string title, string year, string uri, bool coincidence, string cover)>(search.Length);
@@ -94,10 +84,9 @@ namespace Online.Controllers
                         if (catalog.Count == 0)
                             return OnError();
 
-                        if (!rch.enable)
-                            proxyManager.Success();
+                        proxyManager?.Success();
 
-                        hybridCache.Set(memkey, catalog, cacheTime(40, init: init), inmemory: false);
+                        hybridCache.Set(key, catalog, cacheTime(40), inmemory: false);
                     }
 
                     if (!similar && catalog.Where(i => i.coincidence).Count() == 1)
@@ -108,55 +97,50 @@ namespace Online.Controllers
                     foreach (var res in catalog)
                         stpl.Append(res.title, res.year, string.Empty, $"{host}/lite/animelib?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(res.uri)}", PosterApi.Size(res.cover));
 
-                    return ContentTo(rjson ? stpl.ToJson() : stpl.ToHtml());
+                    return await ContentTpl(stpl);
                 });
                 #endregion
             }
             else
             {
                 #region Серии
-                string memKey = $"animelib:playlist:{uri}";
-
-                return await InvkSemaphore(init, memKey, async () =>
+                return await InvkSemaphore($"animelib:playlist:{uri}", async key =>
                 {
-                    if (!hybridCache.TryGetValue(memKey, out Episode[] episodes))
+                    if (!hybridCache.TryGetValue(key, out Episode[] episodes))
                     {
                         string req_uri = $"{init.corsHost()}/api/episodes?anime_id={uri}";
 
-                        var root = rch.enable ? await rch.Get<JObject>(req_uri, headers) :
-                                                await Http.Get<JObject>(req_uri, timeoutSeconds: 8, httpversion: 2, proxy: proxyManager.Get(), headers: headers);
+                        var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer, safety: true);
 
                         if (root == null || !root.ContainsKey("data"))
-                            return OnError(proxyManager, refresh_proxy: !rch.enable);
+                            return OnError(refresh_proxy: true);
 
                         episodes = root["data"].ToObject<Episode[]>();
 
                         if (episodes.Length == 0)
                             return OnError();
 
-                        if (!rch.enable)
-                            proxyManager.Success();
+                        proxyManager?.Success();
 
-                        hybridCache.Set(memKey, episodes, cacheTime(30, init: init));
+                        hybridCache.Set(key, episodes, cacheTime(30));
                     }
 
                     #region Перевод
-                    memKey = $"animelib:video:{episodes.First().id}";
-                    if (!hybridCache.TryGetValue(memKey, out Player[] players))
+                    string voice_memkey = $"animelib:video:{episodes.First().id}";
+                    if (!hybridCache.TryGetValue(voice_memkey, out Player[] players))
                     {
-                        if (rch.IsNotConnected())
+                        if (rch != null && rch.IsNotConnected())
                             return ContentTo(rch.connectionMsg);
 
                         string req_uri = $"{init.corsHost()}/api/episodes/{episodes.First().id}";
 
-                        var root = rch.enable ? await rch.Get<JObject>(req_uri, headers) :
-                                                await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: headers);
+                        var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer, safety: true);
 
                         if (root == null || !root.ContainsKey("data"))
-                            return OnError(proxyManager, refresh_proxy: !rch.enable);
+                            return OnError(refresh_proxy: true);
 
                         players = root["data"]["players"].ToObject<Player[]>();
-                        hybridCache.Set(memKey, players, cacheTime(30, init: init));
+                        hybridCache.Set(voice_memkey, players, cacheTime(30));
                     }
 
                     var vtpl = new VoiceTpl(players.Length);
@@ -174,7 +158,7 @@ namespace Online.Controllers
                     }
                     #endregion
 
-                    var etpl = new EpisodeTpl(episodes.Length);
+                    var etpl = new EpisodeTpl(vtpl, episodes.Length);
 
                     foreach (var episode in episodes)
                     {
@@ -185,113 +169,72 @@ namespace Online.Controllers
                         etpl.Append($"{episode.number} серия", name, episode.season, episode.number, link, "call", streamlink: accsArgs($"{link}&play=true"));
                     }
 
-                    if (rjson)
-                        return ContentTo(etpl.ToJson(vtpl));
-
-                    return ContentTo(vtpl.ToHtml() + etpl.ToHtml());
+                    return await ContentTpl(etpl);
                 });
                 #endregion
             }
         }
-
 
         #region Video
         [HttpGet]
         [Route("lite/animelib/video")]
         async public ValueTask<ActionResult> Video(string title, long id, string voice, bool play)
         {
-            var init = await loadKit(AppInit.conf.AnimeLib);
-            if (await IsBadInitialization(init, rch: true))
+            if (await IsRequestBlocked(rch: true, rch_check: false))
                 return badInitMsg;
 
-            await EnsureAnimeLibToken(init);
+            await EnsureAnimeLibToken();
 
             if (string.IsNullOrEmpty(init.token))
                 return OnError();
 
-            reset: 
-            var rch = new RchClient(HttpContext, host, init, requestInfo, keepalive: -1);
-
-            if (rch.IsNotConnected())
+            if (rch != null)
             {
-                if (init.rhub_fallback && play)
-                    rch.Disabled();
-                else
+                if (rch.IsNotConnected())
+                {
+                    if (init.rhub_fallback && play)
+                        rch.Disabled();
+                    else
+                        return ContentTo(rch.connectionMsg);
+                }
+
+                if (!play && rch.IsRequiredConnected())
                     return ContentTo(rch.connectionMsg);
             }
 
-            if (!play && rch.IsRequiredConnected())
-                return ContentTo(rch.connectionMsg);
-
-            var proxyManager = new ProxyManager(init);
-
-            var cache = await InvokeCache<Player[]>($"animelib:video:{id}", cacheTime(30, init: init), rch.enable ? null : proxyManager, async res =>
+            rhubFallback:
+            var cache = await InvokeCacheResult<Player[]>($"animelib:video:{id}", 30, async e =>
             {
-                if (rch.IsNotConnected())
-                    return res.Fail(rch.connectionMsg);
-
                 string req_uri = $"{init.corsHost()}/api/episodes/{id}";
-                var headers = httpHeaders(init, HeadersModel.Init("authorization", $"Bearer {init.token}"));
+                var bearer = HeadersModel.Init("authorization", $"Bearer {init.token}");
 
-                var root = rch.enable ? await rch.Get<JObject>(req_uri, headers) :
-                                        await Http.Get<JObject>(req_uri, httpversion: 2, timeoutSeconds: 8, proxy: proxyManager.Get(), headers: headers);
+                var root = await httpHydra.Get<JObject>(req_uri, addheaders: bearer, safety: true);
 
                 if (root == null || !root.ContainsKey("data"))
-                    return res.Fail("data");
+                    return e.Fail("data", refresh_proxy: true);
 
-                return root["data"]["players"].ToObject<Player[]>();
+                return e.Success(root["data"]["players"].ToObject<Player[]>());
             });
 
-            if (IsRhubFallback(cache, init))
-                goto reset;
+            if (IsRhubFallback(cache, safety: true))
+                goto rhubFallback;
 
             if (!cache.IsSuccess)
                 return OnError(cache.ErrorMsg);
 
             var headers_stream = httpHeaders(init.host, init.headers_stream);
 
-            #region goStreams
-            List<(string link, string quality)> goStreams(string _voice)
-            {
-                var _streams = new List<(string link, string quality)>(5);
-
-                foreach (var player in cache.Value)
-                {
-                    if (player.player != "Animelib")
-                        continue;
-
-                    if (!string.IsNullOrEmpty(_voice) && _voice != player.team.name)
-                        continue;
-
-                    foreach (var video in player.video.quality)
-                    {
-                        if (string.IsNullOrEmpty(video.href))
-                            continue;
-
-                        string file = HostStreamProxy(init, "https://video1.cdnlibs.org/.%D0%B0s/" + video.href, proxy: proxyManager.Get(), headers: headers_stream);
-
-                        _streams.Add((file, $"{video.quality}p"));
-                    }
-
-                    if (_streams.Count > 0)
-                        break;
-                }
-
-                return _streams;
-            }
-            #endregion
-
-            List<(string link, string quality)> streams;
+            IReadOnlyList<StreamQualityDto> streams;
 
             if (string.IsNullOrEmpty(voice))
             {
-                streams = goStreams(null);
+                streams = goStreams(cache.Value, null, headers_stream);
             }
             else
             {
-                streams = goStreams(voice);
+                streams = goStreams(cache.Value, voice, headers_stream);
                 if (streams.Count == 0)
-                    streams = goStreams(null);
+                    streams = goStreams(cache.Value, null, headers_stream);
             }
 
             if (streams == null || streams.Count == 0)
@@ -307,8 +250,39 @@ namespace Online.Controllers
         #endregion
 
 
+        #region goStreams
+        IReadOnlyList<StreamQualityDto> goStreams(in Player[] players, string _voice, List<HeadersModel> headers_stream)
+        {
+            var _streams = new List<StreamQualityDto>(20);
+
+            foreach (var player in players)
+            {
+                if (player.player != "Animelib")
+                    continue;
+
+                if (!string.IsNullOrEmpty(_voice) && _voice != player.team.name)
+                    continue;
+
+                foreach (var video in player.video.quality)
+                {
+                    if (string.IsNullOrEmpty(video.href))
+                        continue;
+
+                    string file = HostStreamProxy("https://video1.cdnlibs.org/.%D0%B0s/" + video.href, headers: headers_stream);
+
+                    _streams.Add(new StreamQualityDto(file, $"{video.quality}p"));
+                }
+
+                if (_streams.Count > 0)
+                    break;
+            }
+
+            return _streams;
+        }
+        #endregion
+
         #region [Codex AI] EnsureAnimeLibToken / RequestAnimeLibToken
-        async ValueTask EnsureAnimeLibToken(OnlinesSettings init)
+        async ValueTask EnsureAnimeLibToken()
         {
             if (!string.IsNullOrEmpty(init.token))
                 return;
@@ -352,7 +326,7 @@ namespace Online.Controllers
 
                 try
                 {
-                    System.IO.File.WriteAllText(TokenCachePath, JsonConvert.SerializeObject(cache));
+                    System.IO.File.WriteAllText(TokenCachePath, JsonConvertPool.SerializeObject(cache));
                 }
                 catch { }
 
@@ -367,7 +341,7 @@ namespace Online.Controllers
 
         async ValueTask<(string accessToken, string refreshToken)?> RequestAnimeLibToken(string refreshToken)
         {
-            var payload = JsonConvert.SerializeObject(new
+            var payload = JsonConvertPool.SerializeObject(new
             {
                 grant_type = "refresh_token",
                 client_id = "1",
@@ -389,7 +363,10 @@ namespace Online.Controllers
                     ("site-id", "5")
                 );
 
-                var result = await Http.Post<JObject>("https://api.cdnlibs.org/api/auth/oauth/token", content, httpversion: 2, timeoutSeconds: 8, headers: headers, useDefaultHeaders: false);
+                var result = await Http.Post<JObject>("https://api.cdnlibs.org/api/auth/oauth/token", content, 
+                    httpversion: init.httpversion, timeoutSeconds: init.httptimeout, headers: headers, useDefaultHeaders: false
+                );
+
                 if (result == null)
                     return null;
 

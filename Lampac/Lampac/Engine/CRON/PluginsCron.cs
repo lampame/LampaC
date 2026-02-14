@@ -31,25 +31,6 @@ namespace Lampac.Engine.CRON
                 if (!AppInit.conf.pirate_store)
                     return;
 
-                async ValueTask update(string url, string checkcode = "Lampa.", string path = null)
-                {
-                    try
-                    {
-                        string js = await Http.Get(url, Encoding.UTF8, weblog: false);
-                        if (js != null && js.Contains(checkcode))
-                        {
-                            if (path == null)
-                                path = Path.GetFileName(url);
-
-                            if (js.Contains("METRIKA"))
-                                js = js.Replace("$('body').append(METRIKA);", "");
-
-                            File.WriteAllText($"wwwroot/plugins/{path}", js, Encoding.UTF8);
-                        }
-                    }
-                    catch { }
-                }
-
                 await update("https://immisterio.github.io/bwa/fx.js");
                 await update("https://adultjs.onrender.com", path: "adult.js");
                 await update("https://nb557.github.io/plugins/online_mod.js");
@@ -75,6 +56,26 @@ namespace Lampac.Engine.CRON
             {
                 _cronWork = false;
             }
+        }
+
+
+        async static Task update(string url, string checkcode = "Lampa.", string path = null)
+        {
+            try
+            {
+                await Http.GetSpan(js => 
+                {
+                    if (js.Contains(checkcode, StringComparison.Ordinal))
+                    {
+                        if (path == null)
+                            path = Path.GetFileName(url);
+
+                        File.WriteAllText($"wwwroot/plugins/{path}", js, Encoding.UTF8);
+                    }
+
+                }, url, Encoding.UTF8, weblog: false);
+            }
+            catch { }
         }
     }
 }

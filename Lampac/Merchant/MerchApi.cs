@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Shared;
 
 namespace Merchant.Controllers
@@ -6,6 +7,7 @@ namespace Merchant.Controllers
     public class MerchApi : MerchantController
     {
         [HttpGet]
+        [AllowAnonymous]
         [Route("merchant/user")]
         public ActionResult Index(string account_email)
         {
@@ -28,7 +30,9 @@ namespace Merchant.Controllers
             });
         }
 
-
+        [HttpGet]
+        [HttpPost]
+        [AllowAnonymous]
         [Route("merchant/payconfirm")]
         public ActionResult ConfirmPay(string passwd, string account_email, string merch, string order, int days = 0)
         {
