@@ -50,7 +50,7 @@ jobs:
             rm -rf "$tmp"
           }
 
-          sync_repo "Lampac" "https://github.com/immisterio/Lampac"
+          sync_repo "Lampac" "https://github.com/lampac-talks/lampac"
           sync_repo "lampa-source" "https://github.com/yumata/lampa-source"
 
           if [ -f .gitmodules ]; then
