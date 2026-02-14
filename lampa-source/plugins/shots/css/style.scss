@@ -61,6 +61,24 @@
     }
 }
 
+@keyframes shots-slides-slide-up {
+    0%{
+        transform: translate3d(0,100%,0);
+    }
+    100%{
+        transform: translate3d(0,0,0);
+    }
+}
+
+@keyframes shots-slides-slide-out {
+    0%{
+        transform: translate3d(0,0,0);
+    }
+    100%{
+        transform: translate3d(0,-100%,0);
+    }
+}
+
 .shots-player-recorder{
     position: fixed;
     left: 0;
@@ -219,6 +237,38 @@
 
 .shots-button{
     text-align: center;
+
+    + .shots-button{
+        margin-top: .2em;
+    }
+}
+
+.shots-modal-footer{
+    padding-top: 1em;
+}
+
+.shots-view-button{
+    &__title{
+        position: relative;
+    }
+    &__count{
+        position: absolute;
+        top: 1.9em;
+        left: 12em;
+        background: rgba(255, 255, 255, 0.4);
+        color: #fff;
+        font-size: 0.7em;
+        padding: .1em .4em;
+        border-radius: 1.1em;
+        text-align: center;
+        min-width: 2em;
+        display: block;
+        font-weight: 700;
+    }
+}
+.selectbox-item.focus .shots-view-button__count{
+    background: rgba(0, 0, 0, 0.4);
+    color: #fff;
 }
 
 .shots-modal-upload{
@@ -248,12 +298,20 @@
 .shots-tags{
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5em;
+    margin: -0.25em;
 
     > div{
         padding: 0.3em 0.6em;
         border-radius: 0.5em;
         background: rgba(0, 0, 0, 0.2);
+        margin: 0.25em;
+
+        > svg{
+            width: 1em !important;
+            height: 1em !important;
+            margin-right: 0.6em;
+            vertical-align: bottom;
+        }
     }
 }
 
@@ -303,11 +361,15 @@
     background: #000;
 
     &--hide-panel{
-        .shots-lenta-panel,
-        .shots-lenta-video__progress-bar{
+        .shots-lenta__panel{
             opacity: 0;
             pointer-events: none;
             transform: translate3d(0, 2em, 0);
+        }
+
+        .shots-lenta-video__progress-bar{
+            opacity: 0.2;
+            pointer-events: none;
         }
     }
 
@@ -322,9 +384,13 @@
 
     &__panel{
         position: absolute;
-        bottom: 2em;
-        left: 1em;
-        right: 1em;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 1em;
+        padding-bottom: 2em;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.54) 100%);
+        transition: transform 0.3s ease, opacity 0.3s ease;
     }
 
     .head-backward__button{
@@ -345,6 +411,7 @@
 
     &__progress-bar{
         position: absolute;
+        z-index: 1;
         left: 1em;
         right: 1em;
         bottom: 1em;
@@ -360,6 +427,12 @@
         }
     }
 
+    &__loader{
+        &.show{
+            display: block;
+        }
+    }
+
     &__layer{
         position: absolute;
         left: 0;
@@ -370,17 +443,28 @@
 }
 
 .shots-lenta-panel{
-    display: flex;
-    align-items: end;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+    position: relative;
+
+    .explorer-card__head-body{
+        flex-grow: 1;
+    }
+
+    .explorer-card__head-left{
+        @media screen and (max-width: 400px) {
+            font-size: 0.8em;
+        }
+    }
 
     &__card{
         $self: &;
-
-        flex-grow: 1;
-        margin-bottom: 0;
+        width: 50%;
         display: flex;
-        align-items: end;
+        align-items: flex-end;
+        margin-bottom: 0;
+
+        @media screen and (max-width: 580px) {
+            width: 80%;
+        }
 
         &-title{
             font-size: 1.8em;
@@ -414,6 +498,15 @@
                 img{
                     opacity: 1;
                 }
+            }
+
+            &.focus:after{
+                z-index: 1;
+                right: 0;
+                left: 0;
+                bottom: 0;
+                top: 0;
+                border-radius: 0.3em;
             }
         }
 
@@ -449,6 +542,10 @@
         display: flex;
     }
 
+    &__recorder{
+        line-height: 1.6;
+    }
+
     &__author{
         display: inline-block;
 
@@ -462,12 +559,19 @@
     }
 
     &__right{
+        position: absolute;
+        right: 0;
+        bottom: 0;
         display: flex;
         align-items: center;
         padding-left: 2em;
 
         @media screen and (max-width: 580px) {
             flex-direction: column;
+        }
+
+        @media screen and (max-width: 400px) {
+            font-size: 1.1em;
         }
     }
 
@@ -492,6 +596,15 @@
             &.focus{
                 background: #fff;
                 color: #000;
+
+                &.active{
+                    &.action-liked{
+                        color: #EA4E4E;
+                    }
+                    &.action-favorite{
+                        color: #ffc34b;
+                    }
+                }
             }
 
             &:not(.active) .icon-fill{
@@ -661,18 +774,23 @@
 }
 
 .shots-player-segments{
+    position: relative;
+    z-index: 1;
+
     &__time{
         position: absolute;
         top: 0;
-        border-radius: 3em;
         background: rgb(185 149 255);
         height: 100%;
+        height: 0.4em;
+        pointer-events: none;
     }
 
     &__picture{
         position: absolute;
         bottom: 1em;
         display: none;
+        cursor: pointer;
         
         img{
            width: 7em;
@@ -693,6 +811,174 @@
             display: block;
         }
     }
+}
+
+.shots-video-present{
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    z-index: 50;
+
+    video{
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .head-backward{
+        position: absolute;
+        top: 0.65em;
+    }
+}
+
+.shots-svg-auto{
+    height: auto !important;
+
+    &--helmet{
+        max-height: 6em;
+    }
+}
+
+.shots-selector-tags{
+    display: flex;
+    flex-wrap: wrap;
+    border-radius: 0.7em;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.2em;
+
+    &__tag{
+        display: inline-block;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 0 1em;
+        border-radius: 0.6em;
+        margin: 0.2em;
+        position: relative;
+
+        span{
+            font-size: 1.1em;
+            display: inline-block;
+            padding: 0.6em 0;
+        }
+
+        svg{
+            width: 1.2em !important;
+            height: 1.2em !important;
+            margin-right: 1em;
+        }
+
+        &.active{
+            &::after{
+                content: '';
+                display: block;
+                position: absolute;
+                right: 0.4em;
+                top: 50%;
+                height: 0.5em;
+                width: 0.5em;
+                -webkit-border-radius: 1em;
+                -moz-border-radius: 1em;
+                border-radius: 1em;
+                background: #ffb509;
+                transform: translateY(-50%);
+            }
+
+            span{
+                transform: translateX(-0.3em);
+            }
+        }
+
+        &.focus{
+            background: #fff;
+            color: #000;
+
+            &::after{
+                background: #000;
+            }
+        }
+    }
+}
+.shots-line-title{
+    font-size: 1.1em;
+    margin-bottom: 0.7em;
+}
+
+.shots-slides{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50;
+
+    .head-backward{
+        position: absolute;
+        top: 0.65em;
+    }
+
+    &__slide{
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transform: translate3d(0,100%,0);
+        object-fit: contain;
+        background: #08090D;
+
+        &.active{
+            animation: shots-slides-slide-up .5s forwards;
+        }
+
+        &.up{
+            animation: shots-slides-slide-out .5s forwards;
+        }
+    }
+
+    &__down{
+        position: absolute;
+        left: 50%;
+        bottom: 2em;
+        background: rgba(255, 255, 255, 0.3);
+        padding: 0.7em 1.3em;
+        border-radius: 3em;
+        transform: translate3d(-50%, 1em, 0);
+        opacity: 0;
+        transition: opacity .5s, transform .5s;
+
+        &.active{
+            opacity: 1;
+            transform: translate3d(-50%, 0, 0);
+        }
+    }
+
+    &__install{
+        position: absolute;
+        left: 50%;
+        bottom: 2em;
+        background: #fff;
+        color: #000;
+        padding: 0.7em 1.3em;
+        border-radius: 3em;
+        transform: translate3d(-50%, 3em, 0);
+        opacity: 0;
+        transition: opacity .5s, transform .5s;
+        font-size: 1.7em;
+
+        &.active{
+            opacity: 1;
+            transform: translate3d(-50%, 0, 0);
+        }
+    }
+}
+
+.shots-player-button.focus .rec{
+    fill: #ff0101;
 }
 
 body.true--mobile{

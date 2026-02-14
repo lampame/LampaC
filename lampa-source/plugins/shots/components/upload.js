@@ -4,6 +4,8 @@ import Api from '../utils/api.js'
 import Progress from './progress.js'
 import Handler from '../utils/handler.js'
 import Created from '../utils/created.js'
+import Selector from './selector.js'
+import Tags from '../utils/tags.js'
 
 function Upload(data){
     this.data = data
@@ -21,16 +23,21 @@ function Upload(data){
             text: Lampa.Lang.translate('shots_upload_progress_start')
         })
 
+        this.selector_title = $('<div class="shots-line-title">'+Lampa.Lang.translate('shots_choice_tags')+'</div>')
+        this.selector = new Selector(Tags.list())
+
         this.checkbox.create()
         this.preview.create()
         this.progress.create()
         this.progress.render().addClass('hide')
+        this.selector.create()
 
         this.button_upload   = Lampa.Template.get('shots_button', {text: Lampa.Lang.translate('shots_modal_button_upload_start')})
         this.button_cancel   = Lampa.Template.get('shots_button', {text: Lampa.Lang.translate('shots_modal_button_upload_cancel')})
         this.button_again    = Lampa.Template.get('shots_button', {text: Lampa.Lang.translate('shots_modal_button_upload_again')})
         this.button_complete = Lampa.Template.get('shots_button', {text: Lampa.Lang.translate('shots_modal_button_upload_complete')})
         this.text_complete   = Lampa.Template.get('shots_upload_complete_text')
+        this.text_notice     = Lampa.Template.get('shots_upload_notice_text')
 
         this.button_again.addClass('hide').on('hover:enter', this.startUpload.bind(this))
         this.button_upload.on('hover:enter', this.startUpload.bind(this))
@@ -47,7 +54,16 @@ function Upload(data){
         this.button_cancel.on('hover:enter', this.cancelUpload.bind(this))
 
         this.html.find('.shots-modal-upload__preview').append(this.preview.render())
-        this.html.find('.shots-modal-upload__body').append(this.button_upload).append(this.progress.render()).append(this.button_again).append(this.button_cancel).append(this.text_complete).append(this.button_complete)
+        this.html.find('.shots-modal-upload__body')
+            .append(this.text_notice)
+            .append(this.selector_title)
+            .append(this.selector.render())
+            .append(this.button_upload)
+            .append(this.progress.render())
+            .append(this.button_again)
+            .append(this.button_cancel)
+            .append(this.text_complete)
+            .append(this.button_complete)
 
         Lampa.Modal.open({
             html: this.html,
@@ -58,18 +74,6 @@ function Upload(data){
             onBack: ()=>{}
         })
 
-        this.previewVideo()
-    }
-
-    this.previewVideo = function(){
-        let video = this.html.find('video')[0]
-
-        if(Lampa.Platform.is('apple')) video.setAttribute('playsinline', 'true')
-
-        video.src   = URL.createObjectURL(this.data.recording.blob)
-        video.loop  = true
-        video.muted = false
-        video.play()
     }
 
     this.setFocus = function(target){
@@ -88,12 +92,9 @@ function Upload(data){
         this.progress.setText(Lampa.Lang.translate('shots_upload_progress_start'))
         this.progress.setState('waiting')
 
-        if(this.upload_ready) return this.notifyUpload()
-        if(this.shot_ready)   return this.runUpload(this.shot_ready)
-
         let play = this.data.play_data
         let card = play.card
-        
+
         Api.uploadRequest({
             card_id: card.id,
             card_type: card.original_name ? 'tv' : 'movie',
@@ -107,81 +108,34 @@ function Upload(data){
             season: play.season || 0,
             episode: play.episode || 0,
             voice_name: play.voice_name || '',
-        }, this.runUpload.bind(this), this.errorUpload.bind(this))
-    }
+            balanser: play.balanser || '',
 
-    this.runUpload = function(shot){
-        this.shot_ready = shot 
+            tags: this.selector.get().map(t=>t.id),
 
-        this.progress.setText(Lampa.Lang.translate('shots_upload_progress_uploading'))
-        this.progress.setState('uploading')
-
-        let xhr = new XMLHttpRequest();
-
-        this.uploading = xhr
-
-        xhr.open('PUT', shot.upload_url)
-        xhr.setRequestHeader('Content-Type', 'video/webm')
-
-        // Показываем прогресс
-        xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-                let percent = (e.loaded / e.total * 100).toFixed(1)
-                
-                this.progress.setProgress(percent)
-            }
-        }
-
-        // Успешная загрузка
-        xhr.onload = () => {
-            this.uploading = null
-
-            if (xhr.status >= 200 && xhr.status < 300) {
-                console.log('Upload', 'Успешно загружено', shot.video_id)
-
-                this.upload_ready = true
-
-                this.notifyUpload()
-            }
-            else {
-                console.error('Upload', 'Ошибка загрузки', xhr.status)
-
-                this.errorUpload()
-            }
-        }
-
-        xhr.onerror = ()=>{
-            this.uploading = null
-
-            this.errorUpload()
-        }
-
-        xhr.send(this.data.recording.blob)
-
-        Lampa.Storage.set('shots_last_record', Date.now())
+            recorder: 'new',
+        }, this.endUpload.bind(this), this.errorUpload.bind(this))
     }
 
     this.errorUpload = function(e){
         this.progress.render().addClass('hide')
         this.button_again.removeClass('hide')
 
+        Lampa.Storage.set('shots_last_record', Date.now())
+
         this.setFocus(this.button_again)
     }
 
-    this.notifyUpload = function(){
-        this.progress.setText(Lampa.Lang.translate('shots_upload_progress_notify'))
-        this.progress.setState('waiting')
 
-        Api.uploadNotify(this.shot_ready, this.endUpload.bind(this), this.errorUpload.bind(this))
-    }
-
-    this.endUpload = function(){
+    this.endUpload = function(upload){
         this.progress.render().addClass('hide')
         this.button_cancel.addClass('hide')
         this.button_complete.removeClass('hide')
         this.text_complete.removeClass('hide')
+        this.text_notice.addClass('hide')
+        this.selector_title.remove()
+        this.selector.destroy()
 
-        Api.shotsVideo(this.shot_ready.id, (result)=>{
+        Api.shotsVideo(upload.id, (result)=>{
             Created.add(result.video)
 
             Handler.add(result.video)

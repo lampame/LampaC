@@ -26,10 +26,6 @@ function uploadRequest(data, onsuccess, onerror) {
     Lampa.Network.silent(url('upload-request'), onsuccess, onerror, data, params())
 }
 
-function uploadNotify(data, onsuccess, onerror) {
-    Lampa.Network.silent(url('upload-notify'), onsuccess, onerror, data, params())
-}
-
 function uploadStatus(id, onsuccess, onerror) {
     Lampa.Network.silent(url('upload-status/' + id), onsuccess, onerror, null, params(5000))
 }
@@ -43,11 +39,17 @@ function shotsList(type, page = 1, onsuccess, onerror) {
 }
 
 function shotsCard(card, page = 1, onsuccess, onerror) {
-    Lampa.Network.silent(url('card/' + card.id + '/' + (card.original_name ? 'tv' : 'movie') + '?page=' + page), onsuccess, onerror, null, cache(params(5000), 60 * 10)) // на 10 часов
+    Lampa.Network.silent(url('card/' + card.id + '/' + (card.original_name ? 'tv' : 'movie') + '?page=' + page), onsuccess, onerror, null, params(5000))
+}
+
+function shotsChannel(id, page = 1, onsuccess, onerror) {
+    Lampa.Network.silent(url('channel/' + id + '?page=' + page), onsuccess, onerror, null, params(10000))
 }
 
 function shotsLiked(id, type ,onsuccess, onerror) {
-    Lampa.Network.silent(url('liked'), onsuccess, onerror, {
+    let uid = Lampa.Storage.get('lampa_uid','')
+
+    Lampa.Network.silent(url('liked?uid=' + uid), onsuccess, onerror, {
         id,
         type
     }, params(5000))
@@ -74,17 +76,37 @@ function shotsFavorite(action, shot, onsuccess, onerror) {
     }, params(5000))
 }
 
-function lenta(page = 1, onsuccess) {
-    Lampa.Network.silent(url('lenta?page=' + page), (result)=>{
+function lenta(query = {}, onsuccess) {
+    let uid = Lampa.Storage.get('lampa_uid','')
+
+    Lampa.Arrays.extend(query, {
+        page: 1,
+        sort: 'id',
+        uid: uid,
+        limit: 20
+    })
+
+    let path = []
+
+    for(let key in query){
+        path.push(key + '=' + encodeURIComponent(query[key]))
+    }
+
+    Lampa.Network.silent(url('lenta?' + path.join('&')), (result)=>{
         onsuccess(result.results)
     }, ()=>{
         onsuccess([])
     }, null, params(10000))
 }
 
+function shotsViewed(id, onsuccess, onerror) {
+    let uid = Lampa.Storage.get('lampa_uid','')
+
+    Lampa.Network.silent(url('viewed?uid=' + uid), onsuccess, onerror, {id}, params(5000))
+}
+
 export default {
     uploadRequest,
-    uploadNotify,
     uploadStatus,
     shotsList,
     shotsLiked,
@@ -94,5 +116,7 @@ export default {
     shotsReport,
     shotsDelete,
     shotsCard,
+    shotsChannel,
+    shotsViewed,
     lenta
 }

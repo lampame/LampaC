@@ -23,6 +23,8 @@ let tracker_data  = {
     time: 0
 }
 
+let update_timer
+
 /**
  * Запуск
  * @return {void}
@@ -87,19 +89,24 @@ function push(method, type, card){
             card_id: card.id,
             id: find ? find.id : 0
         }).then(()=>{
-            update(()=>{
-                // Оповещаем другие устройства о изменении закладок
-                Socket.send('bookmarks',{}) 
+            clearTimeout(update_timer)
 
-                // Глобальное оповещение об изменении закладок для обновления карточек
-                Lampa.Listener.send('state:changed', {
-                    target: 'favorite',
-                    reason: 'update',
-                    method,
-                    card,
-                    type
+            // Видимо сразу несколько изменений могут прийти, поэтому ждем секунду перед обновлением
+            update_timer = setTimeout(()=>{
+                update(()=>{
+                    // Оповещаем другие устройства о изменении закладок
+                    Socket.send('bookmarks',{}) 
+
+                    // Глобальное оповещение об изменении закладок для обновления карточек
+                    Lampa.Listener.send('state:changed', {
+                        target: 'favorite',
+                        reason: 'update',
+                        method,
+                        card,
+                        type
+                    })
                 })
-            })
+            },1000)
         }).catch(()=>{
             console.warn('Account', 'bookmarks ' + method + ' fail')
         })
@@ -179,13 +186,18 @@ function update(call){
                 Api.load('bookmarks/dump', {dataType: 'text'}).then((result)=>{
                     LoadingProgress.status('Bookmarks parsing dump')
 
+                    // !!! WebWorker почему-то зависает на телевизорах и вылетает, пока без него
                     // Парсим текст в массив закладок
-                    WebWorker.json({
-                        type: 'parse',
-                        data: result
-                    },(e)=>{
+                    // WebWorker.json({
+                    //     type: 'parse',
+                    //     data: result
+                    // },(e)=>{
+                        console.log('Account', 'bookmarks dump load complete, size:', result.length)
+
+                        let e = {data:Arrays.decodeJson(result, {})}
+
                         if(!e.data.bookmarks){
-                            console.error('Account', 'bookmarks wrong dump format', result)
+                            console.error('Account', 'bookmarks wrong dump format', Utils.shortText(result, 300))
 
                             if(call && typeof call == 'function') call()
 
@@ -200,12 +212,12 @@ function update(call){
 
                             if(call && typeof call == 'function') call()
                         })
-                    })
-                }).catch(()=>{
+                    //})
+                }).catch((e)=>{
                     LoadingProgress.status('Bookmarks no dump load, trying cache')
 
-                    console.error('Account', 'bookmarks full update fail, trying load from cache')
-                    
+                    console.error('Account', 'bookmarks full update fail, trying load from cache:', 'message', e.message)
+
                     loadFromCache(()=>{
                         if(call && typeof call == 'function') call()
                     })

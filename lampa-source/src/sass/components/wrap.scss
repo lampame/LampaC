@@ -41,7 +41,6 @@ body.menu--open:not(.light--version){
     .wrap{
         &__left{
             transform: translate3d(15em, 0, 0);
-            background: transparent;
         }
         &__content{
             transform: translate3d(15em, 0, 0);
@@ -49,6 +48,40 @@ body.menu--open:not(.light--version){
     }
     .background{
         opacity: 0.5;
+    }
+}
+
+body.menu--always:not(.light--version){
+    .wrap{
+        &__left{
+            width: 5em;
+            margin-left: 0;
+            visibility: visible;
+
+            .menu__text{
+                display: none;
+            }
+        }
+    }
+}
+
+body.menu--always.menu--open:not(.light--version){
+    .wrap{
+        &__left{
+            transform: translate3d(0, 0, 0);
+
+            > .scroll{
+                width: 15em;
+            }
+
+            .menu__text{
+                display: block;
+            }
+        }
+
+        &__content{
+            transform: translate3d(10em, 0, 0);
+        }
     }
 }
 

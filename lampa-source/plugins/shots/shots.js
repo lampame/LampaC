@@ -10,6 +10,11 @@ import Api from './utils/api.js'
 import List from './components/list.js'
 import Card from './components/card.js'
 import View from './utils/view.js'
+import Channel from './components/channel.js'
+import Present from './components/present.js'
+import Roll from './utils/roll.js'
+import Tags from './utils/tags.js'
+import Settings from './utils/settings.js'
 
 function startPlugin() {
     window.plugin_shots_ready = true
@@ -23,11 +28,15 @@ function startPlugin() {
 
         Handler.init()
 
+        Settings.init()
+
         Favorite.init()
 
         Created.init()
 
         View.init()
+
+        Tags.load()
 
         $('body').append(`
             <style>
@@ -39,6 +48,7 @@ function startPlugin() {
 
         Lampa.Component.add('shots_list', List)
         Lampa.Component.add('shots_card', Card)
+        Lampa.Component.add('shots_channel', Channel)
 
         // Экран закладок - шоты
 
@@ -113,12 +123,12 @@ function startPlugin() {
             screen: ['main'],
             call: (params, screen)=>{
                 return function(call){
-                    Api.lenta(1, (shots)=>{
+                    Api.lenta({sort: 'new'}, (shots)=>{
                         Lampa.Utils.extendItemsParams(shots, {
                             createInstance: (item_data)=> Shot(item_data, {
                                 playlist: shots,
                                 onNext: (page, call)=>{
-                                    Api.lenta(page, call)
+                                    Api.lenta({sort: 'new', page: page}, call)
                                 }
                             })
                         })
@@ -145,33 +155,58 @@ function startPlugin() {
         let waiting = false
 
         Lampa.Menu.addButton('<svg><use xlink:href="#sprite-shots"></use></svg>', 'Shots', ()=>{
-            if(waiting) return
+            let present = new Present()
 
-            waiting = true
+            present.onComplete = ()=>{
+                present.onBack = ()=>{}
 
-            let call = (shots)=>{
-                Lampa.Loading.stop()
+                if(waiting) return
 
-                waiting = false
+                waiting = true
 
-                let lenta = new Lenta(shots[0], shots)
+                let call = (shots)=>{
+                    Lampa.Loading.stop()
 
-                lenta.onNext = (page, call)=>{
-                    Api.lenta(page, call)
+                    present.destroy()
+
+                    waiting = false
+
+                    if(shots.length == 0){
+                        return Lampa.Bell.push({
+                            icon: '<svg><use xlink:href="#sprite-shots"></use></svg>',
+                            text: Lampa.Lang.translate('shots_alert_noshots')
+                        })
+                    }
+
+                    let lenta = new Lenta(shots[0], shots)
+
+                    lenta.onNext = (page, call)=>{
+                        Roll.next(call)
+                    }
+
+                    lenta.start()
                 }
 
-                lenta.start()
+                Lampa.Loading.start(()=>{
+                    waiting = false
+
+                    present.destroy()
+
+                    call = ()=>{}
+
+                    Lampa.Loading.stop()
+                })
+
+                Roll.start(call)
             }
 
-            Lampa.Loading.start(()=>{
-                waiting = false
+            present.onBack = ()=>{
+                present.destroy()
 
-                call = ()=>{}
+                Lampa.Controller.toggle('content')
+            }
 
-                Lampa.Loading.stop()
-            })
-
-            Api.lenta(1, call)
+            present.start()
         })
     }
 

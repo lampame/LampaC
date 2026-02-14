@@ -69,7 +69,6 @@ let html = `<div>
         </div>
         <div class="settings-folder__name">#{settings_main_rest}</div>
     </div>
-    
 </div>`
 
 export default html

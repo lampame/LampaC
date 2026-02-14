@@ -6,23 +6,28 @@ import Manifest from '../core/manifest'
  * @returns {void}
  */
 function init(){
-    let video_libs = ['hls/hls.js', 'dash/dash.js']
+    let include = []
 
-    video_libs = video_libs.map(lib=>{
-        return window.location.protocol == 'file:' ? Manifest.github_lampa + 'vender/' + lib : './vender/' + lib
-    })
+    // Видео библиотеки
+    include = include.concat(['hls/hls.js', 'dash/dash.js', 'qrcode/qrcode.js'].map(lib=>{
+        return window.location.protocol == 'file:' || window.location.href.indexOf('chrome-extension') > -1 ? Manifest.github_lampa + 'vender/' + lib : './vender/' + lib
+    }))
 
-    Utils.putScript(video_libs,()=>{})
-
-    if(window.youtube_lazy_load && window.lampa_settings.youtube) Utils.putScript([Utils.protocol() + 'youtube.com/iframe_api'],()=>{})
-
-    Utils.putScript([Manifest.github_lampa + 'vender/qrcode/qrcode.js'],()=>{})
-    
-    if(!window.lampa_settings.iptv && window.lampa_settings.services){
-        Utils.putScript([
-            Utils.protocol() + Manifest.cub_domain + '/plugin/sport',
-        ],()=>{})
+    // YouTube IFrame API
+    if(window.youtube_lazy_load && window.lampa_settings.youtube){
+        include.push(Utils.protocol() + 'youtube.com/iframe_api')
     }
+
+    // Плагины различные
+    if(!window.lampa_settings.iptv && window.lampa_settings.services){
+        include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/sport')
+        include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/tsarea')
+    }
+
+    // Плагин Shots
+    if(window.location.hostname !== 'localhost') include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/shots')
+
+    Utils.putScriptAsync(include,()=>{})
 }
 
 export default {

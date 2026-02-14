@@ -1,9 +1,10 @@
 let object = {
     author: 'Yumata',
     github: 'https://github.com/yumata/lampa-source',
-    css_version: '3.1.2',
-    app_version: '3.1.2',
-    cub_site: 'cub.rip'
+    css_version: '3.1.4',
+    app_version: '3.1.4',
+    cub_site: 'cub.rip',
+    apk_link_download: 'https://github.com/lampa-app/LAMPA/releases/download/v1.12.3/app-lite-release.apk'
 }
 
 let plugins = []
