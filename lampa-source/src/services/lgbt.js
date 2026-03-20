@@ -1,6 +1,8 @@
 import Manifest from '../core/manifest'
 import Utils from '../utils/utils'
 import Cache from '../utils/cache'
+import VPN from '../core/vpn'
+import Arrays from '../utils/arrays'
 
 /**
  * Инициализация DMCA, блокировка карточек к показу по требованию правообладателей
@@ -9,7 +11,7 @@ import Cache from '../utils/cache'
 function init(){
     if(!window.lampa_settings.disable_features.lgbt){
         Cache.getData('other', 'lgbt', 60 * 24 * 10).then((result)=>{
-            if(result) window.lampa_settings.lgbt = result
+            if(result && Arrays.isObject(result)) window.lampa_settings.lgbt = result
             else{
                 Lampa.Network.silent(Utils.protocol() + 'tmdb.'+Manifest.cub_domain+'/lgbt.json',(lgbt)=>{
                     let map = {}
@@ -25,17 +27,19 @@ function init(){
             }
         }).catch(e=>{})
 
-        Lampa.SettingsApi.addParam({
-            component: 'more',
-            param: {
-                name: 'lgbt_content_block',
-                type: 'trigger',
-                default: true
-            },
-            field: {
-                name: Lampa.Lang.translate('settings_lgbt_content_block'),
-            }
-        })
+        if(!(VPN.code() == 'ru' || VPN.code() == 'by')){
+            Lampa.SettingsApi.addParam({
+                component: 'more',
+                param: {
+                    name: 'lgbt_content_block',
+                    type: 'trigger',
+                    default: true
+                },
+                field: {
+                    name: Lampa.Lang.translate('settings_lgbt_content_block'),
+                }
+            })
+        }
     }
 }
 
