@@ -1,5 +1,7 @@
 # Lampac
 
+Lampac NextGen - https://github.com/lampac-nextgen/lampac
+
 ---
 
 <table>
