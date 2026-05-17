@@ -1,0 +1,13 @@
+{
+  "enable": false,
+  "dynamic": true,
+  "references": [
+    "references/"
+  ],
+  "tree": [
+    "Models",
+    "Services",
+    "GlobalUsings.cs",
+    "ModInit.cs"
+  ]
+}

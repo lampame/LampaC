@@ -1,0 +1,131 @@
+enable: false
+displayindex: 60
+displayname: PornHub
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://rt.pornhub.com
+priorityBrowser: http
+
+menu:
+  route:
+    sort: "{host}/video?o={sort}&page={page}"
+    model: "{host}{model}/videos?page={page}"
+    cat: "{host}/video?c={cat}&page={page}"
+    catsort: "{host}/video?c={cat}&o={sort}&page={page}"
+  sort:
+    Недавно в Избранном: ""
+    Новые: cm
+    Популярные: mv
+    Лучшие: tr
+    Горячие: ht
+  categories:
+    Все: ""
+    Азиатки: "1"
+    Анальный секс: "35"
+    Арабское: "98"
+    БДСМ: "10"
+    Бисексуалы: "76"
+    Блондинки: "9"
+    Большая грудь: "8"
+    Большие члены: "7"
+    Бразильское: "102"
+    Британское: "96"
+    Брызги: "69"
+    Брюнетки: "11"
+    Буккаке: "14"
+    В школе: "88"
+    Веб-камера: "61"
+    Вечеринки: "53"
+    Гонзо: "41"
+    Грубый секс: "67"
+    Групповуха: "80"
+    Девушки (соло): "492"
+    Двойное проникновение: "72"
+    Дрочит: "20"
+    Европейцы: "55"
+    Жесткий секс: "21"
+    Женский оргазм: "502"
+    За кадром: "141"
+    Звезды: "12"
+    Золотой дождь: "211"
+    Зрелые: "28"
+    Игрушки: "23"
+    Индийское: "101"
+    Итальянское: "97"
+    Кастинги: "90"
+    Кончают: "16"
+    Корейское: "103"
+    Косплей: "241"
+    Кунилингус: "131"
+    Курящие: "91"
+    Латинки: "26"
+    Лесбиянки: "27"
+    Любительское: "3"
+    Маленькая грудь: "59"
+    Мамочки: "29"
+    Массаж: "78"
+    Мастурбация: "22"
+    Межрассовый Секс: "25"
+    Минет: "13"
+    Музыка: "121"
+    Мулаты: "17"
+    Мультики: "86"
+    Мускулистые Мужчины: "512"
+    На публике: "24"
+    Немецкое: "95"
+    Ноги: "93"
+    Няни: "89"
+    Парни (соло): "92"
+    Пародия: "201"
+    Попки: "4"
+    Приколы: "32"
+    Проверенное Любительское: "138"
+    Проверенные Модели: "139"
+    Проверенные Пары: "482"
+    Реальный секс: "31"
+    Ретро: "43"
+    Рогоносцы: "242"
+    Ролевые Игры: "81"
+    Русское: "99"
+    Секс втроем: "65"
+    60FPS: "105"
+    Closed Captions: "732"
+    Gaming: "881"
+    Podcast: "891"
+
+list:
+  uri: "video?page={page}"
+
+search:
+  uri: "video/search?search={search}&page={page}"
+
+contentParse:
+  nodes: //li[contains(@class,'videoblock')] | //div[contains(@class,'video-list') or contains(@class,'videos')]//li[contains(@class,'videoblock')] | //ul[@id='videoCategory']//li[contains(@class,'videoblock')]
+  name:
+    node: .//a[@data-event='thumb_click'] | .//a
+    attribute: title
+  href:
+    node: .//a[contains(@class,'linkVideoThumb')] | .//a[contains(@class,'title')]
+    attribute: href
+  img:
+    node: .//img | .//a[contains(@class,'linkVideoThumb')]//img
+    attributes: ["data-mediumthumb", "data-thumb_url", "data-image", "src"]
+  preview:
+    node: .//img | .//a[contains(@class,'linkVideoThumb')]//img
+    attribute: data-mediabook
+  duration:
+    node: .//var[contains(@class,'duration')] | .//*[contains(@class,'duration')]
+  model:
+    name:
+      node: .//a[contains(@href,'/pornstar/')]
+    href:
+      node: .//a[contains(@href,'/pornstar/')]
+      attribute: href
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["1080", "720", "480", "360", "240"]
+    pattern: '"videoUrl":"([^"]+)","quality":"{value}"' 

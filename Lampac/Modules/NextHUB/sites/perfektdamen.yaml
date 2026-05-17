@@ -1,0 +1,50 @@
+enable: true
+displayindex: 404
+streamproxy: true
+displayname: PerfektDamen
+host: https://www.perfektdamen.co
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Популярное: popular/{page}/
+    В тренде: trending/{page}/
+  categories:
+    format: tags/{cat}/
+    Брюнетки: brunette
+    Хардкор: hardcore
+    Блондинки: blonde
+
+list:
+  firstpage: ""
+  uri: "{page}/"
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[contains(@class,'thumb-bl-video')]
+  name:
+    node: .//a
+    attribute: title
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//i[@class='fa fa-clock-o']//span
+  preview:
+    node: .//a
+    attribute: data-preview-custom
+
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    format: "{value}#.m3u8"
+    pattern: "var videoUrl = '([^']+)'"

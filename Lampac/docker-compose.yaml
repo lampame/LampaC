@@ -1,0 +1,52 @@
+---
+# Lampac — primary Compose file (production-like run on your machine). Use `docker compose up -d` from the repo root.
+#
+# BEFORE you uncomment `volumes` below:
+#   1. Create host dirs: mkdir -p lampac-docker/config lampac-docker/plugins
+#   2. Copy config: cp config/example.init.conf lampac-docker/config/init.conf
+#   3. Root password (one line): printf '%s' 'your_strong_password' > lampac-docker/config/passwd
+#   4. Uncomment the entire `volumes:` block (and each volume line under it).
+#
+# If you skip step 4, the container uses init.conf/passwd baked into the image — host files are ignored.
+# Full walkthrough: README.md → «Быстрый старт» → Docker.
+#
+name: lampac
+
+services:
+  lampac:
+    image: ghcr.io/lampac-nextgen/lampac
+    container_name: lampac
+    # Use host networking instead of bridge below: uncomment the next line and remove or adjust `ports` / `networks`.
+    # network_mode: host
+    networks:
+      lampac:
+        ipv4_address: 10.10.10.10
+    ports:
+      - 9118:9118
+    restart: unless-stopped
+    shm_size: 1024mb
+    logging:
+      options:
+        tag: "{{.Name}}"
+    # --- Mount your own files (commented by default). Paths are relative to this compose file. ---
+    # volumes:
+    #   # Required for custom setup: root password (WebLog, etc.) → must exist on host before `up`
+    #   - ./lampac-docker/config/passwd:/lampac/passwd
+    #   # Main JSON/YAML config (hot-reloaded). In-container path is always /lampac/init.conf
+    #   - ./lampac-docker/config/init.conf:/lampac/init.conf
+    #   # Optional: extra user module dir (see README → Docker → manifest.json). Example name is illustrative.
+    #   - ./lampac-docker/mods/BulbaCrawler:/lampac/mods/BulbaCrawler
+    #   # Optional: Lampa client plugin override
+    #   - ./lampac-docker/plugins/lampainit.js:/lampac/plugins/override/lampainit.js
+    #   # Optional: persist cache across restarts
+    #   - ./lampac-docker/cache:/lampac/cache
+    #   # Optional: persist SQLite / local DB dirs
+    #   - ./lampac-docker/database:/lampac/database
+
+networks:
+  lampac:
+    name: lampac
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24

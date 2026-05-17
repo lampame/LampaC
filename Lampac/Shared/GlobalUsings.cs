@@ -3,3 +3,7 @@ global using System.Threading.Tasks;
 global using System.Collections.Generic;
 global using System.IO;
 global using System.Linq;
+global using Shared.Services.Hybrid;
+global using Shared.Services.Utilities;
+global using Shared.Services.Pools;
+global using Shared.Models.Base;

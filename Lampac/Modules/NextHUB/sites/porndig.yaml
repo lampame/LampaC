@@ -1,0 +1,143 @@
+enable: true
+displayindex: 135
+displayname: Porndig
+rch_access: apk,cors
+stream_access: apk,cors,web
+host: https://www.porndig.com
+priorityBrowser: http
+
+menu:
+  categories:
+    format: channels/{cat}/page/{page}
+    4K: 1172/uhd-4k
+    Anal: 33/anal
+    Anal Virgins: 89/anal-virgins
+    Arab: 91/arab
+    Asian: 38/asian
+    BBW: 46/bbw
+    BDSM: 55/bondage-bdsm
+    Beach Porn: 1240/beach-porn
+    Big Ass: 1198/big-ass
+    Big Boobs: 43/big-boobs
+    Big Dick: 802/big-dick
+    Black: 45/black
+    Black Booty: 878/black-booty
+    Blonde: 36/blonde
+    Blowjob: 52/blowjob
+    Bokep: 1241/bokep
+    Brunette: 63/brunette
+    Bukkake: 59/bukkake
+    CFNM: 1226/cfnm
+    Casting Porno: 87/casting-porno
+    Compilation: 1127/compilation
+    Cosplay: 1233/cosplay
+    Creampie: 47/creampie
+    Cuckold: 1236/cuckold
+    Cum Swallowing: 35/cum-swallowing
+    Cumshot: 799/cumshot
+    Cunnilingus: 1173/cunnilingus
+    Deepthroat: 80/deep-throat
+    Domination: 73/domination
+    Double Penetration: 64/double-penetration
+    Emo Gothic: 83/emo-gothic
+    European: 1117/european
+    Ex-Girlfriend: 820/ex-girlfriend
+    Exhibitionist: 803/exhibitionist
+    Extreme: 807/extreme
+    Facial Ejaculation: 50/facial-ejaculation
+    Female Friendly: 65/female-friendly
+    Femdom: 1225/femdom
+    Fetish: 57/fetish
+    Fist Fucking: 66/fist-fucking
+    Foot Fetish: 875/foot-fetish
+    Full HD: 882/full-hd
+    GangBang: 82/gangbang
+    Gloryhole: 1199/gloryhole
+    Golden Shower: 85/golden-shower
+    Grandma: 814/grandma
+    Hairy Pussy: 855/hairy-pussy
+    Hardcore: 1235/hardcore
+    Hentai: 51/hentai
+    Hentai 3D: 1230/hentai-3d
+    Hentai Uncensored: 1231/hentai-uncensored
+    Interracial: 53/interracial
+    Latina: 54/latina
+    Lesbian: 40/lesbian
+    MILF: 39/milf
+    Massage: 74/massage
+    Masturbation: 48/masturbation
+    Mature: 41/mature
+    Mature and Young Guy: 77/mature-and-young-guy
+    Midgets: 87/midgets
+    Natural Big Tits: 93/natural-big-tits
+    Nurse: 1234/nurse
+    Oil: 1175/oil
+    Old Man & Teens 18+: 76/old-man-young-girl
+    Orgy: 42/orgy
+    Outdoor: 884/outdoor
+    POV: 58/pov
+    Pornstar: 879/pornstar
+    Pregnant: 860/pregnant
+    Redhead: 60/redhead
+    Rimming: 1125/rimming
+    Secretary: 115/secretary
+    Sextoys: 856/sextoys
+    Sexy Lingerie: 75/sexy-lingerie
+    Small Tits: 67/small-tits
+    Smoking: 822/smoking
+    Soft: 805/soft
+    Solo: 178/solo
+    Spying: 810/spying
+    Squirting: 68/squirters
+    Step-family: 1197/step-family
+    Stockings: 816/stockings
+    Strapon: 819/strapon
+    Student: 79/student
+    Threesome: 1043/threesome
+    Tit Wank: 86/tit-wank
+    Uniforms: 84/uniforms
+    Upskirt: 1227/upskirt
+    Vintage: 850/vintage
+    Violent Sex: 1042/violent-sex
+    Virgin: 88/virgin
+    Webcam: 70/webcam
+    XXX Scenario: 90/xxx-scenario
+    Young: 34/young
+    Young Black: 812/young-black
+
+list:
+  uri: video/page/{page}
+
+search:
+  uri: channels/33/{search}/page/{page}
+
+contentParse:
+  nodes: //section[contains(@class, 'video_item_wrapper even_item video_item_medium')]
+  name:
+    node: .//a
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img[@class='thumb_preview hidden']
+    attribute: data-src
+  duration:
+    node: .//div[@class='bubble bubble_duration']//span
+  preview:
+    node: .//img[contains(@class, 'js_video_preview')]
+    attribute: data-vid
+
+view:
+  related: true
+  viewsource: true
+  iframe:
+    pattern: '<link rel="prefetch" as="document" href="([^"]+)"'
+  regexMatch:
+    matches: ["/master.mpd", "_2160.mp4", "_1080.mp4", "_720.mp4", "_540.mp4", "_468.mp4", "_360.mp4"]
+    pattern: '"src":"([^"]+{value})"'
+    
+#view:
+#  related: true
+#  patternFile: (master.mpd|playlist.m3u)
+#  patternAbortEnd: (\.(mp4|m3u|ts|mpd)|/yandex/)
+#  patternWhiteRequest: porndig.com

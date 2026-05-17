@@ -1,0 +1,138 @@
+enable: true
+jsonPath: true
+displayindex: 60
+displayname: AniLiberty
+host: https://aniliberty.top/api/v1
+
+headers:
+  referer: "https://aniliberty.top/"
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  accept-language: "ru-RU,ru;q=0.9,en;q=0.8"
+
+movie_cats:
+  - movie
+
+serial_cats:
+  - serial
+
+catalog_key: Релизы
+
+menu:
+  - categories:
+      Сериалы: serial
+      Фильмы: movie
+    sort:
+      Новинки: default
+    format:
+      sort: |
+        string u = $"anime/catalog/releases?page={page}&limit=24";
+        if (cat == "movie")
+            u += "&f[types]=MOVIE";
+        else if (cat == "serial")
+            u += "&f[types][]=TV&f[types][]=ONA&f[types][]=WEB&f[types][]=OVA&f[types][]=OAD&f[types][]=SPECIAL";
+        return u;
+
+search:
+  uri: anime/catalog/releases?page={page}&limit=24&f[search]={search}
+
+list:
+  uri: anime/catalog/releases?page={page}&limit=24
+
+content:
+  nodes: "$.data[*]"
+  serial_key:
+    node: type
+    attribute: value
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      string type = value.ToUpperInvariant();
+      return type == "MOVIE" ? null : type;
+  name:
+    node: name
+    attribute: main
+  original_name:
+    node: name
+    attribute: english
+  href:
+    attribute: alias
+  image:
+    node: poster
+    attribute: preview
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      return value.StartsWith("http", System.StringComparison.OrdinalIgnoreCase)
+          ? value
+          : $"https://aniliberty.top{value}";
+  year:
+    attribute: year
+  total_pages:
+    node: meta.pagination
+    attribute: total_pages
+  args:
+    - name_arg: genres
+      attribute: genres
+      format: |
+        if (string.IsNullOrEmpty(value))
+            return null;
+        var arr = JArray.Parse(value);
+        var list = new System.Collections.Generic.List<string>();
+        foreach (var item in arr)
+        {
+            var title = item?["name"]?.ToString();
+            if (!string.IsNullOrEmpty(title))
+                list.Add(title.Trim());
+        }
+        return list.Count > 0 ? string.Join(", ", list) : null;
+
+
+card_parse:
+  initUrl: |
+    return $"{host}/anime/releases/{uri}";
+  name:
+    node: name
+    attribute: main
+  original_name:
+    node: name
+    attribute: english
+  year:
+    attribute: year
+  image:
+    node: poster
+    attribute: preview
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      return value.StartsWith("http", System.StringComparison.OrdinalIgnoreCase)
+          ? value
+          : $"https://aniliberty.top{value}";
+  description:
+    attribute: description
+
+card_args:
+  - name_arg: genres
+    attribute: genres
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      var arr = JArray.Parse(value);
+      var list = new System.Collections.Generic.List<string>();
+      foreach (var item in arr)
+      {
+          var title = item?["name"]?.ToString();
+          if (!string.IsNullOrEmpty(title))
+              list.Add(title.Trim());
+      }
+      return list.Count > 0 ? string.Join(", ", list) : null;
+  - name_arg: PG
+    node: age_rating
+    attribute: label
+  - name_arg: original_language
+    attribute: alias
+    format: |
+      return "ja";
+
+
+tmdb_injects:
+  - default

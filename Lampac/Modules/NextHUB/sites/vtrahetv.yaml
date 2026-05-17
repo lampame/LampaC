@@ -1,0 +1,128 @@
+enable: true
+displayindex: 130
+displayname: VtraheTV
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://xom.vtrahe.work
+priorityBrowser: http
+
+route:
+  eval: |
+    if (cat != null && sort != null) return $"{host}/{cat}/{sort.Replace("top", "toprated").Replace("most-popular", "popular")}/page/{page}/";
+    if (cat != null || sort != null) return $"{host}/{cat ?? sort}/page/{page}/";
+    if (query.ContainsKey("studio")) return page == 1 ? $"{host}/search/?search={query["studio"]}" : $"{host}/search/{query["studio"]}/page/{page}/";
+    return url;
+
+menu:
+  sort:
+    Новинки: ""
+    Рейтинговое: top
+    Популярнаe: most-popular
+  categories:
+    Азиатки: aziatki
+    Анал: anal
+    Блондинки: blondinki
+    Большие дойки: bolshiye-doyki
+    Большие попки: bolshiye-popki
+    Большие члены: bolshiye-chleny
+    Брюнетки: bryunetki
+    В ванной: v-vannoy
+    В латексе: v-latekse
+    В лосинах: v-losinakh
+    В машине: v-mashine
+    В офисе: v-ofise
+    В чулках: v-chulkakh
+    Волосатые: volosatyye
+    Групповое: gruppovoye
+    Двойное проникновение: dvoynoye-proniknoveniye
+    Домашнее: domashneye
+    Доминирование: dominirovaniye
+    Дрочка: drochka
+    Жены: zheny
+    Жесткое: zhestkoye
+    Зрелые: zrelyye
+    Измена: izmena
+    Кастинг: kasting
+    Красотки: krasotki
+    Крупным планом: krupnym-planom
+    Лесбиянки: lesbiyanki
+    Мамки: mamki
+    Массаж: massazh
+    Мастурбация: masturbatsiya
+    МЖМ: mzhm
+    Минет: minet
+    Молодые: molodyye
+    Мулатки: mulatki
+    На природе: na-prirode
+    На публике: na-publike
+    Негры: negry
+    Нежное: nezhnoye
+    Оргазмы: orgazmy
+    Оргии: orgii
+    От первого лица: ot-pervogo-litsa
+    Пародии: parodii
+    Пикап: pikap
+    Премиум: premium
+    Brazzers: brazzers
+    Full HD: porno-hd
+    Пьяные: pyanyye
+    Раком: rakom
+    Русское: russkoye
+    Рыжие: ryzhiye
+    Свингеры: svingery
+    Секретарши: sekretarshi
+    Секс игрушки: seks-igrushki
+    Сперма: sperma
+    Спящие: spyashchiye
+    Страпон: strapon
+    Студенты: studenty
+    Татуированные: tatuirovannyy
+    Толстушки: tolstushki
+    Фистинг: fisting
+    Худые: khudyye
+    Японки: yaponki
+  customs:
+    - name: Студии
+      arg: studio
+      format: "{value}"
+      submenu:
+        Brazzers: Brazzers
+        21Sextury Network: 21Sextury%20Network
+        Babes: Babes
+        Digital Playground: Digital%20Playground
+        Dreams-HD: Dreams-HD
+        Naughty America: Naughty%20America
+        New Sensations: New%20Sensations
+        Passion HD: Passion%20HD
+        Playboy Plus: Playboy%20Plus
+        Porn Pros: Porn%20Pros
+        Team Skeet: Team%20Skeet
+        Wow Girls: Wow%20Girls
+
+list:
+  uri: page/{page}/
+
+search:
+  uri: search/{search}/page/{page}/
+
+contentParse:
+  nodes: //div[@class='innercont']
+  name:
+    node: .//img
+    attribute: title
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//div[@class='dlit']
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    string[] e = Regex.Match(html, "data-c=\"([^\"]+)\"").Groups[1].Value.Split(';');
+    return $"https://v{e[7]}.cdnde.com/x{e[7]}/upload_{e[0].TrimStart('_')}/{e[4]}/JOPORN_NET_{e[4]}_{e[1]}.mp4?time={e[5]}";

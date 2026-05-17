@@ -1,0 +1,170 @@
+enable: true
+displayindex: 360
+displayname: Lenkino
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://wes.lenkino.adult
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  route:
+    -: '{host}/{sort ?? cat}/page/{page}'
+    catsort: "{host}/{cat}-top/page/{page}"
+    model: "{model}/page/{page}"
+  sort:
+    Новые: ""
+    Лучшие: top-porno
+    Горячие: hot-porno
+  categories:
+    Русское порно: a1-russian
+    Порно зрелых: milf-porn
+    Красивый секс: beautiful
+    Мачеха: stepmom
+    Анал: anal-porno
+    Большие сиськи: big-tits
+    Эротика: erotic
+    Лесби: lesbi-porno
+    Групповуха: group-videos
+    POV: pov
+    БДСМ: bdsm
+    Вебкамера: webcam
+    Ганг банг: gangbang
+    Домашнее порно: amateur
+    ЖМЖ: threesome-ffm
+    Кастинг: casting
+    Куни: cunnilingus
+    Массаж: massage
+    Мастурбация: masturbation
+    Минет: blowjob
+    Соло: solo
+    Хардкор: hardcore
+    МЖМ: threesome-mmf
+    Чешское порно: czech
+    Русское домашнее: russian-amateur
+    Молодые: teen
+    Старые с молодыми: old-young
+    Студенты: student
+    Азиатки: asian
+    Латинки: latina
+    Медсестра: nurse
+    Секретарша: secretary
+    Няня: babysitter
+    Черлидерша: cheerleader
+    Студентка: schoolgirl
+    Горничная: maid
+    Учительница: teacher
+    Блондинки: blonde
+    Брюнетки: brunette
+    Рыжие: redhead
+    Короткие волосы: short-hair
+    Длинные волосы: long-hair
+    Косички: pigtails
+    В ванной: bathroom
+    В машине: car
+    В офисе: office
+    В спальне: bedroom
+    В спортзале: gym
+    На кухне: kitchen
+    На пляже: beach
+    На природе: outdoor
+    На диване: sofa
+    На столе: table
+    Двойное проникновение: double-penetration
+    Крупным планом: close-up
+    Лижет попу: rimjob
+    Между сисек: titjob
+    Наездница: cowgirl
+    Оргазмы: orgasm
+    Поза 69: "69"
+    Раком: doggy-style
+    Сквирт: squirt
+    Стриптиз: striptease
+    Большие жопы: big-ass
+    Большой чёрный член: bbc
+    Большие члены: big-cock
+    Гибкие: flexible
+    Красивая грудь: nice-tits
+    Маленькие сиськи: small-tits
+    Натуральные сиськи: natural-tits
+    Красивые попки: nice-ass
+    Красивые: beautiful
+    Бритые письки: shaved
+    Волосатая пизда: hairy
+    Толстые: bbw
+    Худые: skinny
+    Силиконовые сиськи: fake-tits
+    Интимные стрижки: trimmed
+    Загорелые: tanned
+    Босс: boss
+    Доктор: doctor
+    Тренер: trainer
+    В красивом белье: lingerie
+    В чулках: stockings
+    На каблуках: heels
+    В гольфах: socks
+    Латекс: latex
+    С вибратором: vibrator
+    Дилдо: dildo
+    Евро: european
+    Йога: yoga
+    Куколд: cuckold
+    Межрассовое: interracial
+    На публике: public
+    Пикап: pickup
+    Свингеры: swingers
+    Секс-игрушки: sex-toys
+    Страпон: strapon
+    Анальная пробка: buttplug
+    Бондаж: bondage
+    Женское доминирование: femdom
+    Подчинение: submissive
+    Фистинг: fisting
+    Футфетиш: footjob
+    Негры: black
+    Негритянки: ebony
+    Негры с блондинками: black-blonde
+    Буккаке: bukkake
+    Сперма: cumshot
+    Сперма вытекает: creampie
+    Сперма на груди: cum-on-tits
+    Сперма на лице: facial
+    Глотает сперму: cum-swallow
+    Сперма на попе: cum-on-ass
+    Сперма на пизде: cum-on-pussy
+
+list:
+  uri: "page/{page}"
+
+search:
+  uri: "search/{search}/page/{page}"
+
+contentParse:
+  nodes: //div[@class='item']
+  name:
+    node: .//div[@class='itm-tit']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img[@class='lzy']
+    attribute: data-srcset
+  duration:
+    node: .//div[@class='itm-dur fnt-cs']
+  preview:
+    node: .//img[@class='lzy']
+    attribute: data-preview
+  model:
+    name:
+      node: .//a[@class='itm-opt-mdl len_pucl']
+    href:
+      node: .//a[@class='itm-opt-mdl len_pucl']
+      attribute: href
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["alt_url", "url"]
+    pattern: "video_{value}:[\t ]+'([^']+)'"

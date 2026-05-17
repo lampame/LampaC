@@ -1,0 +1,81 @@
+enable: true
+displayindex: 405
+displayname: HellPorno
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://hellporno.com
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+  categories:
+    format: "{cat}/{page}/"
+    Anal: anal
+    Arab: arab
+    Asian: asian
+    BBW: bbw
+    BDSM: bdsm
+    Big ass: big-ass
+    Big tits: big-tits
+    Casting: casting
+    Creampie: creampie
+    Ebony: ebony
+    Gangbang: gangbang
+    Granny: granny
+    Hairy: hairy
+    Handjob: handjob
+    Indian: indian
+    Interracial: interracial
+    Japanese: japanese
+    MILF: milf
+    Massage: massage
+    Masturbation: masturbation
+    Mature: mature
+    Mom: mom
+    Office: office
+    POV: pov
+    Pantyhose: pantyhose
+    Party: party
+    Pissing: pissing
+    Public: public
+    Russian: russian
+    Skinny: skinny
+    Solo: solo
+    Solo girl: solo-girl
+    Stockings: stockings
+    Teacher: teacher
+    Teen: teen
+    Threesome: threesome
+    Voyeur: voyeur
+
+list:
+  uri: ""
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[@class='video-thumb']
+  name:
+    node: .//a
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//span[@class='time']
+  preview:
+    node: .//video
+    attribute: src
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["1080p", "720p", "480p", "360p"]
+    pattern: 'src="([^"]+)" title="{value}" type="video/mp4"'

@@ -1,0 +1,44 @@
+enable: true
+displayindex: 210
+displayname: NoodleMagazine
+host: https://adult.noodlemagazine.com
+client_type: apk,cors
+rch_access: apk,cors
+stream_access: apk,cors
+qualitys_proxy: false
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Популярное: popular/week?p={page}
+
+list:
+  uri: now?p={page}
+
+search:
+  uri: video/{search}?p={page}
+
+contentParse:
+  nodes: //div[contains(@class, 'item')]
+  name:
+    node: .//div[@class='title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-src
+  duration:
+    node: .//div[@class='m_time']
+  quality:
+    node: .//i[@class='hd_mark']
+  preview:
+    node: .//div
+    attribute: data-trailer_url
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    pattern: '"file":"([^"]+)"'

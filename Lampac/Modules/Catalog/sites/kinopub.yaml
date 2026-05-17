@@ -1,0 +1,162 @@
+enable: false
+jsonPath: true
+displayindex: 25
+displayname: KinoPub
+host: https://api.srvkp.com/v1
+args: access_token=
+
+movie_cats:
+  - movie
+  - movie&genre=23
+  - movie&genre=25
+  - documovie
+  - concert
+  - 3d
+
+serial_cats:
+  - serial
+  - serial&genre=23
+  - serial&genre=25
+  - docuserial
+  - tvshow
+
+catalog_key: Недавно добавленные
+
+menu:
+  - categories:
+      Фильмы: movie
+      Сериалы: serial
+      Аниме: serial&genre=25
+      Мультфильмы: movie&genre=23
+      Мультсериалы: serial&genre=23
+      Документальные фильмы: documovie
+      Документальные сериалы: docuserial
+      ТВ шоу: tvshow
+      Концерты: concert
+      3D: "3d"
+    sort:
+      Недавно добавленные: created-
+      Последние обновления: updated-
+      По году: year-
+      Популярные: views-
+      По рейтингу: rating-
+    format:
+      sort: |
+        string u = url;
+        if (cat != null) u += $"&type={cat}";
+        if (sort != null) u += $"&sort={sort}";
+        return u;
+
+
+search:
+  uri: items/search?q={search}&page={page}&perpage=40
+
+list:
+  uri: items?page={page}&perpage=40
+
+content:
+  nodes: "$.items[*]"
+  serial_key:
+    attribute: type
+    format: |
+      return value is "serial" or "docuserial" or "tvshow" ? value : null;
+  name:
+    attribute: title
+    format: |
+      var parts = value.Split(new string[] { " / " }, System.StringSplitOptions.None);
+      return parts.Length > 0 ? parts[0].Trim() : value.Trim();
+  original_name:
+    attribute: title
+    format: |
+      var parts = value.Split(new string[] { " / " }, System.StringSplitOptions.None);
+      return parts.Length > 1 ? parts[parts.Length - 1].Trim() : null;
+  href:
+    attribute: id
+  image:
+    node: posters
+    attribute: medium
+  year:
+    attribute: year
+  total_pages:
+    node: pagination
+    attribute: total
+  args:
+    - name_arg: release_quality
+      attribute: quality
+      format: |
+        return string.IsNullOrEmpty(value) ? null : $"{value}p";
+    - name_arg: vote_average
+      attribute: imdb_rating
+
+
+card_parse:
+  initUrl: |
+    return $"{host}/items/{uri}?{args}";
+  node: item
+  name:
+    attribute: title
+    format: |
+      var parts = value.Split(new string[] { " / " }, System.StringSplitOptions.None);
+      return parts.Length > 0 ? parts[0].Trim() : value.Trim();
+  original_name:
+    attribute: title
+    format: |
+      var parts = value.Split(new string[] { " / " }, System.StringSplitOptions.None);
+      return parts.Length > 1 ? parts[parts.Length - 1].Trim() : null;
+  year:
+    attribute: year
+  image:
+    node: posters
+    attribute: medium
+  description:
+    attribute: plot
+
+card_args:
+  - name_arg: imdb_id
+    attribute: imdb
+    format: |
+      return string.IsNullOrEmpty(value) ? null : $"tt{value}";
+  - name_arg: imdb_rating
+    attribute: imdb_rating
+  - name_arg: kp_id
+    attribute: kinopoisk
+  - name_arg: kp_rating
+    attribute: kinopoisk_rating
+  - name_arg: release_quality
+    attribute: quality
+    format: |
+      return string.IsNullOrEmpty(value) ? null : $"{value}p";
+  - name_arg: genres
+    attribute: genres
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      var arr = JArray.Parse(value);
+      var list = new System.Collections.Generic.List<string>();
+      foreach (var item in arr)
+      {
+          var title = item?["title"]?.ToString();
+          if (!string.IsNullOrEmpty(title))
+              list.Add(title.Trim());
+      }
+      return list.Count > 0 ? string.Join(", ", list) : null;
+  - name_arg: production_countries
+    attribute: countries
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      var arr = JArray.Parse(value);
+      var list = new System.Collections.Generic.List<string>();
+      foreach (var item in arr)
+      {
+          var title = item?["title"]?.ToString();
+          if (!string.IsNullOrEmpty(title))
+              list.Add(title.Trim());
+      }
+      return list.Count > 0 ? string.Join(", ", list) : null;
+  - name_arg: overview
+    attribute: plot
+
+
+tmdb_injects:
+  - default

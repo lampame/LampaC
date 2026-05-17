@@ -1,0 +1,3490 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0e12" id="metaTheme">
+  <title>Admin — Lampac</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      /* --app-chrome-h set by script on #appChrome; fallbacks use 104px where needed */
+      --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+      --text-xs: 0.6875rem;
+      --text-sm: 0.8125rem;
+      --text-base: 0.875rem;
+      --text-lg: 1rem;
+      --text-xl: 1.25rem;
+      --sp-1: 0.25rem;
+      --sp-2: 0.5rem;
+      --sp-3: 0.75rem;
+      --sp-4: 1rem;
+      --sp-5: 1.25rem;
+      --sp-6: 1.5rem;
+      --sp-8: 2rem;
+      --r-sm: 6px;
+      --r-md: 8px;
+      --r-lg: 12px;
+      --r-xl: 16px;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+      --dur: 180ms;
+      --dur-slow: 300ms;
+      --sidebar-w: 260px;
+    }
+
+    /* Tokens aligned with stats/dashboard.html */
+    [data-theme="dark"] {
+      --bg: #0c0e12;
+      --surface: #13161d;
+      --surface-2: #1a1e28;
+      --surface-3: #222733;
+      --surface-hover: #2a3142;
+      --border: #2a3040;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --text: #e2e6ef;
+      --text-muted: #7c849a;
+      --text-faint: #4d5568;
+      --accent: #3ec9d1;
+      --accent-soft: #2ea8b0;
+      --accent-dim: rgba(62, 201, 209, 0.12);
+      --accent-hover: rgba(62, 201, 209, 0.22);
+      --accent-glow: rgba(62, 201, 209, 0.06);
+      --ok: #4ade80;
+      --ok-dim: rgba(74, 222, 128, 0.12);
+      --warn: #facc15;
+      --warn-dim: rgba(250, 204, 21, 0.12);
+      --err: #f87171;
+      --err-dim: rgba(248, 113, 113, 0.12);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+      --overlay: rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="light"] {
+      --bg: #f4f5f8;
+      --surface: #ffffff;
+      --surface-2: #f0f1f5;
+      --surface-3: #e8eaf0;
+      --surface-hover: #e2e4ec;
+      --border: #d4d8e3;
+      --border-subtle: rgba(0, 0, 0, 0.06);
+      --text: #1a1e28;
+      --text-muted: #6b7280;
+      --text-faint: #9ca3af;
+      --accent: #0d9499;
+      --accent-soft: #0b7d82;
+      --accent-dim: rgba(13, 148, 153, 0.1);
+      --accent-hover: rgba(13, 148, 153, 0.18);
+      --accent-glow: rgba(13, 148, 153, 0.04);
+      --ok: #16a34a;
+      --ok-dim: rgba(22, 163, 74, 0.1);
+      --warn: #ca8a04;
+      --warn-dim: rgba(202, 138, 4, 0.1);
+      --err: #dc2626;
+      --err-dim: rgba(220, 38, 38, 0.1);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+      --overlay: rgba(0, 0, 0, 0.25);
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden
+    }
+
+    body {
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ═══════════════════════════════════
+       APP SHELL
+    ═══════════════════════════════════ */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      min-height: 0;
+    }
+
+    /* Topbar + mobile tab strip: one flex item so the main layout always gets remaining height */
+    .app-chrome {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      flex-shrink: 0;
+      z-index: 35;
+      background: var(--surface);
+    }
+
+    .mobile-tabs {
+      display: none;
+    }
+
+    /* ── TOPBAR (layout + logo — как stats/dashboard.html) ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-4);
+      padding: var(--sp-3) var(--sp-6);
+      min-height: 52px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 30;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-weight: 700;
+      font-size: var(--text-lg);
+      letter-spacing: -0.02em;
+      color: var(--text);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .topbar-logo svg {
+      flex-shrink: 0;
+    }
+
+    .topbar-logo span {
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    .topbar-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Cross-page: Admin / Stats / Weblog */
+    .topbar-app-nav {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      flex-shrink: 0;
+    }
+
+    .topbar-app-nav a {
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      text-decoration: none;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      min-width: 5.75rem;
+      box-sizing: border-box;
+      transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+
+    .topbar-app-nav a:hover {
+      color: var(--text);
+      background: var(--surface-3);
+    }
+
+    .topbar-app-nav a[aria-current="page"] {
+      background: var(--surface);
+      color: var(--accent);
+      border-color: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface-2);
+      padding: 3px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .tab {
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      padding: 5px 12px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--dur) var(--ease);
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .tab:hover {
+      color: var(--text);
+      background: var(--surface-3)
+    }
+
+    .tab.active {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .topbar-spacer {
+      flex: 1;
+      min-width: var(--sp-2)
+    }
+
+    /* Topbar actions */
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      flex-shrink: 0;
+    }
+
+    /* Same footprint as theme .btn-icon (34px); equal min-width so link labels align */
+    .topbar-actions>.btn:not(.btn-icon),
+    .topbar-actions>a.btn {
+      min-height: 34px;
+      min-width: 8.75rem;
+      box-sizing: border-box;
+      justify-content: center;
+    }
+
+    .btn {
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      cursor: pointer;
+      transition: all var(--dur) var(--ease);
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm)
+    }
+
+    .btn:active {
+      transform: translateY(0)
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent-soft);
+    }
+
+    .btn-ghost {
+      border-color: var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      background: var(--surface-3)
+    }
+
+    .btn-danger {
+      border-color: var(--err);
+      background: var(--err-dim);
+      color: var(--err);
+    }
+
+    .btn-danger:hover {
+      background: rgba(248, 113, 113, 0.2)
+    }
+
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: var(--text-xs)
+    }
+
+    .btn-icon {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--dur) var(--ease);
+      flex-shrink: 0;
+    }
+
+    .btn-icon:hover {
+      color: var(--text);
+      background: var(--surface-3)
+    }
+
+    .btn-icon svg {
+      width: 16px;
+      height: 16px
+    }
+
+    /* ── LAYOUT ── */
+    .layout {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      gap: 0;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: var(--sp-4);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .sidebar-app-nav {
+      display: none;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 4px
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px
+    }
+
+    .nav-section {
+      margin-bottom: var(--sp-4)
+    }
+
+    .nav-h {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: var(--sp-2);
+      padding: 0 var(--sp-2);
+    }
+
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: 7px 10px;
+      margin-bottom: 1px;
+      border: none;
+      border-radius: var(--r-sm);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--dur) var(--ease);
+      position: relative;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-btn:hover {
+      background: var(--surface-2);
+      color: var(--text)
+    }
+
+    .nav-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .nav-btn.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 4px;
+      bottom: 4px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--accent);
+    }
+
+    .nav-btn .nav-count {
+      margin-left: auto;
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+
+    .nav-btn svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      opacity: 0.6;
+    }
+
+    .nav-btn.active svg {
+      opacity: 1;
+      color: var(--accent)
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: var(--sp-4);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .sidebar-hint {
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      line-height: 1.5;
+      padding: var(--sp-2);
+    }
+
+    .sidebar-hint code {
+      font-family: var(--font-mono);
+      font-size: 0.625rem;
+      background: var(--surface-3);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* ── MAIN ── */
+    main {
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: var(--sp-5);
+      min-height: 0;
+    }
+
+    main::-webkit-scrollbar {
+      width: 6px
+    }
+
+    main::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    main::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 6px
+    }
+
+    .panel {
+      display: none;
+      max-width: 1400px;
+      margin: 0 auto
+    }
+
+    .panel.active {
+      display: block;
+      animation: fadeIn 200ms var(--ease-out)
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    /* ── PANEL HEADER ── */
+    .panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-5);
+    }
+
+    .panel-header-info h2 {
+      font-size: var(--text-lg);
+      font-weight: 700;
+      margin-bottom: var(--sp-1);
+      letter-spacing: -0.01em;
+    }
+
+    .panel-header-info p {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      line-height: 1.6;
+      max-width: 650px;
+    }
+
+    /* ── SEARCH BAR ── */
+    .search-bar {
+      position: relative;
+      margin-bottom: var(--sp-4);
+    }
+
+    .search-bar svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 15px;
+      height: 15px;
+      color: var(--text-faint);
+      pointer-events: none;
+    }
+
+    .filter-input {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: 9px 12px 9px 36px;
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      width: 100%;
+      max-width: 420px;
+      transition: all var(--dur) var(--ease);
+    }
+
+    .filter-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .filter-input::placeholder {
+      color: var(--text-faint)
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: var(--surface-3);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .search-clear.visible {
+      display: flex
+    }
+
+    .filter-count {
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      margin-top: var(--sp-2);
+      display: none;
+    }
+
+    .filter-count.visible {
+      display: block
+    }
+
+    /* ── TOAST NOTIFICATIONS ── */
+    .toast-container {
+      position: fixed;
+      top: 64px;
+      right: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      pointer-events: none;
+      max-width: calc(100vw - 40px);
+    }
+
+    @media (max-width: 900px) {
+      .toast-container {
+        top: auto;
+        bottom: 20px;
+        right: 12px;
+        left: 12px;
+        max-width: none;
+        align-items: stretch;
+      }
+    }
+
+    .toast {
+      padding: var(--sp-3) var(--sp-4);
+      border-radius: var(--r-lg);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      max-width: 420px;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      pointer-events: auto;
+      animation: toastIn 300ms var(--ease);
+      box-shadow: var(--shadow-lg);
+      cursor: pointer;
+      transition: opacity var(--dur) var(--ease);
+    }
+
+    .toast:hover {
+      opacity: 0.85
+    }
+
+    .toast.toast-out {
+      animation: toastOut 200ms var(--ease) forwards;
+    }
+
+    .toast-ok {
+      background: var(--ok-dim);
+      color: var(--ok);
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      backdrop-filter: blur(12px);
+    }
+
+    .toast-err {
+      background: var(--err-dim);
+      color: var(--err);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      backdrop-filter: blur(12px);
+    }
+
+    .toast-warn {
+      background: var(--warn-dim);
+      color: var(--warn);
+      border: 1px solid rgba(250, 204, 21, 0.2);
+      backdrop-filter: blur(12px);
+    }
+
+    .toast-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      line-height: 1
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(30px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    @keyframes toastOut {
+      from {
+        opacity: 1;
+        transform: translateX(0)
+      }
+
+      to {
+        opacity: 0;
+        transform: translateX(30px)
+      }
+    }
+
+    /* ── SECTION GROUPS ── */
+    details.section-group {
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      background: var(--surface);
+      margin-bottom: var(--sp-4);
+      overflow: hidden;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur-slow) var(--ease);
+    }
+
+    details.section-group[open] {
+      box-shadow: var(--shadow-sm);
+    }
+
+    details.section-group>summary {
+      padding: var(--sp-4) var(--sp-5);
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      transition: background var(--dur) var(--ease);
+      user-select: none;
+    }
+
+    details.section-group>summary:hover {
+      background: var(--surface-2);
+    }
+
+    details.section-group>summary::-webkit-details-marker {
+      display: none
+    }
+
+    details.section-group>summary .chevron {
+      width: 16px;
+      height: 16px;
+      color: var(--text-faint);
+      flex-shrink: 0;
+      transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+
+    details.section-group[open]>summary .chevron {
+      transform: rotate(90deg);
+      color: var(--accent);
+    }
+
+    details.section-group>summary .group-title {
+      font-size: var(--text-base);
+      letter-spacing: -0.01em;
+    }
+
+    .badge {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface-3);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge-accent {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .badge-ok {
+      background: var(--ok-dim);
+      color: var(--ok);
+    }
+
+    .badge-warn {
+      background: var(--warn-dim);
+      color: var(--warn);
+    }
+
+    .section-group>summary .badge-count {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .group-hint {
+      font-size: var(--text-xs);
+      font-weight: 400;
+      color: var(--text-muted);
+      padding: 0 var(--sp-5) var(--sp-3);
+      line-height: 1.5;
+    }
+
+    /* ── KEY BLOCKS (JSON editor) ── */
+    .key-block {
+      border-top: 1px solid var(--border-subtle);
+      padding: var(--sp-4) var(--sp-5);
+      transition: background var(--dur) var(--ease);
+    }
+
+    .key-block:hover {
+      background: var(--accent-glow)
+    }
+
+    .key-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-3);
+    }
+
+    .key-name {
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .key-actions {
+      margin-left: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+    }
+
+    /* ── DUAL EDITOR ── */
+    .dual {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-3);
+    }
+
+    .dual-col h4 {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: var(--sp-2);
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+
+    .dual-col h4 .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-init {
+      background: var(--accent)
+    }
+
+    .dot-current {
+      background: var(--text-faint)
+    }
+
+    textarea.code {
+      flex: 1;
+      width: 100%;
+      min-height: 200px;
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      line-height: 1.5;
+      padding: var(--sp-4);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      resize: vertical;
+      tab-size: 2;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+
+    textarea.code:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    textarea.code-sm {
+      min-height: 140px;
+      font-size: var(--text-xs)
+    }
+
+    /* ── EDITOR WRAP (init/current tabs) ── */
+    .editor-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-3);
+      height: calc(100dvh - 150px);
+      min-height: 320px;
+    }
+
+    .editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+      align-items: center;
+    }
+
+    .editor-toolbar .hint-text {
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      margin-left: auto;
+    }
+
+    /* users.json: form + JSON */
+    #panel-users .editor-wrap {
+      height: calc(100dvh - 220px);
+    }
+
+    .users-inner-tabs {
+      flex-shrink: 0;
+    }
+
+    .users-inner-tabs .tab {
+      padding: 6px 14px;
+      font-size: var(--text-sm);
+    }
+
+    .users-editor-subrow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-3);
+    }
+
+    .users-form-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+      align-items: center;
+      margin-bottom: var(--sp-4);
+    }
+
+    .users-split {
+      display: grid;
+      grid-template-columns: minmax(220px, 300px) 1fr;
+      gap: var(--sp-5);
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+    }
+
+    .users-list-aside {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .users-list-h {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+      margin-bottom: var(--sp-2);
+      padding-left: var(--sp-2);
+    }
+
+    .users-list-mount {
+      flex: 1;
+      min-height: 0;
+      max-height: calc(100dvh - 320px);
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface-2);
+    }
+
+    .users-list-empty {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      padding: var(--sp-5);
+      text-align: center;
+    }
+
+    .users-list-item {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      padding: var(--sp-3) var(--sp-4);
+      border: none;
+      border-bottom: 1px solid var(--border-subtle);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      transition: background var(--dur) var(--ease);
+    }
+
+    .users-list-item:last-child {
+      border-bottom: none;
+    }
+
+    .users-list-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .users-list-item.active {
+      background: var(--accent-dim);
+      box-shadow: inset 3px 0 0 0 var(--accent);
+    }
+
+    .users-list-id {
+      font-weight: 600;
+      font-size: var(--text-sm);
+      word-break: break-word;
+    }
+
+    .users-list-id-muted {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .users-list-meta {
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      line-height: 1.35;
+    }
+
+    .users-detail-aside {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .users-detail-mount {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: var(--sp-1);
+    }
+
+    .users-detail-mount .user-card {
+      margin-bottom: 0;
+    }
+
+    .users-detail-empty {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      padding: var(--sp-8) var(--sp-4);
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface-2);
+    }
+
+    @media (max-width: 900px) {
+      .users-split {
+        grid-template-columns: 1fr;
+      }
+
+      .users-list-mount {
+        max-height: 220px;
+      }
+    }
+
+    .user-card {
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      background: var(--surface);
+      padding: var(--sp-4) var(--sp-5);
+      margin-bottom: var(--sp-4);
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur-slow) var(--ease);
+    }
+
+    .user-card:focus-within {
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+      box-shadow: 0 0 0 1px var(--accent-dim);
+    }
+
+    .user-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
+      padding-bottom: var(--sp-3);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .user-card-title {
+      font-weight: 700;
+      font-size: var(--text-sm);
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .user-card .simple-row {
+      margin-bottom: var(--sp-3);
+    }
+
+    .user-card textarea.uf-ids,
+    .user-card textarea.uf-params {
+      min-height: 72px;
+      font-size: var(--text-xs);
+    }
+
+    .user-card .simple-check {
+      margin-top: 0;
+    }
+
+    #usersEditorJson {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: var(--sp-2);
+    }
+
+    #usersEditorJson textarea.code {
+      flex: 1;
+      min-height: 200px;
+    }
+
+    .users-editor-form-panel {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
+    }
+
+    #usersEditorForm[hidden],
+    #usersEditorJson[hidden] {
+      display: none !important;
+    }
+
+    /* ── SIMPLE EDITOR ── */
+    details.simple-key-block {
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      margin-bottom: var(--sp-3);
+      background: var(--surface);
+      overflow: hidden;
+      transition: border-color var(--dur-slow) var(--ease), box-shadow var(--dur-slow) var(--ease);
+    }
+
+    details.simple-key-block[open] {
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      box-shadow: 0 0 0 1px var(--accent-dim), var(--shadow-md);
+    }
+
+    details.simple-key-block>.simple-key-summary {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--sp-2);
+      padding: var(--sp-3) var(--sp-4);
+      cursor: pointer;
+      user-select: none;
+      background: var(--surface);
+      transition: background var(--dur) var(--ease);
+    }
+
+    details.simple-key-block>.simple-key-summary:hover {
+      background: var(--surface-2);
+    }
+
+    details.simple-key-block>.simple-key-summary::-webkit-details-marker {
+      display: none
+    }
+
+    details.simple-key-block[open]>.simple-key-summary {
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--surface);
+    }
+
+    .simple-key-summary .chevron-sm {
+      width: 14px;
+      height: 14px;
+      color: var(--text-faint);
+      flex-shrink: 0;
+      transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+
+    details.simple-key-block[open]>.simple-key-summary .chevron-sm {
+      transform: rotate(90deg);
+      color: var(--accent);
+    }
+
+    .simple-key-body {
+      padding: var(--sp-4) var(--sp-5);
+    }
+
+    .simple-fieldset {
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+      padding: var(--sp-3) var(--sp-4);
+      margin-bottom: var(--sp-3);
+      background: var(--surface-2);
+    }
+
+    .simple-fieldset>legend {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      padding: 0 var(--sp-2);
+      color: var(--text);
+    }
+
+    .simple-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 220px) 1fr;
+      gap: var(--sp-3);
+      align-items: start;
+      margin-bottom: var(--sp-3);
+    }
+
+    .simple-row label {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      padding-top: 8px;
+      word-break: break-word;
+      font-weight: 500;
+    }
+
+    .simple-row input[type="text"],
+    .simple-row input[type="number"] {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: 8px 12px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      width: 100%;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+
+    .simple-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .simple-check {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      margin-top: 4px;
+    }
+
+    .simple-check input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent)
+    }
+
+    textarea.simple-json {
+      width: 100%;
+      min-height: 120px;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      line-height: 1.5;
+      padding: var(--sp-3);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      resize: vertical;
+      transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }
+
+    textarea.simple-json:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .simple-missing {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      padding: var(--sp-3);
+      text-align: center;
+      background: var(--surface-2);
+      border-radius: var(--r-md);
+    }
+
+    .simple-form-mount {
+      margin-top: var(--sp-2)
+    }
+
+    .simple-cur-hint {
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      margin-top: 4px;
+      font-family: var(--font-mono);
+    }
+
+    .hint {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      margin-top: var(--sp-4);
+    }
+
+    a.link {
+      color: var(--accent);
+      text-decoration: none
+    }
+
+    a.link:hover {
+      text-decoration: underline
+    }
+
+    .key-block.hidden {
+      display: none
+    }
+
+    /* ── KEYBOARD SHORTCUT HINTS ── */
+    .kbd {
+      font-family: var(--font-mono);
+      font-size: 0.625rem;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--text-faint);
+      font-weight: 500;
+    }
+
+    /* ── CONFIRM DIALOG ── */
+    .dialog-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--overlay);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 150ms var(--ease);
+      backdrop-filter: blur(4px);
+    }
+
+    .dialog-overlay.hidden {
+      display: none
+    }
+
+    .dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: var(--sp-6);
+      max-width: 400px;
+      width: 90%;
+      box-shadow: var(--shadow-lg);
+      animation: dialogIn 250ms var(--ease);
+    }
+
+    @keyframes dialogIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px)
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0)
+      }
+    }
+
+    .dialog h3 {
+      font-size: var(--text-lg);
+      font-weight: 700;
+      margin-bottom: var(--sp-2);
+    }
+
+    .dialog p {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      margin-bottom: var(--sp-5);
+      line-height: 1.5;
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: var(--sp-2);
+      justify-content: flex-end;
+    }
+
+    /* ── UNSAVED INDICATOR ── */
+    .unsaved-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--warn);
+      display: none;
+      flex-shrink: 0;
+    }
+
+    .unsaved-dot.visible {
+      display: block
+    }
+
+    /* ── RESPONSIVE ── */
+    .mobile-nav-toggle {
+      display: none
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+        padding-top: var(--app-chrome-h, 104px);
+      }
+
+      .sidebar {
+        display: none
+      }
+
+      .sidebar.open {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        top: var(--app-chrome-h, 104px);
+        z-index: 40;
+        background: var(--surface);
+        width: 100%;
+        animation: slideIn 250ms var(--ease);
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-20px)
+        }
+
+        to {
+          opacity: 1;
+          transform: translateX(0)
+        }
+      }
+
+      .mobile-nav-toggle {
+        display: inline-flex
+      }
+
+      .topbar-logo span {
+        display: none
+      }
+
+      .topbar .tabs {
+        display: none
+      }
+
+      .topbar .topbar-divider {
+        display: none
+      }
+
+      .topbar-actions .btn-label {
+        display: none
+      }
+
+      .topbar-actions>.btn:not(.btn-icon),
+      .topbar-actions>a.btn {
+        min-width: auto
+      }
+
+      .topbar-actions a[href="/adminpanel/auth"] {
+        display: none
+      }
+
+      /* Row 1: menu · logo · · · actions — Row 2: full-width scrollable App / Stats / Weblog */
+      .topbar {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--sp-2);
+        row-gap: var(--sp-2);
+        padding-top: max(var(--sp-3), env(safe-area-inset-top, 0px));
+        padding-left: max(var(--sp-3), env(safe-area-inset-left, 0px));
+        padding-right: max(var(--sp-3), env(safe-area-inset-right, 0px));
+        min-height: 48px;
+      }
+
+      .mobile-nav-toggle {
+        order: 0;
+      }
+
+      .topbar-logo {
+        order: 1;
+      }
+
+      .topbar-spacer {
+        order: 2;
+        flex: 1 1 auto;
+        min-width: var(--sp-2);
+      }
+
+      .topbar-actions {
+        order: 3;
+        flex-shrink: 0;
+      }
+
+      .topbar-app-nav {
+        order: 10;
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding-top: var(--sp-2);
+        margin-top: calc(-1 * var(--sp-1));
+        border-top: 1px solid var(--border-subtle);
+        gap: var(--sp-2);
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        touch-action: manipulation;
+      }
+
+      .topbar-app-nav::-webkit-scrollbar {
+        display: none;
+      }
+
+      .topbar-app-nav a {
+        flex: 0 0 auto;
+        min-width: 5.25rem;
+        min-height: 44px;
+        padding: 10px 14px;
+        font-size: var(--text-sm);
+      }
+
+      .topbar-actions .btn-icon,
+      .mobile-nav-toggle {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+      }
+
+      .topbar-actions>.btn:not(.btn-icon) {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0 12px;
+      }
+
+      .sidebar-app-nav {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+        padding-bottom: var(--sp-4);
+        margin-bottom: var(--sp-4);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .sidebar-app-nav a {
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: 600;
+        padding: 12px 14px;
+        min-height: 48px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text-muted);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+        touch-action: manipulation;
+      }
+
+      .sidebar-app-nav a:hover {
+        color: var(--text);
+        background: var(--surface-3);
+      }
+
+      .sidebar-app-nav a[href="/adminpanel"] {
+        background: var(--surface);
+        color: var(--accent);
+        border-color: var(--accent);
+        box-shadow: var(--shadow-sm);
+      }
+
+      /* Fixed chrome: keeps tabs above scrolling main (avoids WebKit/compositor drawing panel text over the tab strip). */
+      .app-chrome {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: 50;
+        box-shadow: var(--shadow-md);
+      }
+
+      /* Tabs size to content and scroll horizontally — avoid flex:1 crushing labels (looked like a tiny strip under the header). */
+      .mobile-tabs {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        flex-shrink: 0;
+        align-items: stretch;
+        gap: var(--sp-2);
+        position: relative;
+        z-index: 1;
+        min-height: 48px;
+        background: var(--surface-2);
+        padding: 4px max(var(--sp-3), env(safe-area-inset-right, 0px)) 4px max(var(--sp-3), env(safe-area-inset-left, 0px));
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        touch-action: manipulation;
+      }
+
+      .mobile-tabs::-webkit-scrollbar {
+        display: none;
+      }
+
+      .mobile-tabs .tab {
+        flex: 0 0 auto;
+        min-width: 4.5rem;
+        min-height: 44px;
+        text-align: center;
+        justify-content: center;
+        align-items: center;
+        display: inline-flex;
+        padding: 10px 12px;
+        font-size: var(--text-xs);
+        box-sizing: border-box;
+      }
+
+      .dual {
+        grid-template-columns: 1fr
+      }
+
+      .simple-row {
+        grid-template-columns: 1fr
+      }
+
+      main {
+        padding: var(--sp-4) max(var(--sp-3), env(safe-area-inset-right, 0px)) max(var(--sp-5), env(safe-area-inset-bottom, 0px)) max(var(--sp-3), env(safe-area-inset-left, 0px))
+      }
+
+      .topbar-logo {
+        min-width: 0;
+      }
+
+      .topbar-spacer {
+        min-width: var(--sp-2);
+      }
+
+      .panel-header {
+        margin-bottom: var(--sp-6);
+        flex-direction: column;
+        align-items: stretch
+      }
+
+      .panel-header-info p {
+        font-size: var(--text-sm);
+        color: var(--text-muted);
+        max-width: none
+      }
+
+      .search-bar {
+        margin-top: var(--sp-2);
+        margin-bottom: var(--sp-5)
+      }
+
+      .filter-input {
+        max-width: 100%
+      }
+
+      details.section-group>summary {
+        min-height: 48px;
+        padding: var(--sp-4) var(--sp-4)
+      }
+
+      .btn-icon {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .dual {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* ── LOADING SKELETON ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--r-md);
+    }
+
+    @keyframes shimmer {
+      from {
+        background-position: 200% 0
+      }
+
+      to {
+        background-position: -200% 0
+      }
+    }
+
+    .skeleton-block {
+      height: 120px;
+      margin-bottom: var(--sp-4);
+      border-radius: var(--r-xl)
+    }
+
+    .skeleton-line {
+      height: 14px;
+      margin-bottom: var(--sp-2)
+    }
+
+    .skeleton-line.w60 {
+      width: 60%
+    }
+
+    .skeleton-line.w40 {
+      width: 40%
+    }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-2) var(--sp-4);
+      font-size: var(--text-xs);
+      color: var(--text-faint);
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      flex-shrink: 0;
+    }
+
+    .status-bar .spacer {
+      flex: 1
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="app-chrome" id="appChrome">
+      <!-- TOPBAR -->
+      <header class="topbar">
+        <button type="button" class="btn-icon mobile-nav-toggle" id="navToggle" title="Навигация">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+
+        <div class="topbar-logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <rect x="2" y="2" width="24" height="24" rx="6" stroke="currentColor" stroke-width="1.5" fill="none" />
+            <rect x="7" y="16" width="3" height="6" rx="1" fill="var(--accent)" />
+            <rect x="12.5" y="11" width="3" height="11" rx="1" fill="var(--accent)" opacity="0.7" />
+            <rect x="18" y="6" width="3" height="16" rx="1" fill="var(--accent)" opacity="0.45" />
+          </svg>
+          Lampac <span>Admin</span>
+        </div>
+
+        <div class="topbar-divider"></div>
+
+        <nav class="topbar-app-nav" aria-label="Lampac pages">
+          <a href="/adminpanel" aria-current="page">Admin</a>
+          <a href="/stats">Stats</a>
+          <a href="/weblog">Weblog</a>
+        </nav>
+
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" data-panel="sections" role="tab">
+            <svg style="width:12px;height:12px;margin-right:4px;vertical-align:-1px" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+            Группы
+          </button>
+          <button type="button" class="tab" data-panel="simple" role="tab">
+            <svg style="width:12px;height:12px;margin-right:4px;vertical-align:-1px" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Редактор
+          </button>
+          <button type="button" class="tab" data-panel="init" role="tab">
+            <svg style="width:12px;height:12px;margin-right:4px;vertical-align:-1px" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            init.conf
+          </button>
+          <button type="button" class="tab" data-panel="current" role="tab">
+            <svg style="width:12px;height:12px;margin-right:4px;vertical-align:-1px" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            current.conf
+          </button>
+          <button type="button" class="tab" data-panel="users" role="tab">
+            <svg style="width:12px;height:12px;margin-right:4px;vertical-align:-1px" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            users.json
+          </button>
+        </div>
+
+        <div class="topbar-spacer"></div>
+
+        <div class="topbar-actions">
+          <div class="unsaved-dot" id="unsavedDot" title="Есть несохранённые изменения"></div>
+          <button type="button" class="btn-icon" id="themeBtn" title="Сменить тему (Alt+T)">
+            <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="reloadBtn" title="Перезагрузить (Alt+R)">
+            <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            <span class="btn-label">Обновить</span>
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" id="saveInitBtn"
+            title="Сохранить: init.conf или users.json на активной вкладке (Ctrl+S)">
+            <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span class="btn-label">Сохранить</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- MOBILE TABS (visible < 900px) -->
+      <div class="mobile-tabs" id="mobileTabs">
+        <button type="button" class="tab active" data-panel="sections">Группы</button>
+        <button type="button" class="tab" data-panel="simple">Редактор</button>
+        <button type="button" class="tab" data-panel="init">init.conf</button>
+        <button type="button" class="tab" data-panel="current">current</button>
+        <button type="button" class="tab" data-panel="users">users</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar" aria-label="Разделы конфигурации">
+        <nav class="sidebar-app-nav" aria-label="Другие страницы Lampac">
+          <a href="/adminpanel">Admin</a>
+          <a href="/stats">Stats</a>
+          <a href="/weblog">Weblog</a>
+        </nav>
+        <div id="sidebarJsonNav">
+          <div class="nav-section">
+            <div class="nav-h">Группы</div>
+            <div id="navGroups"></div>
+          </div>
+          <div class="nav-section">
+            <div class="nav-h">Быстрый переход</div>
+            <button type="button" class="nav-btn" data-jump="sections-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+              </svg>
+              Все группы
+            </button>
+            <button type="button" class="nav-btn" data-jump="grp-other">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+                <circle cx="5" cy="12" r="1" />
+              </svg>
+              Прочее
+            </button>
+          </div>
+        </div>
+
+        <div id="sidebarSimpleNav" hidden>
+          <div class="nav-section">
+            <div class="nav-h">Каталог групп</div>
+            <div id="navCatalog"></div>
+          </div>
+          <div class="nav-section">
+            <div class="nav-h">Быстрый переход</div>
+            <button type="button" class="nav-btn" data-jump-simple="simple-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+              </svg>
+              Все группы
+            </button>
+            <button type="button" class="nav-btn" data-jump-simple="simple-grp-other">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+                <circle cx="5" cy="12" r="1" />
+              </svg>
+              Прочее
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="sidebar-hint" style="margin-top:var(--sp-1)">
+            <span class="kbd">Ctrl+S</span> сохранить &nbsp;
+            <span class="kbd">Alt+R</span> обновить &nbsp;
+            <span class="kbd">Alt+T</span> тема
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main>
+        <!-- Toast container -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- PANEL: Sections (JSON) -->
+        <div class="panel active" id="panel-sections" data-panel="sections">
+          <div class="panel-header">
+            <div class="panel-header-info">
+              <h2>Группы (JSON)</h2>
+              <p>Ключи из <code>current.conf</code>, сгруппированные по секциям. Правки сохраняются в
+                <strong>init.conf</strong>. Удалить ключ: используйте <code>null</code> или редактируйте весь файл.
+              </p>
+            </div>
+          </div>
+          <div class="search-bar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="search" class="filter-input" id="keyFilter" placeholder="Поиск по ключу..." autocomplete="off"
+              spellcheck="false">
+            <button class="search-clear" id="keyFilterClear" type="button">&times;</button>
+            <div class="filter-count" id="keyFilterCount"></div>
+          </div>
+          <div id="sectionsMount">
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block" style="height:80px"></div>
+          </div>
+        </div>
+
+        <!-- PANEL: Simple Editor -->
+        <div class="panel" id="panel-simple" data-panel="simple">
+          <div class="panel-header">
+            <div class="panel-header-info">
+              <h2>Простой редактор</h2>
+              <p>Поля формы по структуре <code>current.conf</code> + <code>init.conf</code>. Значения берутся из init,
+                подсказки — из current. Массивы и вложенные объекты — JSON-блоки.</p>
+            </div>
+          </div>
+          <div class="search-bar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="search" class="filter-input" id="keyFilterSimple" placeholder="Поиск по ключу..."
+              autocomplete="off" spellcheck="false">
+            <button class="search-clear" id="keyFilterSimpleClear" type="button">&times;</button>
+            <div class="filter-count" id="keyFilterSimpleCount"></div>
+          </div>
+          <div id="simpleMount">
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+          </div>
+        </div>
+
+        <!-- PANEL: init.conf -->
+        <div class="panel" id="panel-init" data-panel="init">
+          <div class="editor-wrap">
+            <div class="editor-toolbar">
+              <button type="button" class="btn btn-ghost btn-sm" id="formatInitBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round">
+                  <polyline points="16 18 22 12 16 6" />
+                  <polyline points="8 6 2 12 8 18" />
+                </svg>
+                Форматировать
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" id="copyInitBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Копировать
+              </button>
+              <span class="editor-toolbar .hint-text"
+                style="font-size:var(--text-xs);color:var(--text-faint);margin-left:auto">
+                <span class="kbd">Ctrl+S</span> сохранить
+              </span>
+            </div>
+            <textarea class="code" id="initRaw" spellcheck="false" autocomplete="off"></textarea>
+          </div>
+        </div>
+
+        <!-- PANEL: current.conf -->
+        <div class="panel" id="panel-current" data-panel="current">
+          <div class="editor-wrap">
+            <div class="editor-toolbar">
+              <span class="badge badge-warn" style="font-size:var(--text-xs)">Только просмотр</span>
+              <span style="font-size:var(--text-xs);color:var(--text-faint)">Полный снимок после слияния дефолтов и
+                модулей</span>
+              <span style="flex:1"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="copyCurrentBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Копировать
+              </button>
+            </div>
+            <textarea class="code" id="currentRaw" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+
+        <!-- PANEL: users.json (accsdb) -->
+        <div class="panel" id="panel-users" data-panel="users">
+          <div class="editor-wrap">
+            <div class="editor-toolbar">
+              <button type="button" class="btn btn-ghost btn-sm" id="formatUsersBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round">
+                  <polyline points="16 18 22 12 16 6" />
+                  <polyline points="8 6 2 12 8 18" />
+                </svg>
+                Форматировать
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" id="copyUsersBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Копировать
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" id="saveUsersBtn">
+                <svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.2" stroke-linecap="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Сохранить users.json
+              </button>
+              <span class="hint-text" style="font-size:var(--text-xs);color:var(--text-faint);margin-left:auto">
+                <span class="kbd">Ctrl+S</span> на этой вкладке тоже сохраняет users.json
+              </span>
+            </div>
+            <div class="users-editor-subrow">
+              <span style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted)">Режим</span>
+              <div class="tabs users-inner-tabs" role="tablist" aria-label="Редактор users.json">
+                <button type="button" class="tab active" data-users-view="form" role="tab">Форма</button>
+                <button type="button" class="tab" data-users-view="json" role="tab">JSON</button>
+              </div>
+            </div>
+            <div id="usersEditorForm" class="users-editor-form-panel">
+              <div class="users-form-toolbar">
+                <button type="button" class="btn btn-primary btn-sm" id="usersAddBtn">+ Пользователь</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="usersFormFromJsonBtn">Обновить из JSON</button>
+              </div>
+              <div class="users-split">
+                <aside class="users-list-aside" aria-label="Список учётных записей">
+                  <div class="users-list-h">Пользователи</div>
+                  <div id="usersListMount" class="users-list-mount" aria-live="polite"></div>
+                </aside>
+                <div class="users-detail-aside">
+                  <p id="usersDetailEmpty" class="users-detail-empty" hidden>Выберите запись в списке слева или нажмите
+                    «+ Пользователь».</p>
+                  <div id="usersDetailMount" class="users-detail-mount"></div>
+                </div>
+              </div>
+            </div>
+            <div id="usersEditorJson" hidden>
+              <textarea class="code" id="usersRaw" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- CONFIRM DIALOG -->
+  <div class="dialog-overlay hidden" id="confirmDialog">
+    <div class="dialog">
+      <h3 id="confirmTitle">Подтверждение</h3>
+      <p id="confirmMsg">Вы уверены?</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="confirmCancel">Отмена</button>
+        <button type="button" class="btn btn-primary btn-sm" id="confirmOk">Подтвердить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const api = (path, opts) => fetch(path, Object.assign({ credentials: 'same-origin' }, opts || {}));
+
+      let usersEditorView = 'form';
+      let usersFormData = [];
+      let usersSelectedIndex = -1;
+
+      let groupsMeta = [];
+      let catalogGroupsMeta = [];
+      let initObj = {};
+      let currentObj = {};
+      let initText = '{}';
+      let currentText = '{}';
+
+      const $ = (s, r) => (r || document).querySelector(s);
+      const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+
+      (function syncAppChromeHeight() {
+        const chrome = document.getElementById('appChrome');
+        if (!chrome) return;
+        const apply = () => {
+          const h = Math.ceil(chrome.getBoundingClientRect().height);
+          document.documentElement.style.setProperty('--app-chrome-h', (h > 0 ? h : chrome.offsetHeight) + 'px');
+        };
+        apply();
+        requestAnimationFrame(apply);
+        window.addEventListener('resize', apply);
+        if (window.ResizeObserver) new ResizeObserver(apply).observe(chrome);
+      })();
+
+      /* ── Toast System ── */
+      function showToast(text, kind) {
+        if (!text) return;
+        const container = $('#toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-' + kind;
+        const icons = { ok: '✓', err: '✕', warn: '⚠' };
+        toast.innerHTML = '<span class="toast-icon">' + (icons[kind] || '') + '</span>' + esc(text);
+        toast.addEventListener('click', () => dismissToast(toast));
+        container.appendChild(toast);
+        setTimeout(() => dismissToast(toast), kind === 'err' ? 8000 : 4000);
+      }
+
+      function dismissToast(toast) {
+        if (toast.classList.contains('toast-out')) return;
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 200);
+      }
+
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      /* ── Theme (same key as /stats/dashboard.html + /weblog/weblog.html) ── */
+      const LAMPAC_THEME_STORAGE_KEY = 'lampac-theme';
+
+      function setTheme(dark) {
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        const meta = $('#metaTheme');
+        if (meta) meta.setAttribute('content', dark ? '#0c0e12' : '#f4f5f8');
+        try { localStorage.setItem(LAMPAC_THEME_STORAGE_KEY, dark ? 'dark' : 'light'); } catch (e) { }
+        syncThemeBtn();
+      }
+
+      function initialThemeIsDark() {
+        try {
+          const t = localStorage.getItem(LAMPAC_THEME_STORAGE_KEY);
+          if (t === 'light') return false;
+          if (t === 'dark') return true;
+        } catch (e) { /* ignore */ }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
+      function syncThemeBtn() {
+        const d = document.documentElement.getAttribute('data-theme') === 'dark';
+        const icon = $('#themeIcon');
+        if (d) {
+          icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+        } else {
+          icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+        }
+      }
+
+      /* ── Panel Switching ── */
+      function switchPanel(id) {
+        const prevPanel = $('.panel.active');
+        const prevId = prevPanel ? prevPanel.dataset.panel : null;
+        if (prevId === 'users' && id !== 'users' && usersEditorView === 'form')
+          usersSerializeFormToTextarea();
+
+        $$('.topbar .tabs .tab[data-panel], #mobileTabs .tab[data-panel]').forEach(t =>
+          t.classList.toggle('active', t.dataset.panel === id));
+        $$('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === id));
+        const sj = $('#sidebarJsonNav');
+        const ss = $('#sidebarSimpleNav');
+        if (sj && ss) {
+          if (id === 'simple') {
+            sj.hidden = true;
+            ss.hidden = false;
+          } else if (id === 'sections') {
+            sj.hidden = false;
+            ss.hidden = true;
+          } else if (id === 'users') {
+            sj.hidden = true;
+            ss.hidden = true;
+          } else {
+            sj.hidden = false;
+            ss.hidden = true;
+          }
+        }
+      }
+
+      function activePanelId() {
+        const p = $('.panel.active');
+        return p ? p.dataset.panel : null;
+      }
+
+      /* ── Confirm Dialog ── */
+      let confirmResolve = null;
+
+      function showConfirm(title, msg) {
+        return new Promise(resolve => {
+          confirmResolve = resolve;
+          $('#confirmTitle').textContent = title;
+          $('#confirmMsg').textContent = msg;
+          $('#confirmDialog').classList.remove('hidden');
+        });
+      }
+
+      $('#confirmOk').addEventListener('click', () => {
+        $('#confirmDialog').classList.add('hidden');
+        if (confirmResolve) confirmResolve(true);
+      });
+
+      $('#confirmCancel').addEventListener('click', () => {
+        $('#confirmDialog').classList.add('hidden');
+        if (confirmResolve) confirmResolve(false);
+      });
+
+      /* ── Data Loading ── */
+      async function loadGroupsMeta() {
+        const res = await api('/adminpanel/api/groups');
+        if (!res.ok) throw new Error('groups ' + res.status);
+        groupsMeta = await res.json();
+      }
+
+      async function loadCatalogGroupsMeta() {
+        const res = await api('/adminpanel/api/groups/catalog');
+        if (!res.ok) throw new Error('groups/catalog ' + res.status);
+        catalogGroupsMeta = await res.json();
+      }
+
+      async function loadConfigs() {
+        const [ri, rc] = await Promise.all([
+          api('/adminpanel/api/init'),
+          api('/adminpanel/api/current')
+        ]);
+        if (!ri.ok || !rc.ok) {
+          if (ri.status === 404 || rc.status === 404)
+            throw new Error('Нет доступа (установите cookie на /adminpanel/auth)');
+          throw new Error('load ' + ri.status + ' / ' + rc.status);
+        }
+        initText = await ri.text();
+        currentText = await rc.text();
+        try { initObj = JSON.parse(initText); } catch (e) { initObj = {}; }
+        try { currentObj = JSON.parse(currentText); } catch (e) { currentObj = {}; }
+        $('#initRaw').value = initText;
+        $('#currentRaw').value = currentText;
+      }
+
+      async function loadUsersJson() {
+        const ru = await api('/adminpanel/api/users-json');
+        if (!ru.ok) {
+          if (ru.status === 404)
+            throw new Error('Нет доступа (установите cookie на /adminpanel/auth)');
+          throw new Error('users-json ' + ru.status);
+        }
+        const txt = await ru.text();
+        const ta = $('#usersRaw');
+        if (ta) ta.value = txt;
+        if (usersEditorView === 'form')
+          usersRefreshFormFromTextarea();
+      }
+
+      function usersDefaultExpires() {
+        return '2099-12-31T23:59:59';
+      }
+
+      function usersEmptyRow() {
+        return {
+          id: '',
+          ids: [],
+          IsPasswd: false,
+          expires: usersDefaultExpires(),
+          group: 0,
+          ban: false,
+          ban_msg: '',
+          comment: '',
+          params: {}
+        };
+      }
+
+      function usersNormalizeFromJson(u) {
+        if (!u || typeof u !== 'object' || Array.isArray(u))
+          return usersEmptyRow();
+        const ids = Array.isArray(u.ids) ? u.ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+        let group = 0;
+        if (typeof u.group === 'number' && !Number.isNaN(u.group))
+          group = u.group;
+        else if (u.group != null) {
+          const n = parseInt(String(u.group), 10);
+          if (!Number.isNaN(n)) group = n;
+        }
+        let params = {};
+        if (u.params != null && typeof u.params === 'object' && !Array.isArray(u.params))
+          params = JSON.parse(JSON.stringify(u.params));
+        return {
+          id: u.id != null ? String(u.id) : '',
+          ids,
+          IsPasswd: !!u.IsPasswd,
+          expires: u.expires != null && String(u.expires).trim() ? String(u.expires) : usersDefaultExpires(),
+          group,
+          ban: !!u.ban,
+          ban_msg: u.ban_msg != null ? String(u.ban_msg) : '',
+          comment: u.comment != null ? String(u.comment) : '',
+          params
+        };
+      }
+
+      function usersParseArrayFromTextarea() {
+        const ta = $('#usersRaw');
+        if (!ta) return [];
+        const raw = ta.value.trim();
+        let parsed;
+        try {
+          parsed = JSON.parse(raw === '' ? '[]' : raw);
+        } catch (e) {
+          throw new Error('JSON: ' + e.message);
+        }
+        if (!Array.isArray(parsed))
+          throw new Error('Корень должен быть JSON-массивом');
+        return parsed.map(usersNormalizeFromJson);
+      }
+
+      function userCardTemplate() {
+        return (
+          '<div class="user-card">' +
+          '  <div class="user-card-head">' +
+          '    <span class="user-card-title">Параметры записи</span>' +
+          '    <button type="button" class="btn btn-danger btn-sm uf-remove" title="Удалить пользователя из списка">Удалить</button>' +
+          '  </div>' +
+          '  <div class="simple-row"><label>id <span style="color:var(--err)">*</span></label><div><input type="text" class="uf-id" autocomplete="off" spellcheck="false" placeholder="основной UID или логин" /></div></div>' +
+          '  <div class="simple-row"><label>ids</label><div><textarea class="uf-ids simple-json" spellcheck="false" placeholder="дополнительные UID — по одному в строку или через запятую"></textarea></div></div>' +
+          '  <div class="simple-row"><label>expires</label><div><input type="text" class="uf-expires" autocomplete="off" spellcheck="false" placeholder="ISO 8601" /></div></div>' +
+          '  <div class="simple-row"><label>group</label><div><input type="number" class="uf-group" step="1" /></div></div>' +
+          '  <div class="simple-row"><label>ban</label><div class="simple-check"><input type="checkbox" class="uf-ban" /> <span style="font-size:var(--text-xs);color:var(--text-muted)">заблокирован</span></div></div>' +
+          '  <div class="simple-row"><label>ban_msg</label><div><input type="text" class="uf-ban_msg" autocomplete="off" spellcheck="false" placeholder="текст при бане" /></div></div>' +
+          '  <div class="simple-row"><label>comment</label><div><input type="text" class="uf-comment" autocomplete="off" spellcheck="false" /></div></div>' +
+          '  <div class="simple-row"><label>IsPasswd</label><div class="simple-check"><input type="checkbox" class="uf-ispasswd" /> <span style="font-size:var(--text-xs);color:var(--text-muted)">метка «вход по паролю» (TelegramAuth / accs)</span></div></div>' +
+          '  <div class="simple-row" style="display:block"><label style="display:block;margin-bottom:var(--sp-2)">params (JSON-объект)</label><textarea class="uf-params simple-json" spellcheck="false" placeholder="{ }"></textarea></div>' +
+          '</div>'
+        );
+      }
+
+      function usersFillCard(card, u) {
+        card.querySelector('.uf-id').value = u.id || '';
+        card.querySelector('.uf-ids').value = (u.ids || []).join('\n');
+        card.querySelector('.uf-expires').value = u.expires || '';
+        card.querySelector('.uf-group').value = String(u.group != null ? u.group : 0);
+        card.querySelector('.uf-ban').checked = !!u.ban;
+        card.querySelector('.uf-ban_msg').value = u.ban_msg || '';
+        card.querySelector('.uf-comment').value = u.comment || '';
+        card.querySelector('.uf-ispasswd').checked = !!u.IsPasswd;
+        const pta = card.querySelector('.uf-params');
+        pta.value = u.params && Object.keys(u.params).length ? JSON.stringify(u.params, null, 2) : '{}';
+      }
+
+      function usersReadDetailCardToObject(card) {
+        const idsRaw = (card.querySelector('.uf-ids')?.value || '').trim();
+        const ids = idsRaw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+        let params = {};
+        const pr = (card.querySelector('.uf-params')?.value || '').trim();
+        if (pr && pr !== '{}') {
+          try {
+            params = JSON.parse(pr);
+          } catch (e) {
+            throw new Error('params: ' + e.message);
+          }
+          if (typeof params !== 'object' || params === null || Array.isArray(params))
+            throw new Error('params должен быть JSON-объектом');
+        }
+        let expires = (card.querySelector('.uf-expires')?.value || '').trim();
+        if (!expires) expires = usersDefaultExpires();
+        const g = parseInt(card.querySelector('.uf-group')?.value || '0', 10);
+        const ban_msg = (card.querySelector('.uf-ban_msg')?.value || '').trim();
+        const comment = (card.querySelector('.uf-comment')?.value || '').trim();
+        const id = (card.querySelector('.uf-id')?.value || '').trim();
+        const draft = {
+          id,
+          ids,
+          IsPasswd: !!card.querySelector('.uf-ispasswd')?.checked,
+          expires,
+          group: Number.isNaN(g) ? 0 : g,
+          ban: !!card.querySelector('.uf-ban')?.checked,
+          ban_msg: ban_msg || null,
+          comment,
+          params
+        };
+        return usersNormalizeFromJson(draft);
+      }
+
+      function usersDetailToData() {
+        const det = $('#usersDetailMount');
+        if (!det) return;
+        const card = det.querySelector('.user-card');
+        if (!card || usersSelectedIndex < 0 || usersSelectedIndex >= usersFormData.length) return;
+        usersFormData[usersSelectedIndex] = usersReadDetailCardToObject(card);
+      }
+
+      function usersListSubtitle(u) {
+        const parts = ['group ' + (u.group != null ? u.group : 0)];
+        if (u.ban) parts.push('ban');
+        const ex = (u.expires || '').toString().trim();
+        if (ex) parts.push(ex.length > 24 ? ex.slice(0, 24) + '…' : ex);
+        return parts.join(' · ');
+      }
+
+      function usersBindDetailRemove(card) {
+        card.querySelector('.uf-remove').addEventListener('click', () => {
+          if (usersSelectedIndex < 0 || usersSelectedIndex >= usersFormData.length) return;
+          usersFormData.splice(usersSelectedIndex, 1);
+          if (usersSelectedIndex >= usersFormData.length)
+            usersSelectedIndex = usersFormData.length ? usersFormData.length - 1 : -1;
+          usersRenderListAndDetail();
+        });
+      }
+
+      function usersRenderListAndDetail() {
+        const listMount = $('#usersListMount');
+        const detMount = $('#usersDetailMount');
+        const emptyEl = $('#usersDetailEmpty');
+        if (!listMount || !detMount) return;
+
+        listMount.innerHTML = '';
+        detMount.innerHTML = '';
+
+        if (!usersFormData.length) {
+          listMount.innerHTML = '<p class="users-list-empty">Нет записей. «+ Пользователь» или «Обновить из JSON».</p>';
+          usersSelectedIndex = -1;
+          if (emptyEl) {
+            emptyEl.hidden = false;
+            emptyEl.textContent = 'Список пуст. Добавьте пользователя или загрузите JSON.';
+          }
+          return;
+        }
+
+        if (usersSelectedIndex < 0 || usersSelectedIndex >= usersFormData.length)
+          usersSelectedIndex = 0;
+
+        usersFormData.forEach((raw, i) => {
+          const u = usersNormalizeFromJson(raw);
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'users-list-item' + (i === usersSelectedIndex ? ' active' : '');
+          b.dataset.userIndex = String(i);
+          const idSpan = document.createElement('span');
+          idSpan.className = 'users-list-id';
+          const idStr = (u.id || '').trim();
+          if (idStr) idSpan.textContent = idStr;
+          else {
+            idSpan.classList.add('users-list-id-muted');
+            idSpan.textContent = '(без id)';
+          }
+          const meta = document.createElement('span');
+          meta.className = 'users-list-meta';
+          meta.textContent = usersListSubtitle(u);
+          b.appendChild(idSpan);
+          b.appendChild(meta);
+          b.addEventListener('click', () => {
+            try {
+              usersDetailToData();
+            } catch (err) {
+              showToast(err.message || String(err), 'err');
+              return;
+            }
+            usersSelectedIndex = i;
+            usersRenderListAndDetail();
+          });
+          listMount.appendChild(b);
+        });
+
+        if (emptyEl) emptyEl.hidden = true;
+
+        const wrap = document.createElement('div');
+        wrap.innerHTML = userCardTemplate();
+        const card = wrap.firstElementChild;
+        usersFillCard(card, usersFormData[usersSelectedIndex]);
+        usersBindDetailRemove(card);
+        detMount.appendChild(card);
+      }
+
+      function usersSerializeFormToTextarea() {
+        if (usersEditorView !== 'form') return true;
+        try {
+          usersDetailToData();
+          const out = [];
+          const skipped = [];
+          usersFormData.forEach((raw, i) => {
+            const u = usersNormalizeFromJson(raw);
+            const id = (u.id || '').trim();
+            if (!id) {
+              skipped.push(i + 1);
+              return;
+            }
+            const obj = {
+              id,
+              ids: u.ids || [],
+              IsPasswd: !!u.IsPasswd,
+              expires: u.expires,
+              group: u.group,
+              ban: !!u.ban,
+              ban_msg: u.ban_msg && String(u.ban_msg).trim() ? String(u.ban_msg).trim() : null
+            };
+            if (u.comment && String(u.comment).trim())
+              obj.comment = String(u.comment).trim();
+            if (u.params && typeof u.params === 'object' && !Array.isArray(u.params) && Object.keys(u.params).length)
+              obj.params = JSON.parse(JSON.stringify(u.params));
+            out.push(obj);
+          });
+          if (skipped.length)
+            showToast('Записи без id не попадают в JSON: строки списка ' + skipped.join(', '), 'warn');
+          $('#usersRaw').value = JSON.stringify(out, null, 2);
+          usersFormData = out.map(usersNormalizeFromJson);
+          if (usersSelectedIndex >= usersFormData.length)
+            usersSelectedIndex = usersFormData.length ? usersFormData.length - 1 : -1;
+          if (usersEditorView === 'form') usersRenderListAndDetail();
+          return true;
+        } catch (e) {
+          showToast(e.message || String(e), 'err');
+          return false;
+        }
+      }
+
+      function usersRefreshFormFromTextarea() {
+        try {
+          usersFormData = usersParseArrayFromTextarea();
+          if (usersSelectedIndex >= usersFormData.length)
+            usersSelectedIndex = usersFormData.length ? usersFormData.length - 1 : -1;
+          if (usersSelectedIndex < 0 && usersFormData.length)
+            usersSelectedIndex = 0;
+          usersRenderListAndDetail();
+        } catch (e) {
+          showToast(e.message || String(e), 'err');
+          usersFormData = [];
+          usersSelectedIndex = -1;
+          usersRenderListAndDetail();
+        }
+      }
+
+      function usersSwitchSubView(view) {
+        if (view === 'json') {
+          if (!usersSerializeFormToTextarea()) return;
+          usersEditorView = 'json';
+          $('#usersEditorForm').hidden = true;
+          $('#usersEditorJson').hidden = false;
+        } else {
+          usersEditorView = 'form';
+          $('#usersEditorForm').hidden = false;
+          $('#usersEditorJson').hidden = true;
+          usersRefreshFormFromTextarea();
+        }
+        $$('#panel-users .users-inner-tabs .tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.usersView === usersEditorView);
+        });
+      }
+
+      /* ── Helpers ── */
+      function isPlainObject(x) {
+        return x !== null && x !== undefined && typeof x === 'object' && !Array.isArray(x);
+      }
+
+      function inferScalarKind(v) {
+        if (v === null) return 'null';
+        if (typeof v === 'boolean') return 'bool';
+        if (typeof v === 'number') return 'num';
+        return 'str';
+      }
+
+      function formSpec(c, i, path) {
+        const hasC = c !== undefined;
+        const hasI = i !== undefined;
+        if (!hasC && !hasI) return { type: 'missing' };
+        const cObj = isPlainObject(c);
+        const iObj = isPlainObject(i);
+        if (cObj || iObj) {
+          if (hasC && hasI && cObj !== iObj)
+            return { type: 'json', path, init: i, current: c };
+          const cO = cObj ? c : {};
+          const iO = iObj ? i : {};
+          const keys = new Set([...Object.keys(cO), ...Object.keys(iO)]);
+          const children = {};
+          for (const k of Array.from(keys).sort((a, b) => a.localeCompare(b))) {
+            const p = path ? path + '.' + k : k;
+            children[k] = formSpec(cO[k], iO[k], p);
+          }
+          return { type: 'object', path, children };
+        }
+        if (Array.isArray(c) || Array.isArray(i))
+          return { type: 'json', path, init: hasI ? i : undefined, current: hasC ? c : undefined };
+        return { type: 'scalar', scalarKind: inferScalarKind(hasC ? c : i), path, init: hasI ? i : undefined, current: hasC ? c : undefined };
+      }
+
+      function formatHintValue(v) {
+        if (v === null) return 'null';
+        if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+        const s = JSON.stringify(v);
+        return s.length > 140 ? s.slice(0, 137) + '…' : s;
+      }
+
+      function setDeep(root, path, val) {
+        const parts = path.split('.');
+        let o = root;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const p = parts[i];
+          if (!o[p] || typeof o[p] !== 'object' || Array.isArray(o[p])) o[p] = {};
+          o = o[p];
+        }
+        o[parts[parts.length - 1]] = val;
+      }
+
+      function parseScalarInput(el) {
+        const k = el.dataset.scalarKind;
+        if (el.type === 'checkbox' || k === 'bool') return el.checked;
+        if (k === 'num') {
+          const t = el.value.trim();
+          if (t === '') return null;
+          const n = Number(t);
+          if (Number.isNaN(n)) throw new Error('Не число');
+          return n;
+        }
+        const t = el.value;
+        return t === '' ? null : t;
+      }
+
+      function stringifyKey(obj, key) {
+        if (!obj || typeof obj !== 'object' || !(key in obj)) return '';
+        return JSON.stringify(obj[key], null, 2);
+      }
+
+      /* ── Chevron SVG ── */
+      const chevronSvg = '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
+      const chevronSmSvg = '<svg class="chevron-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>';
+
+      /* ── Navigation ── */
+      function renderNav() {
+        const nav = $('#navGroups');
+        nav.innerHTML = '';
+        groupsMeta.forEach(g => {
+          const n = (g.keys && g.keys.length) || 0;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'nav-btn';
+          b.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis">' + esc(g.title) + '</span><span class="nav-count">' + n + '</span>';
+          b.addEventListener('click', () => {
+            const el = document.getElementById('grp-' + g.id);
+            if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+            $$('#navGroups .nav-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            $('#sidebar').classList.remove('open');
+          });
+          nav.appendChild(b);
+        });
+      }
+
+      function renderCatalogNav() {
+        const nav = $('#navCatalog');
+        if (!nav) return;
+        nav.innerHTML = '';
+        catalogGroupsMeta.forEach(g => {
+          const n = (g.keys && g.keys.length) || 0;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'nav-btn';
+          b.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis">' + esc(g.title) + '</span><span class="nav-count">' + n + '</span>';
+          b.addEventListener('click', () => {
+            const el = document.getElementById('simple-grp-' + g.id);
+            if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+            $$('#navCatalog .nav-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            $('#sidebar').classList.remove('open');
+          });
+          nav.appendChild(b);
+        });
+      }
+
+      /* ── Key Filter ── */
+      function applyKeyFilter() {
+        const q = ($('#keyFilter').value || '').trim().toLowerCase();
+        const clearBtn = $('#keyFilterClear');
+        const countEl = $('#keyFilterCount');
+        clearBtn.classList.toggle('visible', q.length > 0);
+
+        let total = 0, visible = 0;
+        $$('.key-block:not(.key-block-simple)').forEach(el => {
+          total++;
+          const k = (el.dataset.key || '').toLowerCase();
+          const show = q.length === 0 || k.includes(q);
+          el.classList.toggle('hidden', !show);
+          if (show) visible++;
+        });
+        $$('.section-group:not(.section-group-simple)').forEach(det => {
+          const vis = $$('.key-block:not(.key-block-simple)', det).some(b => !b.classList.contains('hidden'));
+          det.style.display = vis ? '' : 'none';
+        });
+        if (q.length > 0) {
+          countEl.textContent = 'Найдено: ' + visible + ' из ' + total;
+          countEl.classList.add('visible');
+        } else {
+          countEl.classList.remove('visible');
+        }
+      }
+
+      function applyKeyFilterSimple() {
+        const q = ($('#keyFilterSimple').value || '').trim().toLowerCase();
+        const clearBtn = $('#keyFilterSimpleClear');
+        const countEl = $('#keyFilterSimpleCount');
+        clearBtn.classList.toggle('visible', q.length > 0);
+
+        let total = 0, visible = 0;
+        $$('.key-block-simple').forEach(el => {
+          total++;
+          const k = (el.dataset.key || '').toLowerCase();
+          const show = q.length === 0 || k.includes(q);
+          el.classList.toggle('hidden', !show);
+          if (show) visible++;
+        });
+        $$('.section-group-simple').forEach(det => {
+          const vis = $$('.key-block-simple', det).some(b => !b.classList.contains('hidden'));
+          det.style.display = vis ? '' : 'none';
+        });
+        if (q.length > 0) {
+          countEl.textContent = 'Найдено: ' + visible + ' из ' + total;
+          countEl.classList.add('visible');
+        } else {
+          countEl.classList.remove('visible');
+        }
+      }
+
+      $('#keyFilterClear').addEventListener('click', () => {
+        $('#keyFilter').value = '';
+        applyKeyFilter();
+        $('#keyFilter').focus();
+      });
+
+      $('#keyFilterSimpleClear').addEventListener('click', () => {
+        $('#keyFilterSimple').value = '';
+        applyKeyFilterSimple();
+        $('#keyFilterSimple').focus();
+      });
+
+      /* ── Render Sections (JSON) ── */
+      function renderSections() {
+        const mount = $('#sectionsMount');
+        mount.innerHTML = '';
+        groupsMeta.forEach((g, idx) => {
+          const det = document.createElement('details');
+          det.className = 'section-group';
+          det.id = 'grp-' + g.id;
+          det.open = idx === 0;
+          const sum = document.createElement('summary');
+          const nk = (g.keys && g.keys.length) || 0;
+          sum.innerHTML = chevronSvg + '<span class="group-title">' + esc(g.title) + '</span> <span class="badge badge-count">' + nk + '</span>';
+          det.appendChild(sum);
+          if (g.hint) {
+            const hi = document.createElement('div');
+            hi.className = 'group-hint';
+            hi.textContent = g.hint;
+            det.appendChild(hi);
+          }
+          (g.keys || []).forEach(key => {
+            det.appendChild(renderKeyBlock(key));
+          });
+          mount.appendChild(det);
+        });
+        applyKeyFilter();
+      }
+
+      function renderKeyBlock(key) {
+        const wrap = document.createElement('div');
+        wrap.className = 'key-block';
+        wrap.dataset.key = key;
+        const head = document.createElement('div');
+        head.className = 'key-head';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'key-name';
+        nameSpan.textContent = key;
+        head.appendChild(nameSpan);
+        const inInit = initObj && key in initObj;
+        const badge = document.createElement('span');
+        badge.className = 'badge' + (inInit ? ' badge-accent' : '');
+        badge.textContent = inInit ? 'в init' : 'только current';
+        head.appendChild(badge);
+        const actions = document.createElement('div');
+        actions.className = 'key-actions';
+        const bCopy = document.createElement('button');
+        bCopy.type = 'button';
+        bCopy.className = 'btn btn-ghost btn-sm';
+        bCopy.innerHTML = '<svg style="width:12px;height:12px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/></svg> current → init';
+        bCopy.addEventListener('click', () => {
+          const ta = wrap.querySelector('.ta-init');
+          ta.value = stringifyKey(currentObj, key) || 'null';
+          showToast('Значение из current скопировано', 'ok');
+        });
+        const bSave = document.createElement('button');
+        bSave.type = 'button';
+        bSave.className = 'btn btn-sm';
+        bSave.innerHTML = '<svg style="width:12px;height:12px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> Сохранить';
+        bSave.addEventListener('click', () => saveSection(key, wrap));
+        actions.appendChild(bCopy);
+        actions.appendChild(bSave);
+        head.appendChild(actions);
+        wrap.appendChild(head);
+
+        const dual = document.createElement('div');
+        dual.className = 'dual';
+        const colInit = document.createElement('div');
+        colInit.className = 'dual-col';
+        colInit.innerHTML = '<h4><span class="dot dot-init"></span> init.conf (редактор)</h4>';
+        const colCur = document.createElement('div');
+        colCur.className = 'dual-col';
+        colCur.innerHTML = '<h4><span class="dot dot-current"></span> current.conf (просмотр)</h4>';
+        const taInit = document.createElement('textarea');
+        taInit.className = 'code code-sm ta-init';
+        taInit.spellcheck = false;
+        taInit.value = stringifyKey(initObj, key) || '';
+        const taCur = document.createElement('textarea');
+        taCur.className = 'code code-sm';
+        taCur.readOnly = true;
+        taCur.style.opacity = '0.65';
+        taCur.value = stringifyKey(currentObj, key) || '// нет в current';
+        colInit.appendChild(taInit);
+        colCur.appendChild(taCur);
+        dual.appendChild(colInit);
+        dual.appendChild(colCur);
+        wrap.appendChild(dual);
+        return wrap;
+      }
+
+      /* ── Render Simple Editor ── */
+      function renderSimpleSections() {
+        const mount = $('#simpleMount');
+        if (!mount) return;
+        mount.innerHTML = '';
+        catalogGroupsMeta.forEach((g, idx) => {
+          const det = document.createElement('details');
+          det.className = 'section-group section-group-simple';
+          det.id = 'simple-grp-' + g.id;
+          det.open = idx === 0;
+          const sum = document.createElement('summary');
+          const nk = (g.keys && g.keys.length) || 0;
+          sum.innerHTML = chevronSvg + '<span class="group-title">' + esc(g.title) + '</span> <span class="badge badge-count">' + nk + '</span>';
+          det.appendChild(sum);
+          if (g.hint) {
+            const hi = document.createElement('div');
+            hi.className = 'group-hint';
+            hi.textContent = g.hint;
+            det.appendChild(hi);
+          }
+          (g.keys || []).forEach(key => {
+            det.appendChild(renderKeyBlockSimple(key));
+          });
+          mount.appendChild(det);
+        });
+        applyKeyFilterSimple();
+      }
+
+      function makeScalarControl(spec, isRoot) {
+        const sk = spec.scalarKind;
+        if (sk === 'bool') {
+          const wrap = document.createElement('div');
+          wrap.className = 'simple-check';
+          const inp = document.createElement('input');
+          inp.type = 'checkbox';
+          inp.checked = spec.init === true;
+          inp.dataset.scalarKind = 'bool';
+          if (isRoot) inp.dataset.formRootScalar = '1';
+          else inp.dataset.formPath = spec.path;
+          wrap.appendChild(inp);
+          return wrap;
+        }
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.dataset.scalarKind = sk === 'num' ? 'num' : 'str';
+        if (spec.init !== undefined && spec.init !== null) inp.value = String(spec.init);
+        if (spec.init === null) inp.placeholder = 'null';
+        else if (spec.current !== undefined) inp.placeholder = 'current: ' + formatHintValue(spec.current);
+        if (isRoot) inp.dataset.formRootScalar = '1';
+        else inp.dataset.formPath = spec.path;
+        if (sk === 'num') inp.dataset.scalarKind = 'num';
+        return inp;
+      }
+
+      function renderScalarRow(spec, labelText) {
+        const row = document.createElement('div');
+        row.className = 'simple-row';
+        const lab = document.createElement('label');
+        lab.textContent = labelText;
+        const cell = document.createElement('div');
+        cell.appendChild(makeScalarControl(spec, false));
+        if (spec.current !== undefined) {
+          const hint = document.createElement('div');
+          hint.className = 'simple-cur-hint';
+          hint.textContent = 'current: ' + formatHintValue(spec.current);
+          cell.appendChild(hint);
+        }
+        row.appendChild(lab);
+        row.appendChild(cell);
+        return row;
+      }
+
+      function renderJsonBlock(spec, labelText) {
+        const wrap = document.createElement('div');
+        wrap.className = 'simple-row';
+        wrap.style.display = 'block';
+        const lab = document.createElement('label');
+        lab.textContent = labelText + ' (JSON)';
+        lab.style.display = 'block';
+        lab.style.marginBottom = 'var(--sp-2)';
+        const ta = document.createElement('textarea');
+        ta.className = 'simple-json';
+        ta.dataset.formPath = spec.path;
+        ta.dataset.formLeaf = 'json';
+        ta.value = spec.init !== undefined ? JSON.stringify(spec.init, null, 2) : '';
+        if (spec.init === undefined && spec.current !== undefined)
+          ta.placeholder = 'current: ' + formatHintValue(spec.current);
+        wrap.appendChild(lab);
+        wrap.appendChild(ta);
+        if (spec.current !== undefined) {
+          const h = document.createElement('div');
+          h.className = 'simple-cur-hint';
+          h.textContent = 'Образец из current: ' + formatHintValue(spec.current);
+          wrap.appendChild(h);
+        }
+        return wrap;
+      }
+
+      function renderObjectFields(spec, container) {
+        const keys = Object.keys(spec.children).sort((a, b) => a.localeCompare(b));
+        let any = false;
+        for (const k of keys) {
+          const ch = spec.children[k];
+          if (ch.type === 'missing') continue;
+          any = true;
+          if (ch.type === 'object') {
+            const fs = document.createElement('fieldset');
+            fs.className = 'simple-fieldset';
+            const leg = document.createElement('legend');
+            leg.textContent = k;
+            fs.appendChild(leg);
+            renderObjectFields(ch, fs);
+            container.appendChild(fs);
+          } else if (ch.type === 'scalar') {
+            container.appendChild(renderScalarRow(ch, k));
+          } else if (ch.type === 'json') {
+            container.appendChild(renderJsonBlock(ch, k));
+          }
+        }
+        if (!any) {
+          const p = document.createElement('p');
+          p.className = 'simple-missing';
+          p.textContent = 'Нет полей для отображения.';
+          container.appendChild(p);
+        }
+      }
+
+      function renderSimpleForm(mount, spec, sectionKey) {
+        mount.innerHTML = '';
+        if (spec.type === 'missing') {
+          const p = document.createElement('p');
+          p.className = 'simple-missing';
+          p.textContent = 'Секции нет в current и init. Добавьте ключ на вкладке «Группы (JSON)».';
+          mount.appendChild(p);
+          return;
+        }
+        if (spec.type === 'scalar') {
+          const row = document.createElement('div');
+          row.className = 'simple-row';
+          const lab = document.createElement('label');
+          lab.textContent = 'Значение («' + sectionKey + '»)';
+          const cell = document.createElement('div');
+          cell.appendChild(makeScalarControl(spec, true));
+          if (spec.current !== undefined) {
+            const hint = document.createElement('div');
+            hint.className = 'simple-cur-hint';
+            hint.textContent = 'current: ' + formatHintValue(spec.current);
+            cell.appendChild(hint);
+          }
+          row.appendChild(lab);
+          row.appendChild(cell);
+          mount.appendChild(row);
+          return;
+        }
+        if (spec.type === 'json') {
+          const lab = document.createElement('label');
+          lab.textContent = 'Секция (JSON)';
+          lab.style.display = 'block';
+          lab.style.marginBottom = 'var(--sp-2)';
+          lab.style.fontSize = 'var(--text-xs)';
+          lab.style.color = 'var(--text-muted)';
+          const ta = document.createElement('textarea');
+          ta.className = 'simple-json';
+          ta.dataset.formRootJson = '1';
+          ta.value = spec.init !== undefined ? JSON.stringify(spec.init, null, 2) : '';
+          if (spec.init === undefined && spec.current !== undefined)
+            ta.placeholder = 'current: ' + formatHintValue(spec.current);
+          mount.appendChild(lab);
+          mount.appendChild(ta);
+          if (spec.current !== undefined) {
+            const h = document.createElement('div');
+            h.className = 'simple-cur-hint';
+            h.textContent = 'Образец из current: ' + formatHintValue(spec.current);
+            mount.appendChild(h);
+          }
+          return;
+        }
+        if (spec.type === 'object') {
+          renderObjectFields(spec, mount);
+        }
+      }
+
+      function renderKeyBlockSimple(key) {
+        const details = document.createElement('details');
+        details.className = 'key-block key-block-simple simple-key-block';
+        details.dataset.key = key;
+        details.open = false;
+
+        const sum = document.createElement('summary');
+        sum.className = 'simple-key-summary key-head';
+        sum.innerHTML = chevronSmSvg;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'key-name';
+        nameSpan.textContent = key;
+        sum.appendChild(nameSpan);
+        const inInit = initObj && key in initObj;
+        const inCur = currentObj && key in currentObj;
+        const badge = document.createElement('span');
+        badge.className = 'badge' + (inInit ? ' badge-accent' : '');
+        badge.textContent = inInit ? 'в init' : (inCur ? 'только current' : 'нет');
+        sum.appendChild(badge);
+        const actions = document.createElement('div');
+        actions.className = 'key-actions';
+        const bSave = document.createElement('button');
+        bSave.type = 'button';
+        bSave.className = 'btn btn-sm';
+        bSave.innerHTML = '<svg style="width:12px;height:12px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> Сохранить';
+        bSave.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          saveSimpleSection(key, details);
+        });
+        actions.appendChild(bSave);
+        sum.appendChild(actions);
+        details.appendChild(sum);
+
+        const body = document.createElement('div');
+        body.className = 'simple-key-body';
+        const mount = document.createElement('div');
+        mount.className = 'simple-form-mount';
+        const c = currentObj[key];
+        const i = initObj[key];
+        const spec = formSpec(c, i, '');
+        renderSimpleForm(mount, spec, key);
+        body.appendChild(mount);
+        details.appendChild(body);
+
+        return details;
+      }
+
+      function collectSimpleSection(wrap) {
+        const mount = wrap.querySelector('.simple-form-mount');
+        if (!mount) throw new Error('Нет формы');
+        const hasControl = mount.querySelector('[data-form-path], textarea[data-form-root-json="1"], [data-form-root-scalar="1"]');
+        if (mount.querySelector('.simple-missing') && !hasControl)
+          throw new Error('Секции нет в current/init — добавьте ключ на вкладке «Группы (JSON)»');
+        const rootJ = mount.querySelector('textarea[data-form-root-json="1"]');
+        if (rootJ) {
+          const t = rootJ.value.trim();
+          if (t === '') return null;
+          return JSON.parse(t);
+        }
+        const rootS = mount.querySelector('[data-form-root-scalar="1"]');
+        if (rootS) {
+          const inner = rootS.tagName === 'INPUT' ? rootS : rootS.querySelector('input[type="checkbox"]');
+          if (!inner) throw new Error('Некорректная разметка формы');
+          return parseScalarInput(inner);
+        }
+        const obj = {};
+        mount.querySelectorAll('[data-form-path]').forEach(el => {
+          const path = el.dataset.formPath;
+          if (!path) return;
+          let val;
+          if (el.tagName === 'TEXTAREA' && el.dataset.formLeaf === 'json') {
+            const t = el.value.trim();
+            if (t === '') return;
+            val = JSON.parse(t);
+          } else if (el.type === 'checkbox') {
+            val = el.checked;
+          } else {
+            const t = el.value.trim();
+            const kind = el.dataset.scalarKind || 'str';
+            if (t === '' && kind === 'str') return;
+            if (t === '' && kind === 'num') return;
+            if (kind === 'num') {
+              const n = Number(t);
+              if (Number.isNaN(n)) throw new Error('Не число: ' + path);
+              val = n;
+            } else val = t;
+          }
+          setDeep(obj, path, val);
+        });
+        return obj;
+      }
+
+      /* ── Save Operations ── */
+      async function saveSection(key, wrap) {
+        const ta = wrap.querySelector('.ta-init');
+        const raw = ta.value.trim();
+        let body;
+        try {
+          body = raw === '' ? '{}' : raw;
+          JSON.parse(body);
+        } catch (e) {
+          showToast('JSON ошибка в «' + key + '»: ' + e.message, 'err');
+          return;
+        }
+        const res = await api('/adminpanel/api/init/section/' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body
+        });
+        if (!res.ok) {
+          let err = 'Ошибка ' + res.status;
+          try { const j = await res.json(); if (j.error) err = j.error + (j.detail ? ': ' + j.detail : ''); } catch (e) { }
+          showToast(err, 'err');
+          return;
+        }
+        showToast('«' + key + '» сохранено в init.conf', 'ok');
+        await refresh();
+      }
+
+      async function saveSimpleSection(key, wrap) {
+        let body;
+        try {
+          body = collectSimpleSection(wrap);
+        } catch (e) {
+          showToast('«' + key + '»: ' + (e.message || String(e)), 'err');
+          return;
+        }
+        const raw = JSON.stringify(body);
+        try { JSON.parse(raw); } catch (e) {
+          showToast('JSON ошибка: ' + e.message, 'err');
+          return;
+        }
+        const res = await api('/adminpanel/api/init/section/' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: raw
+        });
+        if (!res.ok) {
+          let err = 'Ошибка ' + res.status;
+          try { const j = await res.json(); if (j.error) err = j.error + (j.detail ? ': ' + j.detail : ''); } catch (e) { }
+          showToast(err, 'err');
+          return;
+        }
+        showToast('«' + key + '» сохранено (простой редактор)', 'ok');
+        await refresh();
+      }
+
+      async function saveFullInit() {
+        const raw = $('#initRaw').value;
+        try { JSON.parse(raw); } catch (e) {
+          showToast('JSON ошибка: ' + e.message, 'err');
+          return;
+        }
+        const ok = await showConfirm('Сохранить init.conf?', 'Весь файл init.conf будет перезаписан. Это действие нельзя отменить.');
+        if (!ok) return;
+
+        const res = await api('/adminpanel/api/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: raw
+        });
+        if (!res.ok) {
+          let err = 'Ошибка ' + res.status;
+          try { const j = await res.json(); if (j.error) err = j.error + (j.detail ? ': ' + j.detail : ''); } catch (e) { }
+          showToast(err, 'err');
+          return;
+        }
+        showToast('init.conf сохранён', 'ok');
+        await refresh();
+      }
+
+      async function saveUsersJson() {
+        if (usersEditorView === 'form' && !usersSerializeFormToTextarea())
+          return;
+        const raw = $('#usersRaw').value.trim();
+        let parsed;
+        try {
+          parsed = JSON.parse(raw === '' ? '[]' : raw);
+        } catch (e) {
+          showToast('JSON ошибка: ' + e.message, 'err');
+          return;
+        }
+        if (!Array.isArray(parsed)) {
+          showToast('Корень должен быть JSON-массивом', 'err');
+          return;
+        }
+        const ok = await showConfirm('Сохранить users.json?', 'Файл users.json в рабочей директории будет перезаписан.');
+        if (!ok) return;
+
+        const body = JSON.stringify(parsed);
+        const res = await api('/adminpanel/api/users-json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body
+        });
+        if (!res.ok) {
+          let err = 'Ошибка ' + res.status;
+          try { const j = await res.json(); if (j.error) err = j.error + (j.detail ? ': ' + j.detail : ''); } catch (e) { }
+          showToast(err, 'err');
+          return;
+        }
+        showToast('users.json сохранён', 'ok');
+        await refresh();
+      }
+
+      async function saveActiveConfig() {
+        if (activePanelId() === 'users')
+          return saveUsersJson();
+        return saveFullInit();
+      }
+
+      /* ── Copy to clipboard ── */
+      function copyToClipboard(text, label) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(label + ' скопировано', 'ok');
+        }).catch(() => {
+          showToast('Не удалось скопировать', 'err');
+        });
+      }
+
+      $('#copyInitBtn').addEventListener('click', () => copyToClipboard($('#initRaw').value, 'init.conf'));
+      $('#copyCurrentBtn').addEventListener('click', () => copyToClipboard($('#currentRaw').value, 'current.conf'));
+
+      /* ── Refresh ── */
+      async function refresh() {
+        try {
+          await loadGroupsMeta();
+          await loadCatalogGroupsMeta();
+          renderNav();
+          renderCatalogNav();
+          await loadConfigs();
+          await loadUsersJson();
+          renderSections();
+          renderSimpleSections();
+        } catch (e) {
+          showToast(e.message || String(e), 'err');
+        }
+      }
+
+      /* ── Event Listeners ── */
+      $('#reloadBtn').addEventListener('click', refresh);
+      $('#saveInitBtn').addEventListener('click', saveActiveConfig);
+      $('#formatInitBtn').addEventListener('click', () => {
+        try {
+          $('#initRaw').value = JSON.stringify(JSON.parse($('#initRaw').value), null, 2);
+          showToast('JSON отформатирован', 'ok');
+        } catch (e) {
+          showToast('Формат: ' + e.message, 'err');
+        }
+      });
+
+      $('#formatUsersBtn').addEventListener('click', () => {
+        try {
+          if (usersEditorView === 'form') usersSerializeFormToTextarea();
+          const t = $('#usersRaw').value.trim();
+          $('#usersRaw').value = JSON.stringify(JSON.parse(t === '' ? '[]' : t), null, 2);
+          if (usersEditorView === 'form') usersRefreshFormFromTextarea();
+          showToast('JSON отформатирован', 'ok');
+        } catch (e) {
+          showToast('Формат: ' + e.message, 'err');
+        }
+      });
+
+      $('#copyUsersBtn').addEventListener('click', () => {
+        if (usersEditorView === 'form' && !usersSerializeFormToTextarea()) return;
+        copyToClipboard($('#usersRaw').value, 'users.json');
+      });
+
+      $('#saveUsersBtn').addEventListener('click', saveUsersJson);
+
+      $$('#panel-users .users-inner-tabs .tab').forEach(btn => {
+        btn.addEventListener('click', () => usersSwitchSubView(btn.dataset.usersView));
+      });
+
+      $('#usersAddBtn').addEventListener('click', () => {
+        if (usersEditorView !== 'form')
+          usersSwitchSubView('form');
+        try {
+          if (usersFormData.length) usersDetailToData();
+        } catch (e) {
+          showToast(e.message || String(e), 'err');
+          return;
+        }
+        usersFormData.push(usersEmptyRow());
+        usersSelectedIndex = usersFormData.length - 1;
+        usersRenderListAndDetail();
+      });
+
+      $('#usersFormFromJsonBtn').addEventListener('click', () => {
+        usersRefreshFormFromTextarea();
+        showToast('Форма обновлена из JSON', 'ok');
+      });
+
+      // Tabs (только верхняя полоса и мобильные — не внутренние вкладки users.json)
+      $$('.topbar .tabs .tab[data-panel], #mobileTabs .tab[data-panel]').forEach(t =>
+        t.addEventListener('click', () => switchPanel(t.dataset.panel)));
+
+      // Theme
+      $('#themeBtn').addEventListener('click', () => {
+        const d = document.documentElement.getAttribute('data-theme') === 'dark';
+        setTheme(!d);
+      });
+
+      setTheme(initialThemeIsDark());
+
+      // Mobile nav
+      $('#navToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+      // Jump navigation
+      $$('[data-jump]').forEach(b => b.addEventListener('click', () => {
+        const id = b.getAttribute('data-jump');
+        if (id === 'sections-top') { $('#sectionsMount').scrollIntoView({ behavior: 'smooth' }); return; }
+        const el = document.getElementById(id);
+        if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        $('#sidebar').classList.remove('open');
+      }));
+
+      $$('[data-jump-simple]').forEach(b => b.addEventListener('click', () => {
+        const jid = b.getAttribute('data-jump-simple');
+        if (jid === 'simple-top') { $('#simpleMount').scrollIntoView({ behavior: 'smooth' }); $('#sidebar').classList.remove('open'); return; }
+        const el = document.getElementById(jid);
+        if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        $('#sidebar').classList.remove('open');
+      }));
+
+      // Filters
+      $('#keyFilter').addEventListener('input', applyKeyFilter);
+      $('#keyFilterSimple').addEventListener('input', applyKeyFilterSimple);
+
+      /* ── Keyboard Shortcuts ── */
+      document.addEventListener('keydown', (e) => {
+        // Ctrl+S / Cmd+S — save init
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          saveActiveConfig();
+        }
+        // Alt+R — reload
+        if (e.altKey && e.key === 'r') {
+          e.preventDefault();
+          refresh();
+        }
+        // Alt+T — toggle theme
+        if (e.altKey && e.key === 't') {
+          e.preventDefault();
+          const d = document.documentElement.getAttribute('data-theme') === 'dark';
+          setTheme(!d);
+        }
+        // Escape — close dialogs / sidebar
+        if (e.key === 'Escape') {
+          $('#confirmDialog').classList.add('hidden');
+          $('#sidebar').classList.remove('open');
+        }
+      });
+
+      /* ── Boot ── */
+      (async function boot() {
+        try {
+          await loadGroupsMeta();
+          await loadCatalogGroupsMeta();
+          renderNav();
+          renderCatalogNav();
+          await loadConfigs();
+          await loadUsersJson();
+          renderSections();
+          renderSimpleSections();
+        } catch (e) {
+          showToast(e.message || String(e), 'err');
+        }
+      })();
+    })();
+  </script>
+</body>
+
+</html>

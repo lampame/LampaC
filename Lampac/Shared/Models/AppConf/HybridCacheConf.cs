@@ -1,11 +1,10 @@
-﻿namespace Shared.Models.AppConf
+﻿namespace Shared.Models.AppConf;
+
+public class HybridCacheConf
 {
-    public class HybridCacheConf
-    {
-        public string type { get; set; }
+    public string type { get; set; }
 
-        public int extend { get; set; }
+    public bool memExtend { get; set; }
 
-        public int reqIPs { get; set; }
-    }
+    public int extend { get; set; }
 }

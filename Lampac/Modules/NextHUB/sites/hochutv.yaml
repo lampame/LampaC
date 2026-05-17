@@ -1,0 +1,27 @@
+enable: false
+displayindex: 95
+displayname: HochuTV
+host: http://hochu.tv
+priorityBrowser: http
+geostreamproxy: ["ALL"]
+
+list:
+  uri: ""
+  total_pages: 1
+
+contentParse:
+  nodes: //td
+  name:
+    node: .//div[@class='titchan']
+  href:
+    node: .//a 
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+
+view:
+  bindingToIP: true
+  patternFile: \.m3u
+  patternAbortEnd: \.(mp4|m3u|ts|mpd)
+  patternWhiteRequest: cdntvpotok.com

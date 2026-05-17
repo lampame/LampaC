@@ -1,0 +1,52 @@
+enable: true
+displayindex: 230
+displayname: XXXperevod
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+#https://xxxperevod.com
+host: https://c.xxxperevod.icu
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Топ рейтинга: top-rated/{page}/
+    Популярное: most-popular/{page}/
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/?from_videos={page}
+
+contentParse:
+  nodes: //div[contains(@class, 'item')]
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();
+
+#view:
+#  related: true
+#  addInitScript: localStorage.setItem('kvsplayer_selected_format', '720p');
+#  patternFile: /get_file/
+#  patternWhiteRequest: kt_player\.
+#  waitLocationFile: true

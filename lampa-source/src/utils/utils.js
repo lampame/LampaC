@@ -328,7 +328,9 @@ function shortText(fullStr, strLen, separator){
 }
 
 function protocol(){
-    return window.location.protocol == 'https:' ? 'https://' : (localStorage.getItem('protocol') || 'https') + '://'
+    let prot = Storage.get('protocol') || 'https'
+
+    return window.location.protocol == 'https:' ? 'https://' : prot + '://'
 }
 
 

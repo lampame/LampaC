@@ -1,0 +1,105 @@
+enable: false
+displayindex: 140
+displayname: Rusporno
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://wwv.rusporno.org
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  categories:
+    format: categories/{cat}/{page}/
+    Анальный секс: analnyy-seks
+    Блондинки: blondinki
+    Большие попы: bolshie-popy
+    Большие сиськи: bolshie-siski
+    Большие члены: bolshie-chleny
+    Бритые киски: britye-kiski
+    Брюнетки: bryunetki
+    Веб-камера: veb-kamera
+    Волосатые: volosatye
+    Горячие сучки: goryachii-suchki
+    Групповой секс: gruppovoy-seks
+    Двойное проникновение: dvoynoe-proniknovenie
+    Двойной анал: dvoynoy-anal
+    Домашнее и любители: domashnee-i-lyubitelskoe
+    Жесткое и хардкор: jestkoe-i-hardkor
+    Зрелые женщины: zrelye-jenshchiny
+    Кастинги Вудмана: kasting-vudmana
+    Красивые и милые: krasivye-i-milye
+    Крупным планом: porno-krupnym-planom
+    Куколд и сексвайф: kukold-i-seksvayf
+    Куни: kuni
+    Лижет анус: lijet-anus
+    Маленькие сиськи: malenkie-siski
+    Мамки: mamki
+    Мастурбация и соло: masturbaciya-i-solo
+    Межрассовый секс: mejrassovyy-seks
+    Минет: minet
+    Молодые девушки: molodye-devushki
+    На публике: na-publike
+    Нежный секс: nejnyy-seks
+    От первого лица: ot-pervogo-lica
+    Пикап: pikap
+    Порно в чулках: porno-v-chulkah
+    Порно вечеринки: porno-vecherinki
+    Порно звезды: porno-zvezdy
+    Порно кастинги: porno-kastingi
+    Порно массаж: porno-massaj
+    Порно с азиатками: porno-s-aziatkami
+    Порно с латинками: porno-s-latinkami
+    Порно с разговорами: porno-s-razgovorami
+    Порно студентов: porno-studentov
+    Пьяные: pyanye
+    Русские свингеры: russkie-svingery
+    Русское порно: russkoe-porno
+    Рыжеволосые: ryjevolosye
+    Секс в машине: seks-v-mashine
+    Секс втроем: seks-vtroem
+    Сексуальные девушки: seksualnye-suchki
+    Сквирт: skvirt
+    Сперма и Камшоты: sperma-i-kamshoty
+    Старики и молодые: stariki-i-molodye
+    Страпон: strapon
+    Стриптиз: striptiz
+    Толстушки: tolstushki
+    У гинеколога: u-ginekologa
+    Фистинг: fisting
+    Худенькие девушки: hudenkie-devushki
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/?mode=async&function=get_block&block_id=list_videos_videos_list_search_result&from_videos={page}
+
+contentParse:
+  nodes: //div[@class='item  ']
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//video
+    attribute: src
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();
+
+#view:
+#  related: true
+#  patternFile: /get_file/
+#  patternWhiteRequest: kt_player\.
+#  waitLocationFile: true

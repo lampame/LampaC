@@ -1,4 +1,5 @@
-﻿using Shared.Models;
+﻿using Jint;
+using System.Text.Json;
 
 public static class Extensions
 {
@@ -28,5 +29,29 @@ public static class Extensions
                 dest[i] = char.ToLowerInvariant(src[i]);
             }
         });
+    }
+
+    public static T Invoke<T>(this Engine engine, string propertyName, params object[] arguments) where T : class
+    {
+        var result = engine.Invoke(propertyName, arguments);
+        if (result == null || result.IsNull() || result.IsUndefined())
+            return default;
+
+        if (typeof(T) == typeof(string))
+            return (T)(object)result.AsString();
+
+        return JsonSerializer.Deserialize<T>(result.AsString());
+    }
+
+    async public static Task<T> InvokeAsync<T>(this Engine engine, string propertyName, params object[] arguments) where T : class
+    {
+        var result = await engine.InvokeAsync(propertyName, arguments);
+        if (result == null || result.IsNull() || result.IsUndefined())
+            return default;
+
+        if (typeof(T) == typeof(string))
+            return (T)(object)result.AsString();
+
+        return JsonSerializer.Deserialize<T>(result.AsString());
     }
 }

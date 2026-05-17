@@ -1,0 +1,44 @@
+enable: true
+displayindex: 403
+displayname: 3Movs
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://www.3movs.com
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Недавно добавленные: latest-updates/{page}/
+    Самые просматриваемые: most-viewed/all-time/{page}/
+    Топ рейтинг: top-rated/all-time/{page}/
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[contains(@class,'item thumb')]
+  name:
+    node: .//a[@class='title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-src
+  duration:
+    node: .//div[@class='time']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["video_url", "video_alt_url"]
+    pattern: "{value}:[\t ]+'([^']+)'"

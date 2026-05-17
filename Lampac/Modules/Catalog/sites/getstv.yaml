@@ -1,0 +1,124 @@
+enable: false
+jsonPath: true
+displayindex: 45
+displayname: GetsTV
+host: https://getstv.com/api
+
+headers:
+  user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36
+  authorization: Bearer token
+
+
+movie_cats:
+  - film
+
+serial_cats:
+  - serial
+  - show
+
+catalog_key: Новинки
+
+menu:
+  - categories:
+      Фильмы: film
+      Сериалы: serial
+      Шоу: show
+      Аниме: anime
+    sort:
+      Новинки: year
+      Популярные: popular
+      Последние поступления: created
+      Обновления: updated
+      По рейтингу: rating
+    format:
+      sort: |
+        int skip = (page * 50) - 50;
+        return $"movies?skip={skip}&contentType={cat}&sort={sort}";
+
+
+search:
+  uri: movies?searchText={search}&sort=year
+  total_pages: 5
+  initUrl: |
+    int skip = (page * 50) - 50;
+    return $"{url}?skip={skip}";
+
+list:
+  total_pages: 1000
+
+content:
+  nodes: "$[*]"
+  serial_key:
+    attribute: contentType
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      string type = value.ToLowerInvariant();
+      return type == "episode" || type.EndsWith("episode") ? type : null;
+  name:
+    node: title
+    attributes:
+      - ru
+      - en
+  original_name:
+    node: title
+    attribute: en
+  href:
+    attribute: _id
+  image:
+    attributes:
+      - poster
+      - bgPoster
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      return $"https://img.getstv.com/poster/cover/345x518/{value.Trim()}.jpg";
+  year:
+    attribute: released
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      if (DateTime.TryParse(value, out var dt))
+          return dt.Year > 0 ? dt.Year.ToString() : null;
+      var match = Regex.Match(value, "\\d{4}");
+      return match.Success ? match.Value : null;
+  args:
+    - name_arg: vote_average
+      attribute: rating
+
+
+card_parse:
+  initUrl: |
+    return $"{host}/movies/{uri}";
+  name:
+    node: title
+    attributes:
+      - ru
+      - en
+  original_name:
+    node: title
+    attribute: en
+  year:
+    attribute: year
+  image:
+    attributes:
+      - poster
+      - bgPoster
+    format: |
+      if (string.IsNullOrEmpty(value))
+          return null;
+      return $"https://img.getstv.com/poster/cover/345x518/{value.Trim()}.jpg";
+  description:
+    attribute: description
+
+card_args:
+  - name_arg: vote_average
+    attribute: rating
+  - name_arg: genres
+    attribute: genres
+  - name_arg: production_countries
+    attribute: countries
+
+
+tmdb_injects:
+  - default

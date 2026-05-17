@@ -1,99 +1,82 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Caching.Memory;
-using Shared.Models.SISI.Base;
+using Shared.Models.Module.Interfaces;
+using System.Reflection;
 
-namespace Shared.Models.Module.Entrys
+namespace Shared.Models.Module.Entrys;
+
+public class SisiModuleEntry
 {
-    public class SisiModuleEntry
+    public static List<IModuleSisi> Modules;
+    public static List<IModuleSisiAsync> ModulesAsync;
+
+    static readonly object _lock = new object();
+
+    public static void EnsureCache(bool forced = false)
     {
-        public RootModule mod;
+        if (forced == false && Modules != null)
+            return;
 
-        // version >= 3
-        public Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, List<ChannelItem>> Invoke = null;
-        public Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, Task<List<ChannelItem>>> InvokeAsync = null;
-
-        // version < 3
-        public Func<string, List<ChannelItem>> Events = null;
-
-        public static List<SisiModuleEntry> sisiModulesCache = null;
-        static readonly object _sisiModulesCacheLock = new object();
-
-        public static void EnsureCache(bool forced = false)
+        lock (_lock)
         {
-            if (AppInit.modules == null)
+            if (forced == false && Modules != null)
                 return;
 
-            if (forced == false && sisiModulesCache != null)
-                return;
+            Modules = new List<IModuleSisi>();
+            ModulesAsync = new List<IModuleSisiAsync>();
 
-            lock (_sisiModulesCacheLock)
+            try
             {
-                if (forced == false && sisiModulesCache != null)
-                    return;
-
-                sisiModulesCache = new List<SisiModuleEntry>();
-
-                try
+                foreach (var mod in CoreInit.modules.Where(m => m?.assembly != null && m.enable))
                 {
-                    foreach (var mod in AppInit.modules.Where(i => i.sisi != null && i.enable))
+                    var asm = mod.assembly;
+
+                    IEnumerable<Type> types;
+
+                    try
+                    {
+                        types = asm.GetTypes();
+                    }
+                    catch (ReflectionTypeLoadException rtle)
+                    {
+                        Serilog.Log.Error(rtle, "CatchId={CatchId}", "id_83c22b34");
+                        types = rtle.Types.Where(t => t != null);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    foreach (var type in types)
                     {
                         try
                         {
-                            var entry = new SisiModuleEntry() { mod = mod };
-
-                            var assembly = mod.assembly;
-                            if (assembly == null)
+                            if (!type.IsClass || type.IsAbstract)
                                 continue;
 
-                            var type = assembly.GetType(mod.NamespacePath(mod.sisi));
-                            if (type == null)
-                                continue;
-
-                            if (mod.version >= 3)
+                            if (typeof(IModuleSisi).IsAssignableFrom(type))
                             {
-                                try
-                                {
-                                    var m = type.GetMethod("Invoke");
-                                    if (m != null)
-                                    {
-                                        entry.Invoke = (Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, List<ChannelItem>>)Delegate.CreateDelegate(
-                                            typeof(Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, List<ChannelItem>>), m);
-                                    }
-                                }
-                                catch { }
-
-                                try
-                                {
-                                    var m2 = type.GetMethod("InvokeAsync");
-                                    if (m2 != null)
-                                    {
-                                        entry.InvokeAsync = (Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, Task<List<ChannelItem>>>)Delegate.CreateDelegate(
-                                            typeof(Func<HttpContext, IMemoryCache, RequestModel, string, SisiEventsModel, Task<List<ChannelItem>>>), m2);
-                                    }
-                                }
-                                catch { }
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    var m = type.GetMethod("Events");
-                                    if (m != null)
-                                    {
-                                        entry.Events = (Func<string, List<ChannelItem>>)Delegate.CreateDelegate(
-                                            typeof(Func<string, List<ChannelItem>>), m);
-                                    }
-                                }
-                                catch { }
+                                // Требуется public parameterless ctor
+                                var instance = Activator.CreateInstance(type) as IModuleSisi;
+                                if (instance != null)
+                                    Modules.Add(instance);
                             }
 
-                            if (entry.Invoke != null || entry.InvokeAsync != null || entry.Events != null)
-                                sisiModulesCache.Add(entry);
+                            if (typeof(IModuleSisiAsync).IsAssignableFrom(type))
+                            {
+                                var instance = Activator.CreateInstance(type) as IModuleSisiAsync;
+                                if (instance != null)
+                                    ModulesAsync.Add(instance);
+                            }
                         }
-                        catch { }
+                        catch
+                        {
+                            // игнорируем сломанные типы
+                        }
                     }
                 }
-                catch { }
+            }
+            catch (System.Exception ex)
+            {
+                Serilog.Log.Error(ex, "{Class} {CatchId}", "SisiModuleEntry", "id_txay880j");
             }
         }
     }

@@ -1,0 +1,93 @@
+enable: true
+jsonPath: true
+displayindex: 20
+displayname: FilmixApp
+host: http://filmixapp.cyou/api/v2
+args: app_lang=ru_RU&user_dev_apk=2.2.10.0&user_dev_id=ghsaksdhy13fd&user_dev_name=Xiaomi+24069PC21G&user_dev_os=14&user_dev_token=&user_dev_vendor=Xiaomi
+
+movie_cats:
+  - s0
+  - s14
+
+serial_cats:
+  - s7
+  - s93
+
+catalog_key: Новинки
+
+menu:
+  - categories:
+      Фильмы: s0
+      Сериалы: s7
+      Мультфильмы: s14
+      Мультсериалы: s93
+    sort:
+      Новинки: year
+      Последние поступления: date
+      Популярные: rating
+    format:
+      sort: |
+        string u = url;
+        if (cat != null) u += $"&filter={cat}";
+        if (sort != null) u += $"&orderby={sort}&orderdir=desc";
+        return u;
+
+
+search:
+  uri: search?story={search}&page={page}
+  total_pages: 5
+
+list:
+  uri: catalog?page={page}
+  total_pages: 5000
+
+content:
+  nodes: "$[*]"
+  serial_key:
+    node: last_episode
+    attribute: post_id
+  name:
+    attribute: title
+  original_name:
+    attribute: original_title
+  href:
+    attribute: id
+  image:
+    attribute: poster
+  year:
+    attribute: year
+  args:
+    - name_arg: release_quality
+      attribute: quality
+      format: |
+        string q = Regex.Match(value.Trim(), " ([^ ]+)$").Groups[1].Value.Replace("+", "");
+        return string.IsNullOrEmpty(q) ? value : $"{q}p";
+
+
+card_parse:
+  initUrl: |
+    return $"{host}/post/{uri}?{args}";
+  name:
+    attribute: title
+  original_name:
+    attribute: original_title
+  year:
+    attribute: year
+  image:
+    attribute: poster
+  description:
+    attribute: short_story
+
+card_args:
+  - name_arg: kp_rating
+    attribute: kp_rating
+  - name_arg: imdb_rating
+    attribute: imdb_rating
+  - name_arg: production_countries
+    attribute: countries
+  - name_arg: genres
+    attribute: categories
+
+
+tmdb_injects:
+  - default

@@ -1,0 +1,59 @@
+enable: true
+displayindex: 231
+displayname: 24rolika
+rch_access: apk
+stream_access: apk
+streamproxy: true
+host: https://w2.huyalkino.com
+priorityBrowser: http
+headers_stream:
+  referer: "{host}/"
+
+menu:
+  categories:
+    format: "{cat}/page/{page}/"
+    С русской озвучкой: russian
+    Русское порно: russia
+    Анал: gopa
+    Ретро: retro
+    Азиатки: asian-girl
+    БДСМ: bdsm
+    Большие члены: big-cock
+    Большие сиськи: big-tits
+    Групповуха: group
+    Лесбиянки: lesbi
+    Молодые девушки: teen
+    Женская мастурбация: solo
+    Красивый секс: beautiful
+    Межрасовое: black
+    Домашнее: homemade
+    Ютуб: youtube-porno
+    Одноклассники: ok
+    Инцест: incest
+    Оргазмы: orgasms
+
+list:
+  uri: page/{page}/
+
+search:
+  uri: index.php?do=search&subaction=search&search_start={page}&full_search=0&story={search}
+
+contentParse:
+  nodes: //div[@class='thumb']
+  name:
+    node: .//a[@class='th-title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-src
+  duration:
+    node: .//div[@class='th-time icon-l']
+
+view:
+  bindingToIP: true
+  related: true 
+  viewsource: true
+  regexMatch:
+    pattern: 'file:"([^"]+)"'

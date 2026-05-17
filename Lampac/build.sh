@@ -1,62 +1,54 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
 
-echo "Building Lampac project with all modules..."
+OUTPUT="${OUTPUT:-publish}"
+CONFIG="${CONFIG:-Release}"
 
-# Verify .NET version
-echo "Using .NET version: $(dotnet --version)"
-
-# Clean previous builds
-echo "Cleaning previous builds..."
-rm -rf ./publish ./bin ./obj
-
-# Restore dependencies for entire solution
-echo "Restoring NuGet packages..."
-dotnet restore Lampac.sln
-
-# Build all core projects in Release mode
-echo "Building core solution..."
-dotnet build Lampac.sln --configuration Release --no-restore
-
-# Build and publish main application
-echo "Publishing main application..."
-dotnet publish Lampac/Lampac.csproj --configuration Release --output ./publish --no-build
-
-# Copy module references and compile dynamic modules
-echo "Setting up modules..."
-mkdir -p ./publish/module/references
-
-# Copy reference DLLs for module compilation
-find . -name "*.dll" -path "*/bin/Release/*" -not -path "*/publish/*" | while read dll; do
-    cp "$dll" ./publish/module/references/ 2>/dev/null || true
+CLEAN=false
+FORMAT=false
+extra_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --clean|-C)
+      CLEAN=true
+      ;;
+    --format)
+      FORMAT=true
+      ;;
+    *)
+      extra_args+=("$arg")
+      ;;
+  esac
 done
 
-# Copy module source files if they exist
-if [ -d "module" ]; then
-    echo "Copying module files..."
-    cp -r module ./publish/
-
-    # Compile any source-based modules
-    if [ -f "module/manifest.json" ]; then
-        echo "Compiling dynamic modules..."
-        cd ./publish
-
-        # Use dotnet build to compile modules (this triggers the compilation logic in Startup.cs)
-        dotnet build --configuration Release --no-restore || echo "Module compilation completed with warnings"
-
-        cd ..
-    fi
+if [[ "$FORMAT" == true ]]; then
+  dotnet format NextGen.slnx
+  exit 0
 fi
 
-# Copy configuration files
-echo "Copying configuration files..."
-cp init.conf ./publish/ 2>/dev/null || echo "init.conf not found, will use defaults"
-cp init.yaml ./publish/ 2>/dev/null || echo "init.yaml not found, will use defaults"
+if [[ "$CLEAN" == true ]]; then
+  while IFS= read -r -d '' d; do
+    rm -rf "$d"
+  done < <(find "$ROOT" \( -name node_modules -o -name .git \) -prune -o -type d \( -name bin -o -name obj \) -print0)
+  exit 0
+fi
 
-echo "Build completed successfully!"
-echo "Full application with modules available in ./publish directory"
-echo ""
-echo "To run the application:"
-echo "  cd ./publish"
-echo "  dotnet Lampac.dll"
+args=(
+  "Core/Core.csproj"
+  "-c" "$CONFIG"
+  "--self-contained" "false"
+  "-o" "$OUTPUT"
+)
+
+if [[ -n "${RUNTIME_ID:-}" ]]; then
+  args+=("-r" "$RUNTIME_ID")
+fi
+
+if ((${#extra_args[@]} > 0)); then
+  dotnet publish "${args[@]}" "${extra_args[@]}"
+else
+  dotnet publish "${args[@]}"
+fi

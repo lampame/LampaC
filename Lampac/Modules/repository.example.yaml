@@ -1,0 +1,8 @@
+- repository: https://github.com/example/private-modules
+  branch: beta-feature
+  modules:
+    - AwesomeModule1
+    - AwesomeModule2   
+  token: access_tokens
+  token_type: Bearer
+  accept: application/vnd.github.raw

@@ -1,0 +1,112 @@
+enable: true
+jsonPath: true
+displayindex: 30
+displayname: VoKino
+host: http://api.vokino.org/v2
+
+movie_cats:
+  - movie
+  - multfilm
+  - documovie
+
+serial_cats:
+  - serial
+  - multserial
+  - anime
+  - docuserial
+  - tvshow
+
+catalog_key: В тренде
+
+menu:
+  - categories:
+      Фильмы: movie
+      Сериалы: serial
+      Мультфильмы: multfilm
+      Мультсериалы: multserial
+      Аниме: anime
+    sort:
+      В тренде: popular
+      Новинки: new
+      Обновления: updatings
+      Лучшее: rating
+    format:
+      sort: |
+        string u = url;
+        if (cat != null) u += $"&type={cat}";
+        if (sort != null) u += $"&sort={sort}";
+        return u;
+  - categories:
+      Документальные фильмы: documovie
+      Документальные сериалы: docuserial
+      ТВ шоу: tvshow
+    format:
+      -: |
+        return $"{url}&type={cat}";
+
+
+search:
+  uri: search?name={search}&page={page}
+  total_pages: 5
+
+list:
+  uri: list?page={page}
+  total_pages: 1000
+
+content:
+  nodes: "$.channels[*].details"
+  serial_key:
+    attribute: type
+    format: |
+      return value is "serial" or "docuserial" or "multserial" or "tvshow" or "anime" ? value : null;
+  name:
+    attribute: name
+  original_name:
+    attribute: originalname
+  href:
+    attribute: ident
+  image:
+    attribute: poster
+  year:
+    attribute: released
+  args:
+    - name_arg: vote_average
+      attribute: rating_kp
+    - name_arg: PG
+      attribute: age
+
+
+card_parse:
+  initUrl: |
+    return $"{host}/view/{uri}";
+  node: details
+  name:
+    attribute: name
+  original_name:
+    attribute: originalname
+  year:
+    attribute: released
+  image:
+    attribute: poster
+  description:
+    attribute: about
+
+card_args:
+  - name_arg: runtime
+    attribute: runtime
+  - name_arg: kp_rating
+    attribute: rating_kp
+  - name_arg: imdb_rating
+    attribute: rating_imdb
+  - name_arg: production_countries
+    attribute: country
+  - name_arg: genres
+    attribute: genre
+  - name_arg: PG
+    attribute: age
+  - name_arg: overview
+    attribute: about
+
+
+tmdb_injects:
+  - default

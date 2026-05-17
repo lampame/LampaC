@@ -1,0 +1,192 @@
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/NxtSettings.cs
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/Base/BaseSettings.cs
+enable: true
+enabled: false
+displayindex: 110
+displayname: "PornoTest"
+host: "http://porno.host"
+debug: false                      // расширенный лог в консоль
+ignore_no_picture: true           // выводить в list ролики без постеров
+abortMedia: true                  // не загружать медиа файлы - "\\.(woff2?|vtt|srt|css|svg|jpe?g|png|gif|webp|ico)$"
+fullCacheJS: true                 // кешировать file.js?args=
+keepopen: true                    // использовать открытый ранее браузер  | false открывать всегда новый
+rhub: false                       // выполнять запросы к источнику на клиенте
+rhub_fallback: false              // разрешить выполнить запрос на сервере, если клиент не смог
+rhub_geo_disable: ["RU"]          // для RU выполнять запросы только через сервер
+group: 0                          // группа доступа
+group_hide: true                  // не показывать в списке для пользователей с не несоответствующей группой
+geo_hide: null                    // скрыть из списка для GEO - ["RU", "UA"]
+client_type: null                 // показывать для устройств которые соответствуют минимальным требованиям - "apk,cors"
+cache_time: 5                     // кеш 5 минут для list/search
+overridehost: null                // указать другой сервер - "http://ip:9118/pornotest"
+overridehosts: null               // указать несколько серверов - ["http://ip:9118/pornotest", "http://ip2:9118/pornotest"]
+overridepasswd: null
+headers:                          // изменить user-agent, добавить данные авторизации и т.д - примеры в current.conf
+  referer: "{host}/"
+  x-requested-with: XMLHttpRequest
+headers_stream:                   // изменить header для streamproxy/geostreamproxy - примеры в current.conf
+  referer: "{host}/"
+vast: null
+priorityBrowser: null             // null (chrome) | "http" | "firefox"
+globalnameproxy: null             // example.conf
+useproxy: true                    // example.conf
+proxy:                            // example.conf
+  list:
+    - socks5://127.0.0.1:9050
+useproxystream: false             // example.conf
+streamproxy: false                // false прямая ссылка на видео | true через сервер
+geostreamproxy: null              // streamproxy для определённого GEO - ["RU", "UA"]
+apnstream: false                  // streamproxy через внешний сервер nginx/cf/etc
+apn: null                         // example.conf
+qualitys_proxy: true              // если у пользователя нету прямого доступа к видео, он может запросить видео через сервер
+streamproxy_preview: true
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/RouteSettings.cs
+route:
+  eval: |
+    if (cat != null && sort != null) return $"{host}/{cat}/{sort.Replace("top", "toprated").Replace("most-popular", "popular")}/page/{page}/";
+    if (cat != null || sort != null) return $"{host}/{cat ?? sort}/page/{page}/";
+    if (query.ContainsKey("studio")) return page == 1 ? $"{host}/search/?search={query["studio"]}" : $"{host}/search/{query["studio"]}/page/{page}/";
+    return url;
+
+
+cookies:
+  - Domain: ".porno.host"
+    Expires: "2040-10-17T00:00:00"  // если нужна сессия, не указывать Expires
+    Path: "/"
+    HttpOnly: true
+    Secure: true
+    Name: "dle_user_id"
+    Value: "345462"
+  - Domain: ".porno.host"
+    Expires: "2040-10-17T00:00:00"
+    Path: "/"
+    HttpOnly: true
+    Secure: true
+    Name: "dle_password"
+    Value: "asdhiosayuwafe"
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/MenuSettings.cs
+menu:
+  route:
+    sort: "{host}/{sort}/week/{page}/"
+    cat: "{host}/{cat}/{page}/"
+    catsort: "{host}/{cat}/{sort}/week/{page}/"
+    model: "{host}/{model}/{page}/"
+    modelsort: "{host}/{model}/{sort}/week/{page}/"
+    -: "{host}/{sort ?? cat ?? model}/{page}"
+  sort:
+    "Новинки": ""                       // соответствует настройке в list.uri
+    "Топ рейтинга": "toprated/{page}"   // конечный url будет {host}/toprated/{page} | http://porno.host/toprated/1
+    "Топ просмотров": "popular/{page}"
+  categories:
+    format: "porno/{cat}/{page}"
+    Азиатки: "asian/{page}"
+    Анал: "anal/{page}"
+    БДСМ: "bds/{page}"
+  customs:
+    - name: Студии
+      arg: studio
+      format: channels/{value}/{page}
+      submenu:
+        Pornhub: pornhub
+        Brazzers: brazzers
+        Teamskeet: teamskeet
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ListSettings.cs
+list:
+  firstpage: null       // начальная страница, page 1 | "" - http://porno.host
+  uri: "last/{page}"
+  total_pages: 1
+  viewsource: true      // view-source:http://porno.host/last/2  | false - разметка из "консоль, элементы" после загрузки всей страницы
+  patternAbort: null    // блокировка сетевых запросов - "/(ads|vast)/"
+  contentParse: null    // секция из contentParse если нужно переопределить получение данных
+  routeEval: null       // замена запроса, смотрите beeg.yaml
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ListSettings.cs
+search:
+  uri: "search/{search}/{page}"
+  viewsource: true
+  patternAbort: null
+  contentParse: null
+  routeEval: null
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ListSettings.cs
+model:
+  uri: "{host}/{model}/{page}"
+  format: '{host}/{model.Split("=")[1]}/{page}'
+
+
+// https://html-agility-pack.net/documentation
+// либо GTP по запросу C# HtmlAgilityPack как получить содержимое элемента * в html *
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ContentParseSettings.cs
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/SingleNodeSettings.cs
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ModelParse.cs
+contentParse:                                       // глобальная секция для list/search c "contentParse": null
+  nodes: "//li[contains(@class, ' trailer')]"       // элемент видео row  | <li> который содержит в class имя trailer | <li data-view-component="true" class="twq trailer">row</li>
+  name:                                             // title видео
+    node: ".//p"                                    // первый элемент <p> в row | <p>Большая грудь</p> | <p class="sjt">Большая грудь</p>
+  href:                                             // ссылка на full news
+    node: ".//a[@class='image']"                    // поиск ссылки с точным class | <a class="image" href="/news/5264">Большая грудь</a>
+    attribute: "href"                               // в найденной ссылке взять значение href
+  img:                                              // постер
+    node: ".//img[2]"                               // второй элемент <img> в row
+    attribute: "src"
+  duration:
+    node: ".//span[@class='duration']"              // <span class="duration">23:87</span> | <span data="lua" class="duration" component="arg">23:87</span>
+                                                    // attribute не указан, берется значение внутри элемента
+  quality:
+    node: ".//meta[@name='quality']"                // <meta name="quality" content="1080p" />
+    attribute: "content"
+  preview:
+    node: .//img
+    attribute: data-preview
+  model:
+    name:
+      node: .//div[@class='item-channel-models']//a
+    href:
+      node: .//div[@class='item-channel-models']//a
+      attribute: href
+  eval: null                                        // evaluate.parse.cs
+
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/ViewSettings.cs
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/SingleNodeSettings.cs
+#https://github.com/lampac-nextgen/lampac/blob/main/Shared/Models/NextHUB/RegexMatchSettings.cs
+view:
+  viewsource: true
+  addInitScript: localStorage.setItem('pljsquality', '720p');  // выполнить JS до начала загрузки страницы
+  playbtn: ".jw-video.jw-reset" // элемент на который нужно кликнуть
+  patternFile: "_[0-9]+p.mp4"   // найти ссылку на видео в сетевых запросах по шаблону regex
+  patternWhiteRequest: (\.css|kt_player\.)
+  waitLocationFile: false       // true - ждать ответа от patternFile и использовать в качестве ссылки полученный location
+  related: true                 // похожие видео
+  relatedParse: null
+  waitForSelector: null         // ждать появления елемента в разметке | "#video" для id="video"
+  waitForSelector_timeout: 5000 // ждать элемент не больше 5 секунд
+  NetworkIdle: false            // исходная разметка html для related/evaluate | true - разметка из "консоль, элементы" после загрузки всей страницы
+  iframe:                                     // найти ссылку в начальном html и перейти по ней | ebun.yaml
+    pattern: '<iframe[^>]+ src="([^"]+)"'     // формат regexMatch
+  nodeFile:                     // поиск видео в разметке, смотрите pornone.yaml и brazzrus.yaml
+    node: //video[@class='jw-video jw-reset']
+    attribute: src
+  regexMatch:
+    matches: ["1080p", "720p", "480p", "360p"]
+    pattern: '(https?://[^\t" ]+_{value}\\.mp4)'
+    index: 1
+    format: "https:{value}&play=1"
+  bindingToIP: false            // видео не привязано к ip | true - привязано
+  patternAbort: \.(css|js|jpe?g)
+  abortMedia: true
+  fullCacheJS: true
+  cache_time: 15
+  priorityBrowser: null       // переопределить браузер для view
+  keepopen: true
+  initUrlEval: |              // изменить начальный запрос
+    return Regex.Replace(url, "https?://[^/]+/-0", "https://store.externulls.com/facts/file/");
+  routeEval: |                // контроль над запросами браузера
+    await route.ContinueAsync(new RouteContinueOptions { Url = route.Request.Url + "&getstream=1" });
+    return false;
+  eval: null                  // evaluate.view.cs (кастомный поиск ссылки через C#)
+  evalJS: null                // evaluate.view.js (кастомный поиск ссылки через JS)
+  fileEval: null              // evaluate.file.cs (изменение конечной ссылки перед запуском плеера)
+  fileEval: ""

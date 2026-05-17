@@ -1,0 +1,11 @@
+{
+  "enable": false,
+  "dynamic": true,
+  "tree": [
+    "GcTask.cs",
+    "ModInit.cs",
+    "RoomDb.cs",
+    "WatchTogetherController.cs",
+    "WsEvents.cs"
+  ]
+}

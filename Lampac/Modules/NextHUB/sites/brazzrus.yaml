@@ -1,0 +1,69 @@
+enable: false
+displayindex: 170
+displayname: BRAZZRUS
+host: https://ww.bzrus.pro
+priorityBrowser: http
+
+menu:
+  categories:
+    Русская озвучка: categories/russkaya-ozvucka?page={page}
+    Инцест: categories/incest?page={page}
+    Порно с мачехой: categories/macexa?page={page}
+    Студия Brazzers: categories/brazzers?page={page}
+    Милфы: categories/milfy?page={page}
+    Мамка: categories/mamka?page={page}
+    Большие сиськи: categories/bolsie-siski?page={page}
+    Измена порно: categories/izmena-porno?page={page}
+    Общее: categories/obshee?page={page}
+    TeamSkeet Network: categories/teamskeet-network?page={page}
+    Групповой секс: categories/gruppovoi-seks?page={page}
+    ЖМЖ: categories/zmz?page={page}
+    Порно анал: categories/anal?page={page}
+    Порно с большими жопами: categories/bolsie-zopy?page={page}
+    Порно мультики: categories/3d-porno-multiki?page={page}
+    Принуждение: categories/prinuzhdenie?page={page}
+    Трахнул мамку: categories/traxnul-mamku?page={page}
+    Куколд: categories/kukold?page={page}
+    Красивый секс: categories/krasivyi-seks?page={page}
+    Зрелая: categories/zrelaya?page={page}
+    Большие задницы: categories/bolshie-zadnicy?page={page}
+    Гэнгбэнг: categories/gengbeng?page={page}
+    Big tits: categories/big-tits?page={page}
+    Big ass: categories/big-ass?page={page}
+    Порно со зрелыми: categories/porno-zrelyx?page={page}
+    Premium: categories/premium?page={page}
+    Подчинение: categories/podcinenie?page={page}
+    Порно в чулках: categories/v-culkax?page={page}
+    Глубокая глотка: categories/glubokaya-glotka?page={page}
+    Порно в красивом белье: categories/v-krasivom-bele?page={page}
+
+list:
+  firstpage: ""
+  uri: ?page={page}
+
+search:
+  firstpage: search?q={search}
+  uri: search?q={search}&page={page}
+
+contentParse:
+  nodes: .//div[@class='card-video']
+  name:
+    node: .//div[@class='card-video__name preloading']//a
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//span[@class='preloading']//span[2]
+
+view:
+  related: true
+  addInitScript: localStorage.setItem('pljsquality', '720');
+  patternAbort: \.(mp4|m3u|ts|mpd)
+  waitForSelector: "[id^='oframeplayer-']"
+  NetworkIdle: true
+  nodeFile:
+    node: //video
+    attribute: src

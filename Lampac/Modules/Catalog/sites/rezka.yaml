@@ -1,0 +1,104 @@
+enable: true
+displayindex: 10
+displayname: Rezka
+host: https://rezka.ag
+
+search:
+  uri: search/?do=search&subaction=search&q={search}
+
+movie_cats:
+  - films
+
+serial_cats:
+  - series
+
+catalog_key: Последние поступления
+
+menu:
+  - categories:
+      Фильмы: films
+      Сериалы: series
+      Мультфильмы: cartoons
+      Аниме: animation
+    sort:
+      Новинки: new
+      Сейчас смотрят: watching
+      Последние поступления: last
+      Популярные: popular
+    format:
+      sort: 'sort != "new" ? $"{cat}/page/{page}/?filter={sort}" : $"new/page/{page}/?filter=last&genre={cat.Replace("films", "1").Replace("series", "2").Replace("cartoons", "3").Replace("animation", "82")}"'
+
+
+content:
+  serial_regex: "(Сериал|сезон|серии|серия)"
+  nodes: //div[@class='b-content__inline_item']
+  name:
+    node: .//div[@class='b-content__inline_item-link']//a
+    format: 'value.Split(" / ")[0]'
+  href:
+    node: .//a
+    attribute: href
+  image:
+    node: .//img
+    attribute: src
+  year:
+    node: .//div[@class='b-content__inline_item-link']//div
+    format: "value.Trim().Split('-', ',', ' ')[0]"
+  total_pages:
+    node: //div[@class='b-navigation']/a[last()-1]
+
+
+card_parse:
+  name:
+    node: //h1[@itemprop='name']
+    format: 'value.Split(" / ")[0]'
+  original_name:
+    node: //div[@itemprop='alternativeHeadline']
+    format: 'value.Split(" / ")[0]'
+  image:
+    node: //img[@itemprop='image']
+    attribute: src
+  year:
+    node: //table[@class='b-post__info']//tr[./td/h2[contains(text(), 'Дата выхода')]]/td[2]
+    format: |
+      using System.Globalization;
+      if (DateTime.TryParseExact(value.Replace(" года", ""), ["d MMMM yyyy", "dd MMMM yyyy"], new CultureInfo("ru-RU"), DateTimeStyles.None, out var date))
+        return date.ToString("yyyy-MM-dd");
+      return string.Empty;
+  description:
+    node: //div[@class='b-post__description_text']
+
+
+card_args:
+  - name_arg: tagline
+    node: //table[@class='b-post__info']//tr[./td/h2[contains(text(), 'Слоган')]]/td[2]
+  - name_arg: runtime
+    node: //td[@itemprop='duration']
+    format: |
+      return int.TryParse(value.TrimStart().Split(" ")[0], out int totalMinutes) ? totalMinutes : null;
+  - name_arg: production_countries
+    node: //table[@class='b-post__info']//tr[./td/h2[contains(text(), 'Страна')]]/td[2]//a
+  - name_arg: genres
+    node: //table[@class='b-post__info']//tr[./td/h2[contains(text(), 'Жанр')]]/td[2]
+  - name_arg: kp_rating
+    node: //span[@class='b-post__info_rates kp']//span
+  - name_arg: kinopoisk_id
+    node: //span[@class='b-post__info_rates kp']//a
+    attribute: href
+    format: |
+      var segments = value.Split('/');
+      string href = CrypTo.DecodeBase64(segments.Length > 2 ? segments[2] : "");
+      return Regex.Match(HttpUtility.UrlDecode(href), "/([0-9]+)/?$").Groups[1].Value;
+  - name_arg: imdb_rating
+    node: //span[@class='b-post__info_rates imdb']//span
+  - name_arg: imdb_id
+    node: //span[@class='b-post__info_rates imdb']//a
+    attribute: href
+    format: |
+      var segments = value.Split('/');
+      string href = CrypTo.DecodeBase64(segments.Length > 2 ? segments[2] : "");
+      return Regex.Match(HttpUtility.UrlDecode(href), "/(tt[0-9]+)").Groups[1].Value;
+
+
+tmdb_injects:
+  - default

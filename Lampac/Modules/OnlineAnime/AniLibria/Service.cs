@@ -1,0 +1,139 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Shared.Models.Base;
+using Shared.Models.Templates;
+using Shared.Services.Utilities;
+using System.Web;
+
+namespace AniLibria;
+
+public struct AniLibriaInvoke
+{
+    #region AniLibriaInvoke
+    readonly string host;
+    readonly string apihost;
+    readonly Func<string, Task<List<RootObject>>> onget;
+    readonly Func<string, string> onstreamfile;
+
+    public AniLibriaInvoke(string host, string apihost, Func<string, Task<List<RootObject>>> onget, Func<string, string> onstreamfile)
+    {
+        this.host = host != null ? $"{host}/" : null;
+        this.apihost = apihost;
+        this.onget = onget;
+        this.onstreamfile = onstreamfile;
+    }
+    #endregion
+
+    #region Embed
+    public async Task<List<RootObject>> Embed(string title)
+    {
+        List<RootObject> search = await onget($"{apihost}/v2/searchTitles?search=" + HttpUtility.UrlEncode(title));
+        if (search == null)
+            return null;
+
+        string stitle = SearchNameTo.Convert(title);
+        var result = new List<RootObject>(search.Count);
+
+        foreach (var item in search)
+        {
+            if (SearchNameTo.StartsWith(item.names.ru, stitle) ||
+                SearchNameTo.StartsWith(item.names.en, stitle))
+                result.Add(item);
+        }
+
+        if (result.Count == 0)
+            return search;
+
+        return result;
+    }
+    #endregion
+
+    #region Tpl
+    public ITplResult Tpl(List<RootObject> result, string title, string code, int year, bool rjson = false, VastConf vast = null, bool similar = false)
+    {
+        if (result == null || result.Count == 0)
+            return default;
+
+        string stitle = SearchNameTo.Convert(title);
+
+        if (!similar && (!string.IsNullOrEmpty(code) || (result.Count == 1 && result[0].season.year == year && (SearchNameTo.Equals(result[0].names.ru, stitle) || SearchNameTo.Equals(result[0].names.en, stitle)))))
+        {
+            var root = string.IsNullOrEmpty(code) ? result[0] : result.Find(i => i.code == code);
+            var episodes = root.player.playlist.Select(i => i.Value);
+
+            var etpl = new EpisodeTpl(episodes.Count());
+
+            foreach (var episode in episodes)
+            {
+                var streamquality = new StreamQualityTpl();
+
+                foreach (var f in new List<(string quality, string url)> { ("1080p", episode.hls.fhd), ("720p", episode.hls.hd), ("480p", episode.hls.sd) })
+                {
+                    if (string.IsNullOrWhiteSpace(f.url))
+                        continue;
+
+                    streamquality.Append(onstreamfile($"https://{root.player.host}{f.url}"), f.quality);
+                }
+
+                string season = SearchNameTo.Equals(root.names.ru, stitle) || SearchNameTo.Equals(root.names.en, stitle)
+                    ? "1"
+                    : "0";
+
+                if (season == "0")
+                {
+                    season = Regex.Match(code ?? "", "-([0-9]+)(nd|th)").Groups[1].Value;
+                    if (string.IsNullOrEmpty(season))
+                    {
+                        season = Regex.Match(code ?? "", "season-([0-9]+)").Groups[1].Value;
+                        if (string.IsNullOrEmpty(season))
+                            season = string.IsNullOrEmpty(code) ? "0" : "1";
+                    }
+                }
+
+                var first = streamquality.Firts();
+                if (first != null)
+                {
+                    etpl.Append(
+                        $"{episode.serie} серия",
+                        title,
+                        season,
+                        episode.serie.ToString(),
+                        first.link,
+                        streamquality: streamquality,
+                        vast: vast
+                    );
+                }
+            }
+
+            return etpl;
+        }
+        else
+        {
+            var stpl = new SimilarTpl(result.Count);
+            string enc_title = HttpUtility.UrlEncode(title);
+
+            foreach (var root in result)
+            {
+                string name = !string.IsNullOrEmpty(root.names.ru) && !string.IsNullOrEmpty(root.names.en) ? $"{root.names.ru} / {root.names.en}" : (root.names.ru ?? root.names.en);
+
+                string img = root.posters.original.url;
+                if (!string.IsNullOrEmpty(img))
+                    img = "https://anilibria.tv" + img;
+
+                stpl.Append(
+                    name,
+                    root.season.year.ToString(),
+                    string.Empty,
+                    host + $"lite/anilibria?title={enc_title}&code={root.code}",
+                    PosterApi.Size(img)
+                );
+            }
+
+            return stpl;
+        }
+    }
+    #endregion
+}

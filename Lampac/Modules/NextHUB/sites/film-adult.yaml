@@ -1,0 +1,49 @@
+enable: false
+streamproxy: true
+displayindex: 180
+displayname: FilmAdult
+host: https://hd.film-adult.com
+priorityBrowser: http
+  
+menu:
+  categories:
+    format: movies/{cat}/page/{page}/
+    Русские Фильмы: russian
+    Классика: vintagexxx
+    Пародии: porno-parodies
+    С переводом: with-translation
+    Marc Dorcel: marc_dorcel
+    Wicked Pictures: wicked-pictures
+    Hustler: hustler
+    Daring: daring
+    Pure Taboo: pure-taboo
+    Digital Playground: digital-playground
+    Mario Salieri: mario-salieri
+    Private: private
+    New Sensations: new-sensations
+    Brasileirinhas: brasileirinhas
+
+list:
+  uri: page/{page}/
+
+search:
+  uri: index.php?do=search&subaction=search&search_start={page}&full_search=0&result_from=16&story={search}
+
+contentParse:
+  nodes: //a[contains(@class, 'poster grid-item')]
+  name:
+    node: .//h3
+  href:
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  quality:
+    node: .//div[@class='poster__rating-likes pi-center']
+
+view:
+  related: true
+  bindingToIP: true
+  playbtn: "#trailer_play_btn3, #video2_container, #trailer_play_btn, #trailer_container"
+  patternFile: .m3u8
+  patternAbortEnd: (\.(mp4|mpd|m3u|ts)|metrika.js|vast.js)

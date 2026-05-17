@@ -1,0 +1,59 @@
+enable: true
+displayindex: 410
+displayname: uPorno
+rch_access: apk
+streamproxy: true
+host: https://www.uporno.xxx
+priorityBrowser: http
+headers_stream:
+  referer: "{host}/"
+
+menu:
+  sort:
+    Новинки: latest-updates/{page}/
+    Лучшее: top-rated/{page}/
+    Популярное: most-popular/{page}/
+  categories:
+    format: categories/{cat}/{page}/
+    Anal: anal
+    Amateur: amateur
+    Big tits: big-tits
+    Big ass: big-ass
+    Blowjob: blowjob
+    Brunette: brunette
+    Creampie: creampie
+    Doggystyle: doggystyle
+    Hardcore: hardcore
+    Homemade: homemade
+    Latina: latina
+    Mature: mature
+    MILF: milf
+    Teen: teen
+    Threesome: threesome
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[@class='thumb thumb_rel item']
+  name:
+    node: .//div[@class='title']
+  href:
+    node: .//a
+    attribute: href
+    format: '{Regex.Match(value, "&u=([^\"]+)").Groups[1].Value.Split("?")[0]}'
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//div[@class='time']
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["video_url", "video_alt_url"]
+    pattern: "{value}:[\t ]+'([^']+)'"

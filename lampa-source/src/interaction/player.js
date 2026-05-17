@@ -12,6 +12,8 @@ import Torserver from './torserver'
 import Android from '../core/android'
 import Broadcast from './broadcast'
 import Select from './select'
+import Modal from './modal'
+import Settings from './settings/settings'
 import Subscribe from '../utils/subscribe'
 import Noty from '../interaction/noty'
 import Lang from '../core/lang'
@@ -22,7 +24,7 @@ import ParentalControl from './parental_control'
 import Preroll from './advert/preroll'
 import Footer from './player/footer'
 import Segments from './player/segments'
-import VLC from '../core/vlc.js'
+import ExternalPlayer from '../core/externalPlayer.js'
 
 let html
 let listener = Subscribe()
@@ -34,7 +36,9 @@ let timer_ask
 let timer_save
 let wait_for_loading_url = false
 let wait_loading = false
+let wait_for_disclaimer = false
 let is_opened = false
+let show_disclaimer = false
 
 let preloader = {
     wait: false
@@ -524,6 +528,7 @@ function destroy(){
 
     wait_for_loading_url = false
     wait_loading = false
+    wait_for_disclaimer = false
 
     viewing.time       = 0
     viewing.difference = 0
@@ -707,26 +712,144 @@ function locked(data, call){
     else call()
 }
 
-function externalPlayer(player_need, data, players){
+function externalPlayer(player_need, data, players, infuseCallbacks){
     let player   = Storage.field(player_need)
     let url      = encodeURIComponent(data.url.replace('&preload','&play'))
     let _url     = encodeURI(data.url.replace('&preload','&play'))
     let furl     = data.url.replace('&preload','&play')
     let playlist = data.playlist ? encodeURIComponent(JSON.stringify(data.playlist)) : ''
+    let segments = data.segments ? encodeURIComponent(JSON.stringify(data.segments)) : ''
 
     for(let p in players){
-        players[p] = players[p].replace('${url}', url).replace('${_url}', _url).replace('${furl}', furl).replace('${playlist}', playlist)
+        players[p] = players[p].replace('${url}', url).replace('${_url}', _url).replace('${furl}', furl).replace('${playlist}', playlist).replace('${segments}', segments)
+    }
+
+    // Infuse multi-URL playlist support for x-callback-url
+    if(player == 'infuse'){
+        let multiUrl = buildInfuseMultiUrl(data, infuseCallbacks)
+        if(multiUrl) return multiUrl
     }
 
     return players[player]
 }
 
+function buildInfuseMultiUrl(data, callbacks){
+    callbacks = callbacks || {}
+
+    let items = (Array.isArray(data.playlist) ? data.playlist : [])
+        .filter(p => typeof p.url == 'string')
+
+    if(items.length <= 1) return null
+
+    let currentUrl = data.url.replace('&preload','&play')
+    let currentIndex = -1
+
+    for(let i = 0; i < items.length; i++){
+        if(items[i].url.replace('&preload','&play') === currentUrl){
+            currentIndex = i
+            break
+        }
+    }
+
+    if(currentIndex < 0) currentIndex = 0
+
+    let urlParts = []
+
+    for(let i = currentIndex; i < items.length; i++){
+        let item = items[i]
+        let itemUrl = encodeURIComponent(item.url.replace('&preload','&play'))
+        urlParts.push('url=' + itemUrl)
+
+        if(item.title){
+            let filename = Utils.clearHtmlTags(item.title).trim()
+            if(filename){
+                urlParts.push('filename=' + encodeURIComponent(filename))
+            }
+        }
+    }
+
+    if(callbacks.x_success){
+        urlParts.push('x-success=' + encodeURIComponent(callbacks.x_success))
+    }
+
+    if(callbacks.x_error){
+        urlParts.push('x-error=' + encodeURIComponent(callbacks.x_error))
+    }
+
+    return 'infuse://x-callback-url/play?' + urlParts.join('&')
+}
+
+function needInnerPlayerDisclaimer(player_need){
+    return (Storage.field(player_need) == 'inner' || launch_player == 'inner') && Platform.is('apple_tv') && !show_disclaimer
+}
+
+function showInnerPlayerDisclaimer(call){
+    wait_for_disclaimer = true
+    show_disclaimer = true
+
+    function openPlayerSettingSidebar(){
+        let openPlayer = (event)=>{
+            if(event.name !== 'player') return
+
+            Settings.listener.remove('open', openPlayer)
+
+            if(!Controller.enabled() || Controller.enabled().name !== 'settings_component'){
+                Controller.toggle('settings_component')
+            }
+
+            let player_field = event.body.find('[data-name="player"]')
+
+            if(player_field.length) player_field.trigger('hover:enter')
+        }
+
+        Settings.listener.follow('open', openPlayer)
+
+        Controller.toggle('settings')
+        Settings.create('player')
+    }
+
+    Modal.open({
+        title: Lang.translate('inner_player_disclaimer_title'),
+        size: 'small',
+        scroll: {
+            nopadding: true
+        },
+        html: $('<div class="about">' + Lang.translate('inner_player_disclaimer_text') + '</div>'),
+        buttons: [
+            {
+                name: Lang.translate('confirm'),
+                onSelect: ()=>{
+                    wait_for_disclaimer = false
+                    Modal.close()
+                    call()
+                }
+            },
+            {
+                name: Lang.translate('inner_player_disclaimer_change_player'),
+                onSelect: ()=>{
+                    wait_for_disclaimer = false
+                    Modal.close()
+                    openPlayerSettingSidebar()
+                }
+            }
+        ],
+        onBack: ()=>{
+            wait_for_disclaimer = false
+            Modal.close()
+        }
+    })
+}
+
 function start(data, need, inner){
     let player_need = 'player' + (need ? '_' + need : '')
+    let launchInner = ()=>{
+        if(needInnerPlayerDisclaimer(player_need)) showInnerPlayerDisclaimer(inner)
+        else inner()
+    }
 
     if(data.launch_player) launch_player = data.launch_player
 
-    if(launch_player == 'lampa' || launch_player == 'inner' || Video.verifyTube(data.url)) inner()
+    if(launch_player == 'lampa' || launch_player == 'inner' || Video.verifyTube(data.url)) launchInner()
     else if(Platform.is('apple')){
         let external_url = externalPlayer(player_need, data, {
             vlc:        'vlc://${furl}',
@@ -748,9 +871,9 @@ function start(data, need, inner){
         else if(Storage.field(player_need) == 'ios'){
             html.addClass('player--ios')
             
-            inner()
+            launchInner()
         }
-        else inner()
+        else launchInner()
     }
     else if(Platform.macOS()){
         let external_url = externalPlayer(player_need, data, {
@@ -767,7 +890,7 @@ function start(data, need, inner){
                 window.location.assign(external_url)
             })
         }
-        else inner()
+        else launchInner()
     }
     else if(Platform.is('apple_tv')){
         let apple_tv_client = Storage.field('apple_tv_client') ?? 'lampa';
@@ -778,10 +901,13 @@ function start(data, need, inner){
             vidhub:     'open-vidhub://x-callback-url/open?url=${url}',
             svplayer:   'svplayer://x-callback-url/stream?url=${url}',
             tracyplayer:'tracy://open?url=${url}',
-            tvospro:       'lampa://video?player=tvospro&src=${url}&playlist=${playlist}',
-            tvos:       'lampa://video?player=tvos&src=${url}&playlist=${playlist}',
-            tvosl:      'lampa://video?player=tvosav&src=${url}&playlist=${playlist}',
-            tvosSelect: 'lampa://video?player=lists&src=${url}&playlist=${playlist}'
+            tvospro:       'lampa://video?player=tvospro&src=${url}&playlist=${playlist}&segments=${segments}',
+            tvos:       'lampa://video?player=tvos&src=${url}&playlist=${playlist}&segments=${segments}',
+            tvosl:      'lampa://video?player=tvosav&src=${url}&playlist=${playlist}&segments=${segments}',
+            tvosSelect: 'lampa://video?player=lists&src=${url}&playlist=${playlist}&segments=${segments}'
+        }, {
+            x_success: `${apple_tv_client}://infuseDidFinish`,
+            x_error: `${apple_tv_client}://infuseDidFail`
         })
 
         if (external_url) {
@@ -791,7 +917,7 @@ function start(data, need, inner){
                 window.location.assign(external_url)
             })
         }
-        else inner()
+        else launchInner()
     }
     else if(Platform.is('webos') && (Storage.field(player_need) == 'webos' || launch_player == 'webos')){
         Preroll.show(data,()=>{
@@ -828,21 +954,19 @@ function start(data, need, inner){
     }
     else if(Platform.desktop() && Storage.field(player_need) == 'other'){
         const path = Storage.field('player_nw_path')
-        const isVLC = path.toLowerCase().indexOf('vlc') !== -1
+        const supportedTypes = Object.values(ExternalPlayer.PLAYER_TYPES)
+        const detectedType = supportedTypes.find(type => path.toLowerCase().indexOf(type) !== -1)
 
         Preroll.show(data,()=>{
             const url = data.url.replace('&preload','&play')
-            if (isVLC) {
-                // Запускаем VLC с API интеграцией
-                const vlcOptions = {
-                    password: Storage.field('vlc_api_password'),
-                    fullscreen: Storage.field('vlc_fullscreen')
-                }
-                VLC.openPlayer(url, data, vlcOptions)
+            if (detectedType) {
+                ExternalPlayer.openPlayer(url, data, {
+                    type: detectedType,
+                    fullscreen: Storage.field('player_external_fullscreen')
+                })
             } else {
                 const file = require('fs')
                 if (file.existsSync(path)) {
-                    // Обычный запуск для других плееров
                     const spawn = require('child_process').spawn
                     spawn(path, [encodeURI(url)])
                 } else {
@@ -852,7 +976,7 @@ function start(data, need, inner){
             listener.send('external', data)
         })
     }
-    else inner()
+    else launchInner()
 }
 
 /**
@@ -1046,7 +1170,7 @@ function stat(url){
  */
 
 function playlist(playlist){
-    if(work || preloader.wait) Playlist.set(playlist)
+    if(work || preloader.wait || wait_for_disclaimer) Playlist.set(playlist)
 }
 
 /**

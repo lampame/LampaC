@@ -1,17 +1,16 @@
-﻿namespace Shared.Models.SISI.Base
+﻿namespace Shared.Models.SISI.Base;
+
+public class ModelItem
 {
-    public class ModelItem
+    public ModelItem() { }
+
+    public ModelItem(string name, string uri)
     {
-        public ModelItem() { }
-
-        public ModelItem(string name, string uri)
-        {
-            this.uri = uri;
-            this.name = name;
-        }
-
-        public string uri { get; set; }
-
-        public string name { get; set; }
+        this.uri = uri;
+        this.name = name;
     }
+
+    public string uri { get; set; }
+
+    public string name { get; set; }
 }

@@ -1,0 +1,6 @@
+{
+  "name": "Lampac",
+  "version": "1.0.0",
+  "parameter": "content:{localhost}/msx/start.json",
+  "action": "link:{localhost}/lampa-main/index.html"
+}

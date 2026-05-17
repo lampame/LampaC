@@ -1,0 +1,99 @@
+enable: true
+displayindex: 290
+displayname: TrahKino
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://trahkino.me
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  route:
+    sort: "{host}/{sort}/{page}/"
+    cat: "{host}/categories/{cat}/{page}/"
+    catsort: '{host}/categories/{cat}/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by={sort.Replace("top-rated", "rating").Replace("most-popular", "video_viewed")}&from={page}'
+  sort:
+    Новинки: ""
+    Лучшее: top-rated
+    Популярнаe: most-popular
+  categories:
+    Большие попки: bolshie-popki
+    Любительское: lyubitelskiy-seks
+    Брюнетки: bryunetki
+    Красотки: krasotki
+    Большие члены: bolshie-hui
+    Большие сиськи: bolshie-siski
+    От первого лица: ot-pervogo-lica
+    Минет: minet
+    Хардкор: hardkor
+    Натуральные сиськи: naturalnye-siski
+    Раком: rakom
+    Фетиш: fetish
+    Молодые: molodye
+    Кончают внутрь: konchayut-vnutr
+    Сперма: sperma
+    Бритые киски: britye-kiski
+    Милфы: milfy
+    Латинки: latinki
+    МЖМ: mjm
+    Лесби: lesbian
+    Дрочка члена: drochka-chlena
+    Красивое: krasivyy-seks
+    Азиатки: aziatki
+    Подборки: podborki
+    Блондинки: blondinki
+    Доктор: doktor
+    4k: 4k
+    Японки: yaponki
+    Красивые сиськи: krasivye-siski
+    Домашнее: domashka
+    На публике: na-publike
+    В очках: v-ochkah
+    Толстушки: tolstye
+    В ванной: v-vannoy
+    Пирсинг: pirsing
+    На каблуках: na-kablukah
+    Ролевые игры: rolevye-igry
+    Развратное: razvrat
+    Француженки: francujenki
+    Хентай: hentay
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[@class='item ']
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-webp
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  bindingToIP: true
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();
+
+#view:
+#  abortMedia: false
+#  fullCacheJS: true
+#  addInitScript: localStorage.setItem('kvsplayer_selected_format', '720p');
+#  playbtn: "#kt_player"
+#  patternFile: /get_file/
+#  patternWhiteRequest: (kt_player|youtube)\.
+#  waitLocationFile: true

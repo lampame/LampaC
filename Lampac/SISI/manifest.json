@@ -1,0 +1,11 @@
+{
+  "enable": true,
+  "tree": [
+    "Controllers",
+    "Models",
+    "SQL",
+    "GlobalUsings.cs",
+    "ModInit.cs",
+    "SisiApi.cs"
+  ]
+}

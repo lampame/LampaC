@@ -1,13 +1,12 @@
-﻿namespace Shared.Models.Browser
+﻿namespace Shared.Models.Browser;
+
+public class KeepopenContext
 {
-    public class KeepopenContext
-    {
-        public bool keepopen { get; set; }
+    public bool keepopen { get; set; }
 
-        public int keepalive { get; set; }
+    public int keepalive { get; set; }
 
-        public int min { get; set; }
+    public int min { get; set; }
 
-        public int max { get; set; }
-    }
+    public int max { get; set; }
 }

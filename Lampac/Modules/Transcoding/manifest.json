@@ -1,0 +1,9 @@
+{
+  "enable": true,
+  "tree": [
+    "Services",
+    "Controller.cs",
+    "ModInit.cs",
+    "ModuleConf.cs"
+  ]
+}

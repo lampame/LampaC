@@ -1,0 +1,28 @@
+{
+  "TelegramAuth": {
+    "enable": true,
+    "data_dir": "database/tgauth",
+    "legacy_import_path": "database/legacy_tgauth",
+    "enable_import": true,
+    "enable_cleanup": true,
+    "mutations_api_secret": "GENERATE_A_LONG_RANDOM_SECRET",
+    "owner_telegram_ids": [123456789],
+    "auto_provision_users": false,
+    "auto_provision_role": "user",
+    "auto_provision_lang": "ru",
+    "auto_provision_expires_days": 0,
+    "auto_provision_activate_immediately": false,
+    "accsdb_sync_group_admin": 100,
+    "accsdb_sync_group_user": 0,
+    "max_active_devices_per_user": 5,
+    "limit_map": [
+      {
+        "pattern": "^/tg/auth",
+        "map": {
+          "limit": 25,
+          "second": 1
+        }
+      }
+    ]
+  }
+}

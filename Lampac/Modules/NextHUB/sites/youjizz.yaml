@@ -1,0 +1,44 @@
+enable: true
+displayindex: 200
+displayname: Youjizz
+rch_access: apk,cors,web
+stream_access: apk,cors,web
+host: https://www.youjizz.com
+priorityBrowser: http
+
+menu:
+  sort:
+    Новинки: newest-clips/{page}.html
+    Популярные: most-popular/{page}.html
+    Топ рейтинга: top-rated-week/{page}.html
+    В тренде: trending/{page}.html
+
+list:
+  uri: newest-clips/{page}.html
+
+search:
+  uri: search/{search}-{page}.html
+
+contentParse:
+  nodes: //div[@class='video-thumb']
+  name:
+    node: .//div[@class='video-title']//a
+  href:
+    node: .//a[contains(@class, 'frame video')]
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//span[@class='time']
+  preview:
+    node: .//a
+    attribute: data-clip
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    format: https:{value}
+    matches: ["Auto", "1080", "720", "480", "360"]
+    pattern: '"quality":"{value}","filename":"([^"]+)"'

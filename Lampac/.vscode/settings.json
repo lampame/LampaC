@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "base.conf": "json",
+    "current.conf": "json",
+    "init.conf": "json",
+    "*.init.conf": "json",
+  }
+}

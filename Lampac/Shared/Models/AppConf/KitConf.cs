@@ -1,41 +1,38 @@
 ﻿using Newtonsoft.Json.Linq;
 
-namespace Shared.Models.AppConf
+namespace Shared.Models.AppConf;
+
+public class KitConf
 {
-    public class KitConf
-    {
-        public bool enable { get; set; }
+    public bool enable { get; set; }
 
-        public bool absolute { get; set; }
+    public bool absolute { get; set; }
 
-        public bool AesGcm { get; set; }
+    public bool aes { get; set; }
 
-        public string path { get; set; }
+    public string aesgcmkeyName { get; set; }
 
-        public string eval_path { get; set; }
+    public bool uidIdentity { get; set; }
 
-        public bool IsAllUsersPath { get; set; }
+    public string path { get; set; }
 
-        public int cacheToSeconds { get; set; }
+    public string eval_path { get; set; }
 
-        public int configCheckIntervalSeconds { get; set; }
+    public int cacheToSeconds { get; set; }
 
-        public bool rhub_fallback { get; set; }
+    public int configCheckIntervalSeconds { get; set; }
 
-        [System.Text.Json.Serialization.JsonIgnore]
-        [Newtonsoft.Json.JsonIgnore]
-        public Dictionary<string, JObject> allUsers { get; set; }
-    }
+    public bool rhub_fallback { get; set; }
+}
 
 
-    public record KitConfEvalPath(string path, string uid);
+public record KitConfEvalPath(string path, string aesGcmKey);
 
 
-    public class KitCacheEntry
-    {
-        public JObject init { get; set; }
-        public string infile { get; set; }
-        public DateTime lockTime { get; set; }
-        public DateTime lastWriteTimeUtc { get; set; }
-    }
+public class KitCacheEntry
+{
+    public JObject init { get; set; }
+    public string infile { get; set; }
+    public DateTime lockTime { get; set; }
+    public DateTime lastWriteTimeUtc { get; set; }
 }

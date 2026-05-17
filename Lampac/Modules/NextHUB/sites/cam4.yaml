@@ -1,0 +1,32 @@
+enable: true
+displayindex: 90
+displayname: cam4
+rch_access: apk,cors
+stream_access: apk,cors,web
+host: https://ru4.cam4.com
+priorityBrowser: http
+cache_time: 2
+
+menu:
+  categories:
+    Все: ""
+    Девушки: female?page={page}
+    Пары: couple?page={page}
+    Парни: male?page={page}
+    Трансы: transgender?page={page}
+
+list:
+  uri: "?page={page}"
+
+contentParse:
+  eval: |
+    var match = Regex.Match(html, "\"username\":\"([^\"]+)\".*?\"src\":\"([^\"]+)\".*?\"poster\":\"([^\"]+)\"");
+    while(match.Success){
+      playlists.Add(new PlaylistItem(){
+        name =  match.Groups[1].Value,
+        video = match.Groups[2].Value.Replace("\\u002F", "/"),
+        picture = match.Groups[3].Value.Replace("\\u002F", "/")
+      });
+      match = match.NextMatch();
+    }
+    return playlists;

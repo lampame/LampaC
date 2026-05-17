@@ -1,0 +1,151 @@
+enable: false
+displayindex: 380
+displayname: WatchPorn
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://watchporn.to
+priorityBrowser: http
+#streamproxy_preview: true
+
+menu:
+  route:
+    sort: "{host}/{sort}/{page}/"
+    cat: "{host}/categories/{cat}/{page}/"
+    catsort: '{host}/categories/{cat}/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by={sort.Replace("top-rated", "rating").Replace("most-popular", "video_viewed")}&from={page}'
+  sort:
+    Новинки: ""
+    Лучшее: top-rated
+    Популярнаe: most-popular
+  categories:
+    format: categories/{cat}/{page}/
+    ManyVids: manyvids
+    OnlyFans: onlyfans
+    XVideosRed: xvideosred
+    PrimalFetish: primalfetish
+    BrazzersExxtra: brazzersexxtra
+    JulesJordan: julesjordan
+    Evilangel: evilangel
+    PascalsSubSluts: pascalssubsluts
+    TabooHeat: tabooheat
+    MissaX: missax
+    OutOfTheFamily: outofthefamily
+    LoveHerFeet: loveherfeet
+    MommyBlowsBest: mommyblowsbest
+    AlexLegend: alexlegend
+    Analized: analized
+    AnalIntroductions: analintroductions
+    BlackedRaw: blackedraw
+    ImMeganLive: immeganlive
+    Vixen: vixen
+    RKPrime: rkprime
+    PureTaboo: puretaboo
+    Deeper: deeper
+    MyPervyFamily: mypervyfamily
+    Tushy: tushy
+    FamilyTherapy: familytherapy
+    HotwifeXXX: hotwifexxx
+    SisLovesMe: sislovesme
+    WCAProductions: wcaproductions
+    JamieYoung: jamieyoung
+    FamilyStrokes: familystrokes
+    AllHerLuv: allherluv
+    Blacked: blacked
+    Nubiles: nubiles
+    DadCrush: dadcrush
+    TushyRaw: tushyraw
+    TightAndTeen: tightandteen
+    MeanaWolf: meana-wolf
+    PornWorld: pornworld
+    SexMex: sexmex
+    Cosplay: cosplay
+    PervMom: pervmom
+    WillTileXXX: willtilexxx
+    BangBus: bangbus
+    MyLifeInMiami: mylifeinmiami
+    BrattySis: brattysis
+    AnalVids: analvids
+    ATKGirlfriends: atkgirlfriends
+    Pornhub: pornhub
+    BAMVisions: bamvisions
+    PrivateStars: privatestars
+    DigitalPlayground: digitalplayground
+    DickDrainers: dickdrainers
+    PureMature: puremature
+    DarkX: darkx
+    BradKnightProductions: bradknightproductions
+    TouchMyWife: touchmywife
+    LoveHerBoobs: loveherboobs
+    AlettaOceanLive: alettaoceanlive
+    SheLovesBlack: shelovesblack
+    HerLimit: herlimit
+    MomComesFirst: momcomesfirst
+    MrLuckyPOV: mrluckypov
+    Grandmams: grandmams
+    IWantClips: iwantclips
+    AuntJudysXXX: auntjudysxxx
+    HouseholdFantasy: householdfantasy
+    IndustryInvaders: industryinvaders
+    MyFamilyPies: myfamilypies
+    TrueAnal: trueanal
+    PornDudeCasting: porndudecasting
+    Lustery: lustery
+    HornyHousehold: hornyhousehold
+    POVMasters: povmasters
+    DaughterSwap: daughterswap
+    SinsLife: sinslife
+    FilthyPOV: filthypov
+    XevBellringer: xev-bellringer
+    PenthouseGold: penthousegold
+    GirlfriendsFilms: girlfriendsfilms
+    DirtyAuditions: dirtyauditions
+    MomsTeachSex: momsteachsex
+    MyFriendsHotMom: myfriendshotmom
+    ClubSweetHearts: clubsweethearts
+    CherryPimps: cherrypimps
+    PornForce: pornforce
+    MommysGirl: mommysgirl
+    WydeSyde: wydesyde
+    ImmoralLive: immorallive
+    CuckHunter: cuckhunter
+    GotMylf: gotmylf
+    ElegantAngel: elegantangel
+    GirlsWay: girlsway
+    MsPrice: msprice
+    NewSensations: newsensations
+    OnlyTarts: onlytarts
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/?mode=async&function=get_block&block_id=list_videos_videos_list_search_result&from_videos={page}
+
+contentParse:
+  nodes: //div[@class='item  ']
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-webp
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();
+
+#view:
+#  related: true
+#  patternFile: /get_file/
+#  patternWhiteRequest: kt_player\.
+#  waitLocationFile: true

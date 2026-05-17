@@ -1,0 +1,79 @@
+enable: true
+displayindex: 330
+displayname: Jopa Online
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://jopaonline.mobi
+priorityBrowser: http
+
+menu:
+  route:
+    sort: "{host}/{sort}/{page}"
+    cat: "{host}/categories/{cat}/{page}"
+    catsort: "{host}/categories/{cat}/{sort}/{page}"
+  sort:
+    Новинки: ""
+    Топ рейтинга: toprated
+    Популярнаe: popular
+  categories:
+    Мамки: mamki
+    Русское: russkoe
+    Жесткое: zhestkoe
+    Зрелые: zrelye
+    Измена: izmena
+    Красотки: krasotki
+    Домашнее: domashnee
+    Большие члены: big-cock
+    Групповое: gruppovoe
+    Анал: anal
+    Студенты: studenty
+    Азиатки: asian
+    Красивый секс: krasiviy-seks
+    Большие сиськи: bolshie-siski
+    Лесбиянки: lesbiyanki
+    Жопы: zhopy
+    Двойное проникновение: dvoynoe-proniknovenie
+    Молодые: molodye
+    Пикап: pickap
+    Мастурбация: masturbation
+    В ванной: v-vannoi
+    Негры: s-negrami
+    Мулатки: mulatki
+    Худые: hudenkie
+    Чулки: stockings
+    Раком: rakom
+    Минет: minet
+    Рыжие: redhead
+    Блондинки: blonde
+    Брюнетки: bryunetki
+    Межрасовое: mejrassovyy
+
+list:
+  uri: "{page}"
+
+search:
+  uri: search/{search}/{page}
+
+contentParse:
+  nodes: //div[@class='th']
+  name:
+    node: .//p
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//div[@class='th-duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["720p", "480p", "360p", "240p"]
+    pattern: 'value="([^"]+)">{value}</option>'

@@ -1,0 +1,38 @@
+{
+  "name": "Загрузчик приложений",
+  "headline": "Загрузчик приложений",
+  "extension": "Версия MSX: 1.0.0",
+  "version": "1.0.0",
+  "parameter": "content:http://smart.sisi.am/msx/start.json",
+  "note": "For this service, Media Station X 0.1.120 or higher is needed",
+  "action": "[settings:validate_links:0|home]",
+  "dictionary": "http://smart.sisi.am/msx/lang/ru.json",
+  "pages": [
+    {
+      "items": [
+        {
+          "id": "description",
+          "type": "space",
+          "layout": "5,0,5,5",
+          "text": ""
+        },
+        {
+          "type": "control",
+          "layout": "0,0,5,1",
+          "image": "http://smart.sisi.am/msx-logo.png",
+          "label": "Sisi",
+          "action": "link:http://smart.sisi.am",
+          "selection": {
+            "important": true,
+            "action": "update:content:description",
+            "data": {
+              "text": [
+                "{txt:msx-white: Sisi} — Просмотр клубнички"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

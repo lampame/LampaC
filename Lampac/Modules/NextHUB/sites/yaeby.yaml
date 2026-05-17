@@ -1,0 +1,226 @@
+enable: false
+displayindex: 235
+displayname: yaeby
+host: https://www.yaeby.pro
+
+list:
+  uri: "new-porno/?mode=async&function=get_block&block_id=list_videos_latest_videos_list&sort_by=post_date_and_popularity&from={page}"
+  viewsource: true
+
+search:
+  uri: search/{search}/{page}/?mode=async&function=get_block&block_id=list_videos_videos_list_search_result&q=анал&category_ids=&sort_by=post_date
+  viewsource: true
+
+model:
+  uri: "{model}?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=post_date_and_popularity&from={page}"
+  total_pages: 1
+
+contentParse:
+  nodes: //div[contains(@class, 'item')]
+  name:
+    node: .//strong[@class='title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+  model:
+    name:
+      node: .//div[@class='item-channel-models']//a
+    href:
+      node: .//div[@class='item-channel-models']//a
+      attribute: href
+
+view:
+  related: true
+  abortMedia: false
+  fullCacheJS: true
+  addInitScript: localStorage.setItem('kvsplayer_selected_format', '1080p');
+  playbtn: "#kt_player"
+  patternFile: /get_file/
+  patternWhiteRequest: (kt_player|youtube)\.
+  waitLocationFile: true
+
+menu:
+  sort:
+    Новинки: ""
+    Лучшие: top-rated/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=rating_today&from={page}
+    Популярные: pop-video/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=video_viewed_today&from={page}
+  categories:
+    format: porno/{cat}/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=post_date_and_popularity&from={page}
+    Аматорское, любительское: amatorskoe
+    Соло: solo
+    От первого лица: ot-pervogo-lica
+    Большая жопа: big-ass
+    Крупный план: krupnyy-plan
+    Гламурная: glamurnaya
+    Секс боком: seks-bokom
+    Шатенка: shatenka
+    Русское: russkoe
+    Мастурбация: masturbaciya
+    Нежно: nejno
+    Зрелые женщины: zrelye
+    Куни: kuni
+    Красивое: krasivoe
+    Наездница: naezdnica
+    Русское домашнее: russkoe-domashnee-porno
+    Девушки Красотки: krasotka
+    Горловой минет: gorlovoy-minet
+    Кончил в девушку: konchil-v-devushku
+    Минет: minet
+    Большие сиськи: bolshie-siski
+    Сперма в рот: sperma-v-rot
+    Блондинки: blonidinki
+    Раком: rakom
+    Анал: anal
+    Чулки: chulki
+    Рыжие: ryjie
+    Сперма на живот: sperma-na-jivot
+    За деньги: za-dengi
+    Лифчик: lifchik
+    Римминг: rimming
+    Высокие: vysokie
+    Большой член: bolshoy-chlen
+    Худые: hudye
+    Негритянки: negrityanki
+    На улице: na-ulice
+    Кончил на лицо: konchil-na-lico
+    Брюнетки: bryunetki
+    Кончил в анал: konchil-v-anal
+    Молодые: molodye
+    Сперма на сиськах: sperma-na-siskah
+    В магазине: v-magazine
+    На каблуках: na-kablukah
+    В очках: v-ochkah
+    В офисе: v-ofise
+    Пикап: pikap
+    Толстые: tolstye
+    Частное, домашнее: chastnoe-porno
+    В сапогах: v-sapogah
+    Лесби: lesbi
+    Униформа: uniforma
+    Поза 69: poza-69
+    Тату: tatu
+    ЖМЖ: jmj
+    С закрытыми глазами: s-zakrytymi-glazami
+    Спортсменка: sportsmenka
+    Трусики: trusiki
+    С сюжетом: s-syujetom
+    Застукала: zastukala
+    На столе: na-stole
+    Медсестра: medsestra
+    Стоя: stoya
+    На диване: na-divane
+    Низкие: nizkie
+    В одежде: v-odejde
+    Двойное проникновение: dvoynoe-proniknovenie
+    Волосатая пизда: volosataya-pizda
+    В машине: v-mashine
+    Межрассовое: mejrassovoe
+    Секс в спальне: seks-v-spalne
+    В масле: v-masle
+    В шортиках: v-shortikah
+    Измена: izmena
+    Втроем: vtroem
+    Куколд: kukold
+    Оргия: orgiya
+    Азиатки: aziatki
+    Тренер: trener
+    На природе: na-prirode
+    Групповуха: gruppovuha
+    Дрочит парню: drochit-parnyu
+    В мини юбке: v-mini-yubke
+    Сквирт: skvirt
+    На кухне: na-kuhne
+    Писсинг: pissing
+    Секс в ванной: seks-v-vannoy
+    Латино: latino
+    Горничная: gornichnaya
+    Секретарша: sekretarsha
+    Эротика: erotika
+    Колготки: kolgotki
+    Свингер секс: svinger-seks
+    Секс игрушки: seks-igrushki
+    Косплей: kospley
+    Студенты: studenty
+    Начальница: nachalnica
+    В презервативе: v-prezervative
+    Массаж: massaj
+    Хентай и Аниме: hentay-i-anime
+    Женский оргазм: jenskiy-orgazm
+    С неграми: negry
+    МЖМ: mjm
+    Чёрный член негра: bolshoy-chernyy-chlen
+    Фут Фетиш: fut-fetish
+    На пляже: na-plyaje
+    Начальник: nachalnik
+    Доктор: doktor
+    Фильмы и кино: filmy-i-kino
+    Ганг Банг: gang-bang
+    Кастинг: kasting
+    В душе: v-dushe
+    На публике: na-publike
+    Страпон: strapon
+    Пародии: parodii
+    Фистинг: fisting
+    В туалете: v-tualete
+    Связанные: svyazannye
+    Жесткое, насилие: jestkoe
+    Вуайеризм: vuayerizm
+    Вебкам запись: vebkam-zapis
+    Невеста: nevesta
+    Скрытая камера: skrytaya-kamera
+    В латексе: v-latekse
+    В клубе: v-klube
+    Полицейский: policeyskiy
+    Госпожа: gospoja
+    Одежда из латекса: odejda-iz-lateksa
+    БДСМ: bdsm
+    Секс в лодке: seks-na-lodke
+  customs:
+    - name: Студии
+      arg: studio
+      format: channels/{value}/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=post_date_and_popularity&from={page}
+      submenu:
+        Pornhub: pornhub
+        Brazzers: brazzers
+        Teamskeet: teamskeet
+        Bangbros: bangbros
+        EvilAngel: evilangel
+        Private: private
+        RusRazvrat: rusrazvrat
+        RealityKings: realitykings
+        Pornworld: pornworld
+        Mylf: mylf
+        Brazzers Exxtra: brazzers-exxtra
+        MOFOS: mofos
+        PenthouseGold: penthousegold
+        Firstanalquest: firstanalquest
+        NubileFilms: nubilefilms
+        DDF Network: ddf-network
+        Naughty America: naughty-america
+        Jules Jordan Video: jules-jordan-video
+        Vixen: vixen
+        Public Agent: public-agent
+        Blacked: blacked
+        Tushy: tushy
+        BrattySis: brat-sis
+        Teenmegaworld: teenmegaworld
+        SEXMEX: sexmex
+        ANALVIDS: analvids
+        Onlyfans: onlyfans
+        FakeTaxi: faketaxi
+        Legalporno: legalporno
+        21Sextury: 21-sextury
+        DorcelClub: dorcelclub
+        Hustler: hustler
+        Sislovesme: sislovesme
+        Passion-HD: passion-hd
+        HotWifeXXX: hotwifexxx
+        PervMom: pervmom

@@ -1,0 +1,89 @@
+---
+name: Reusable .NET Build
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: "Git ref to checkout (e.g., refs/tags/1.0.0). Empty = github.ref"
+        type: string
+        required: false
+        default: ""
+
+      dotnet_version:
+        description: "Dotnet version (e.g. 10.0.x)"
+        type: string
+        required: false
+        default: "10.0.x"
+
+      project_file:
+        description: "Path to .csproj file"
+        type: string
+        required: false
+        default: "Core/Core.csproj"
+
+      retention_days:
+        description: "Artifact retention days (7 for CI, 30 for releases)"
+        type: number
+        required: false
+        default: 7
+
+      verify_format:
+        description: "Run dotnet format --verify-no-changes"
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build:
+    name: Build Lampac NextGen
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine checkout ref
+        id: checkout_ref
+        run: |
+          if [ -n "${{ inputs.checkout_ref }}" ]; then
+            REF="${{ inputs.checkout_ref }}"
+            echo "Using checkout_ref from workflow_call: $REF"
+          else
+            REF="${{ github.ref }}"
+            if [[ "$REF" == refs/tags/* ]]; then
+              TAG_NAME="${REF#refs/tags/}"
+              echo "Using tag push event: $TAG_NAME"
+            else
+              echo "Using default ref: $REF"
+            fi
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Checking out ref: $REF"
+
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ steps.checkout_ref.outputs.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5.2.0
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Restore
+        run: dotnet restore --verbosity minimal ${{ inputs.project_file }}
+
+      - name: Publish Lampac NextGen
+        run: |
+          set -euo pipefail
+          dotnet publish ${{ inputs.project_file }} \
+            --configuration Release \
+            --output publish \
+            --verbosity minimal
+
+      - name: Upload artifact Lampac NextGen
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: lampac-nextgen
+          path: publish/
+          include-hidden-files: true
+          retention-days: ${{ inputs.retention_days }}

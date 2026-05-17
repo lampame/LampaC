@@ -1,0 +1,101 @@
+enable: true
+displayindex: 20
+displayname: Filmix
+host: https://filmix.my
+
+headers:
+  referer: "{host}/"
+  sec-fetch-dest: empty
+  sec-fetch-mode: cors
+  sec-fetch-site: same-origin
+  x-requested-with: XMLHttpRequest
+#  cookie: "dle_user_id=; dle_password=; dle_hash=; x-a-key=sinatra; FILMIXNET="
+
+
+movie_cats:
+  - film
+  - mults
+
+serial_cats:
+  - seria
+  - multser
+
+catalog_key: Новинки
+
+menu:
+  - categories:
+      Фильмы: film
+      Сериалы: seria
+      Мультфильмы: mults
+      Мультсериалы: multser
+    sort:
+      Новинки: date
+    format:
+      sort: "loader.php?do=cat&category={cat}%2F&cstart={page}&requested_url={cat}%2Fpages%2F{page}"
+
+
+search:
+  uri: engine/ajax/sphinx_search.php
+  postData: scf=fx&story={search}&search_start=0&do=search&subaction=search
+
+
+content:
+  serial_regex: "(seria|multser)/"
+  nodes: //article[contains(@class,'shortstory')]
+  name:
+    node: .//h2[contains(@class,'name')]/a
+  original_name:
+    node: .//div[contains(@class,'origin-name')]
+  href:
+    node: .//h2[contains(@class,'name')]/a
+    attribute: href
+  image:
+    node: .//div[contains(@class,'short')]//img
+    attribute: src
+  year:
+    node: .//div[contains(@class,'item year')]//a
+    format: |
+      var match = Regex.Match(value, "\\d{4}");
+      return match.Success ? match.Value : value;
+  total_pages:
+    node: //div[contains(@class,'navigation')]/a[not(contains(@class,'next'))][last()]
+  args:
+    - name_arg: release_quality
+      node: .//div[contains(@class,'top-date')]//div[contains(@class,'quality')]
+      format: |
+        string q = Regex.Match(value.Trim(), " ([^ ]+)$").Groups[1].Value.Replace("+", "");
+        return string.IsNullOrEmpty(q) ? value : $"{q}p";
+
+
+card_parse:
+  name:
+    node: //h1[@class='name']
+  original_name:
+    node: //div[contains(@class,'origin-name')]
+  image:
+    node: //img[contains(@class,'poster')]
+    attribute: src
+  year:
+    node: //div[contains(@class,'item year')]//a
+    format: |
+      var match = Regex.Match(value, "\\d{4}");
+      return match.Success ? match.Value : value;
+  description:
+    node: //div[@class='about']//div[@class='full-story']
+
+card_args:
+  - name_arg: runtime
+    node: //div[contains(@class,'item durarion')]
+    attribute: content
+  - name_arg: production_countries
+    node: //div[contains(@class,'item contry')]//a
+  - name_arg: genres
+    node: //div[contains(@class,'item category')][span[contains(@class,'label')]='Жанр:']//span[@class='item-content']//a
+  - name_arg: kp_rating
+    node: //span[contains(@class,'kinopoisk')]/p[1]
+  - name_arg: imdb_rating
+    node: //span[contains(@class,'imdb')]/p[1]
+
+
+tmdb_injects:
+  - default

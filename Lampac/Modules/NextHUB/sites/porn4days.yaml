@@ -1,0 +1,98 @@
+enable: true
+displayindex: 270
+displayname: Porn4days
+stream_access: apk,cors
+rch_access: apk,cors
+rchstreamproxy: web
+host: https://porn4days.pw
+priorityBrowser: http
+
+menu:
+  sort:
+    Новинки: ""
+    Популярное: popullar/page{page}/
+  categories:
+    format: search/page{page}/?s={cat}
+    Anal: Anal
+    Big Ass: Big%20Ass
+    MILF: MILF
+    Teen: Teen
+    Big Tits: Big%20Tits
+    Lesbian: Lesbian
+    Squirt: Squirt
+    Rough Sex: Rough%20Sex
+    Ebony: Ebony
+    Asian: Asian
+    Big Dick: Big%20Dick
+    Latina: Latina
+    Facial: Facial
+    Double Penetration DP: Double%20Penetration%20DP
+    Interracial: Interracial
+    Threesome: Threesome
+    Gangbang: Gangbang
+    Blonde: Blonde
+    Natural Tits: Natural%20Tits
+    Creampie: Creampie
+    Brunette: Brunette
+    Deepthroat: Deepthroat
+  customs:
+    - name: Студии
+      arg: studio
+      format: search/page{page}/?s={value}
+      submenu:
+        Brazzers: premium-brazzers
+        BangBros: BangBros
+        RealityKings: RealityKings
+        Mofos: Mofos
+        NaughtyAmerica: NaughtyAmerica
+        DigitalPlayground: DigitalPlayground
+        TeamSkeet: TeamSkeet
+        Blacked: Blacked
+        Tushy: Tushy
+        HardX: HardX
+        MomPOV: MomPOV
+        GirlsWay: GirlsWay
+
+list:
+  uri: newest/page{page}/
+
+search:
+  uri: search/page{page}/?s={search}
+
+model:
+  format: '{host}/search/page{page}/?s={model.Split("=")[1]}'
+
+contentParse:
+  nodes: //div[contains(@class, 'card video-card')]
+  name:
+    node: .//h2//a
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//span[@class='video-badge right']
+
+view:
+  viewsource: true
+  iframe:
+    pattern: '"embedUrl": +"([^"]+)"' 
+  nodeFile:
+    node: //source[@type='video/mp4']
+    attribute: src
+
+
+# 04.02.2026
+#  bindingToIP: true
+#   iframe:
+#     pattern: '"src", "(https?://streamtape.com/[^"]+)"'
+#   patternFile: (/get_video|\.m3u8|\?stream=1)
+#   patternAbortEnd: \.(mp4|m3u|ts|mpd)
+#   patternWhiteRequest: streamtape\.
+
+
+# 04.12.2025
+# playbtn: "#clicktodelete"
+# patternWhiteRequest: (porn4days|streamtape)\.

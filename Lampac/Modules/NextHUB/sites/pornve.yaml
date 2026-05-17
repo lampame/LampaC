@@ -1,0 +1,64 @@
+enable: true
+displayindex: 406
+displayname: PornVe
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://pornve.com
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: latest-updates/{page}/
+    Лучшее: top-rated/{page}/
+    Популярное: most-popular/{page}/
+  categories:
+    format: tags/{cat}/{page}/
+    blonde: blonde
+    shaved: shaved
+    tight pussy: tight-pussy
+    brunette: brunette
+    milf: milf
+    deepthroat: deepthroat
+    pov: pov
+    facial: facial
+    asian: asian
+    creampie: creampie
+    fingering: fingering
+    hardcore: hardcore
+    latina: latina
+    natural tits: natural-tits
+    doggy: doggy
+    amateur: amateur
+    big tits: big-tits
+    anal: anal
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[contains(@class,'thumb item')]
+  name:
+    node: .//div[@class='title']
+  href:
+    node: .//a
+    attribute: href
+  duration:
+    node: .//div[@class='time']
+  img:
+    node: .//img
+    attribute: data-webp
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["video_alt_url", "video_url"]
+    pattern: "{value}:[\t ]+'([^']+)'"

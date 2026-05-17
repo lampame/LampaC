@@ -1,0 +1,36 @@
+{
+  "name": "Lampac",
+  "type": "list",
+  "headline": "Lampa Media Station",
+  "version": "1.0.0",
+  "parameter": "content:{localhost}/msx/start.json",
+  "action": "[settings:validate_links:0|home]",
+  "dictionary": "{localhost}/lampa-main/msx/lang/ru.json",
+  "template": {
+    "type": "separate",
+    "layout": "0,0,2,3",
+    "color": "msx-glass"
+  },
+  "items": [
+    {
+      "title": "Lampa",
+      "image": "{localhost}/lampa-main/msx-logo.png",
+      "action": "link:{localhost}/lampa-main/index.html"
+    },
+    {
+      "title": "SiSi",
+      "image": "{localhost}/sisi/msx-logo.png",
+      "action": "link:{localhost}/sisi/index.html"
+    },
+    {
+      "title": "SiSi Native",
+      "image": "{localhost}/sisi/msx-logo.png",
+      "action": "content:{localhost}/sisi?initial=msx"
+    },
+    {
+      "title": "ForkPlayer",
+      "image": "{localhost}/msx/fork2.png",
+      "action": "link:http://browser.appfxml.com"
+    }
+  ]
+}

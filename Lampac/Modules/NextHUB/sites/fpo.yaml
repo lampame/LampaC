@@ -1,0 +1,44 @@
+enable: true
+displayindex: 412
+displayname: FPO
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://www.fpo.xxx
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Лучшее: top-2/{page}/
+    Популярнаe: popular-2/{page}/
+
+list:
+  uri: /new-1/{page}/
+
+search:
+  uri: search/{search}/
+
+contentParse:
+  nodes: //div[contains(@class,'item ')]
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//span[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();

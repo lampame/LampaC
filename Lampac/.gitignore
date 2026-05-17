@@ -339,5 +339,30 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/MiniApi/cache
+/MiniApi/database
+/MiniApi/current.conf
+/MiniApi/init.conf
+/MiniApi/passwd
+/MiniApi/wwwroot/bookmarks
+/MiniApi/.playwright
+/ApiCore/cache
+/ApiCore/.playwright
+/ApiCore/database
+/ApiCore/wwwroot/bookmarks
+/ApiCore/current.conf
+/ApiCore/init.conf
+/ApiCore/passwd
+/Core/.playwright
+/Core/cache
+/Core/database
+/Core/wwwroot/bookmarks
+/Core/current.conf
+/Core/init.conf
+/Core/passwd
 
-!Build
+# Docker development
+/lampac-docker
+
+# Mac OS
+.DS_Store

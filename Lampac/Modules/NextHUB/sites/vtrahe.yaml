@@ -1,0 +1,76 @@
+enable: false
+displayindex: 120
+displayname: Vtrahe
+rch_access: apk
+stream_access: apk,cors
+rchstreamproxy: web
+# https://vtrahehd.tv
+host: https://movie.vtrahe.info
+priorityBrowser: http
+headers:
+  referer: https://site.vtrahehd.tv/
+
+menu:
+  sort:
+    Новинки: ""
+    Рейтинговое: top/page/{page}/
+    Популярнаe: most-popular/page/{page}/
+  categories:
+    format: "{cat}/page/{page}/"
+    Full HD: fullhd
+    Азиатки: aziatskoe-porno
+    Анал: analnoe-porno
+    Большие сиськи: bolshie-siski
+    Большие члены: bolshie-chleny
+    Групповое: gruppovoe-porno
+    Домашнее: domashnee-porno
+    Зрелые: zrelye-zhenshhiny
+    Кастинг: kastingi
+    Кончающие: konchayushhie
+    Мастурбация: drochka-i-masturbaciya
+    Минет: minet-i-oralnyj-seks
+    Негры: porno-s-negrami-i-mulatkami
+    Вечеринки: porno-vecherinki
+    Звезды: porno-zvyozdy
+    До 35 лет: porno-35
+    Пародии: porno-parodies
+    Пьяные: seks-po-pyani
+    Русское: russkoe-porno
+    Секс на улице: seks-na-ulice-i-nudisty
+    Скрытая камера: skrytaya-kamera
+    Сперма: sperma
+    Толстые: tolstushki
+    Фетиш: fetish-i-prochee
+    Лучшее порно: sorts
+    3D: 3d-porno
+
+list:
+  firstpage: ""
+  uri: latest-updates/page/{page}/
+
+search:
+  uri: "?do=search&subaction=search&search_start={page}&full_search=0&story={search}"
+  encodingRequest: "windows-1251"
+
+contentParse:
+  nodes: //div[@class='innercont']
+  name:
+    node: .//div[@class='preview_title']//a
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//div[@class='dlit']
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    string[] e = Regex.Match(html, "data-c=\"([^\"]+)\"").Groups[1].Value.Split(';');
+    int videoId = int.Parse(e[4]);
+    int folder = 1000 * (videoId / 1000);
+    string qualitySuffix = e[1] == "720p" ? "" : "_" + e[1];
+    return $"https://{e[7]}.vstor.top/whlvid/{e[5]}/{e[6]}/{folder}/{videoId}/{videoId}{qualitySuffix}.mp4/{videoId}{qualitySuffix}.mp4";

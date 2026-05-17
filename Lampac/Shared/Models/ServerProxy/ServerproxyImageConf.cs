@@ -1,24 +1,24 @@
-﻿using Shared.Models.Base;
+﻿namespace Shared.Models.ServerProxy;
 
-namespace Shared.Models.ServerProxy
+public class ServerproxyImageConf : Iproxy
 {
-    public class ServerproxyImageConf : Iproxy
-    {
-        public bool cache { get; set; }
+    public bool enable { get; set; }
 
-        public bool cache_rsize { get; set; }
-
-        public int cache_time { get; set; }
-
-        public bool noSqlDb { get; set; }
+    public bool NetVipsCache { get; set; }
 
 
-        public bool useproxy { get; set; }
+    public bool cache { get; set; }
 
-        public bool useproxystream { get; set; }
+    public bool cache_rsize { get; set; }
 
-        public string globalnameproxy { get; set; }
+    public int cache_time { get; set; }
 
-        public ProxySettings proxy { get; set; }
-    }
+
+    public bool useproxy { get; set; }
+
+    public bool useproxystream { get; set; }
+
+    public string globalnameproxy { get; set; }
+
+    public ProxySettings proxy { get; set; }
 }

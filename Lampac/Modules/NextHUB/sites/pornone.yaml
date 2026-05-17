@@ -1,0 +1,569 @@
+enable: true
+displayindex: 160
+displayname: PornOne
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://pornone.com
+ignore_no_picture: false
+priorityBrowser: http
+
+#cookies:
+#  - Domain: pornone.com
+#    Path: /
+#    Name: res
+#    Value: "1080"
+
+list:
+  uri: "{page}/"
+
+search:
+  uri: search?q={search}&sort=relevance&page={page}
+
+contentParse:
+  nodes: //a[@class='popbop vidLinkFX  videocard linkage']
+  name:
+    node: .//div[@class='videotitle ']
+  href:
+    attribute: href
+  img:
+    node: .//img[contains(@class, 'lazy-loading')]
+    attribute: data-src
+  duration:
+    node: .//span[@class='durlabel']
+
+view:
+  related: true
+  bindingToIP: true
+  viewsource: true
+  nodeFile:
+    node: //source
+    attribute: src
+    
+#view:
+#  related: true
+#  bindingToIP: true
+#  patternAbort: (\.(mp4|mpd|m3u|ts)|matomo.js)
+#  patternWhiteRequest: pornone\.
+#  waitForSelector: "#pornone-video-player_html5_api"
+#  nodeFile:
+#    node: //video[@id='pornone-video-player_html5_api']//source
+#    attribute: src
+
+menu:
+  route:
+    sort: "{host}/{sort}/week/{page}/"
+    cat: "{host}/{cat}/{page}/"
+    catsort: "{host}/{cat}/{sort}/{page}/"
+  sort:
+    Новинки: ""
+    Популярные: rating
+  categories:
+    Amateur: amateur
+    Anal: anal
+    Asain: asian
+    Ass: ass
+    Afghan: afghan
+    Albanian: albanian
+    Algerian: algerian
+    American: american
+    Anime: anime
+    Ass Licking: ass-licking
+    Arab: arab
+    Argentinian: argentinian
+    Argentine: argentine
+    Army: army
+    Ass To Mouth: ass-to-mouth
+    Artistic: artistic
+    Athletic: athletic
+    Audition: audition
+    Aussie: aussie
+    Australian: australian
+    Austrian: austrian
+    Bbc: bbc
+    BBW: bbw
+    Big Boobs: big-boobs
+    Big Dick: big-dick
+    Black: black
+    Blowjob: blowjob
+    Behind The Scenes: behind-the-scenes
+    Backroom: backroom
+    Bound: bound
+    Birthday: birthday
+    Butthole: butthole
+    Braces: braces
+    Bus: bus
+    Boss: boss
+    Babysitter: babysitter
+    Babes: babes
+    Bath: bath
+    Bathroom: bathroom
+    Bangladeshi: bangladeshi
+    Bar: bar
+    Boat: boat
+    Batswana: batswana
+    Bdsm: bdsm
+    Beach: beach
+    Beautiful: beautiful
+    Bedroom: bedroom
+    Belgian: belgian
+    Bra: bra
+    Big Clit: big-clit
+    Bikini: bikini
+    Blonde: blonde
+    Bizarre: bizarre
+    Bisexual: bisexual
+    Blowbang: blowbang
+    Bodybuilder: bodybuilder
+    Bolivian: bolivian
+    Bondage: bondage
+    Boots: boots
+    Bottle: bottle
+    Boy: boy
+    Brazilian: brazilian
+    Bride: bride
+    British: british
+    Brunette: brunette
+    Brutal: brutal
+    Bukkake: bukkake
+    Bulgarian: bulgarian
+    Busty: busty
+    Cartoon: cartoon
+    Cheating: cheating
+    Compilation: compilation
+    Cougar: cougar
+    Creampie: creampie
+    Cuckold: cuckold
+    Cumshot: cumshot
+    Cop: cop
+    Cowgirl: cowgirl
+    Cheerleader: cheerleader
+    Caught: caught
+    Classroom: classroom
+    Car: car
+    Caning: caning
+    Comics: comics
+    Clothed: clothed
+    Celebrities: celebrity
+    Cinema: cinema
+    Curvy: curvy
+    Cute: cute
+    Cameroonian: cameroonian
+    Cambodian: cambodian
+    Cameltoe: cameltoe
+    Canadian: canadian
+    Couch: couch
+    Couple: couple
+    Cbt: cbt
+    Czech: czech
+    Cucumber: cucumber
+    Cfnm: cfnm
+    Chilean: chilean
+    Chinese: chinese
+    Crying: crying
+    Chubby: chubby
+    Classic: classic
+    Cleavage: cleavage
+    Closeup: closeup
+    Club: club
+    College: college
+    Colombian: colombian
+    Cum: cum
+    Condom: condom
+    Corset: corset
+    Cosplay: cosplay
+    Costa Rican: costa-rican
+    Crack: crack
+    Crazy: crazy
+    Criminal: criminal
+    Croatian: croatian
+    Crossdresser: crossdresser
+    Cuban: cuban
+    Cum In Mouth: cum-in-mouth
+    Dad: dad
+    Daughter: daughter
+    Doctor: doctor
+    Double Anal: double-anal
+    Dance: dance
+    Doggystyle: doggystyle
+    Doll: doll
+    Dildo: dildo
+    Dirty Talk: dirty-talk
+    Dirty: dirty
+    Danish: danish
+    Deepthroat: deepthroat
+    Double Penetration: double-penetration
+    Domination: domination
+    Dominican: dominican
+    Dorm: dorm
+    Dress: dress
+    Dutch: dutch
+    Ebony: ebony
+    Erotic: erotic
+    Egyptian: egyptian
+    English: english
+    Ethiopian: ethiopian
+    Exploited: exploited
+    Enema: enema
+    Ecuadorian: ecuadorian
+    Emirati: emirati
+    Emo: emo
+    Exclusive: exclusive
+    Exotic: exotic
+    Estonian: estonian
+    Extreme: extreme
+    European: european
+    Family: family
+    Female: female
+    Fetish: fetish
+    Fisting: fisting
+    Foursome: foursome
+    Fishnet: fishnet
+    Food: food
+    Friend: friend
+    Facial: facial
+    Facesitting: facesitting
+    Fucking: fucking
+    Fight: fight
+    Flash: flash
+    Forest: forest
+    Footjob: footjob
+    Forced: forced
+    Fingering: fingering
+    Freckles: freckles
+    Funny: funny
+    Femdom: femdom
+    First Time: first-time
+    Fake Tits: fake-tits
+    Fantasy: fantasy
+    Fat: fat
+    Feet: feet
+    Ffm: ffm
+    Fijian: fijian
+    Full Movie: full-movie
+    Finnish: finnish
+    Flexible: flexible
+    French: french
+    Gangbang: gangbang
+    Gloryhole: gloryhole
+    Granny: granny
+    Group Sex: group-sex
+    Groping: groping
+    Grandma: grandma
+    Grandpa: grandpa
+    German: german
+    Gagging: gagging
+    Gorgeous: gorgeous
+    Glasses: glasses
+    Girlfriend: girlfriend
+    Gym: gym
+    Game: game
+    Ghanaian: ghanaian
+    Gloves: gloves
+    Gape: gape
+    Gay: gay
+    Ghetto: ghetto
+    Gyno: gyno
+    Goth: goth
+    Greek: greek
+    Guatemalan: guatemalan
+    Hairy: hairy
+    Handjob: handjob
+    Hentai: hentai
+    Homemade: homemade
+    Housewife: housewife
+    Hogtied: hogtied
+    Hazing: hazing
+    Hidden: hidden
+    Hidden Cam: hidden-cam
+    Hat: hat
+    Home: home
+    Hospital: hospital
+    Husband: husband
+    Hermaphrodite: hermaphrodite
+    Heels: heels
+    Haitian: haitian
+    Hardcore: hardcore
+    Honduran: honduran
+    Hungarian: hungarian
+    Hotel: hotel
+    Interracial: interracial
+    Instruction: instruction
+    Interview: interview
+    Insertion: insertion
+    Icelandic: icelandic
+    Irish: irish
+    Indian: indian
+    Indonesian: indonesian
+    Innocent: innocent
+    Internal: internal
+    Interactive: interactive
+    Iranian: iranian
+    Iraqi: iraqi
+    Israeli: israeli
+    Italian: italian
+    Jerking: jerking
+    Jeans: jeans
+    Jizz: jizz
+    Jamaican: jamaican
+    Japanese: japanese
+    Jordanian: jordanian
+    Kissing: kissing
+    Kitchen: kitchen
+    Korean: korean
+    Kenyan: kenyan
+    Kinky: kinky
+    Knockers: knockers
+    Kuwaiti: kuwaiti
+    Latin: latin
+    Lesbian: lesbian
+    Love: love
+    Lactating: lactating
+    Legs: legs
+    Leather: leather
+    Ladyboys: ladyboys
+    Lingerie: lingerie
+    Licking pussy: licking-pussy
+    Lao: lao
+    Latex: latex
+    Latvian: latvian
+    Lebanese: lebanese
+    Libyan: libyan
+    Lithuanian: lithuanian
+    Maid: maid
+    Massage: massage
+    Masturbation: masturbation
+    Mature: mature
+    MILF: milf
+    Mom: mom
+    Mistress: mistress
+    Midget: midget
+    Money: money
+    Model: model
+    Muscle: muscle
+    Machine: machine
+    Malaysian: malaysian
+    Malian: malian
+    Maltese: maltese
+    Moroccan: moroccan
+    Masseuse: masseuse
+    Masochism: masochism
+    Milking: milking
+    Mexican: mexican
+    Mmf: mmf
+    Mozambican: mozambican
+    Mongolian: mongolian
+    Monster: monster
+    Motel: motel
+    Music: music
+    Nasty: nasty
+    Nipples: nipples
+    Neighbour: neighbour
+    Nerd: nerd
+    Nurse: nurse
+    Nun: nun
+    Nylon: nylon
+    Namibian: namibian
+    Natural Tits: natural-tits
+    Nepalese: nepalese
+    New Zealand: new-zealand
+    Nicaraguan: nicaraguan
+    Nigerian: nigerian
+    Norwegian: norwegian
+    Nudist: nudist
+    Orgy: orgy
+    Outdoor: outdoor
+    Oil: oil
+    Old and Young: old-and-young
+    Old Man: old-man
+    Office: office
+    Oriental: oriental
+    Oral: oral
+    Orgasm: orgasm
+    Pawg: pawg
+    POV: pov
+    Pregnant: pregnant
+    Public: public
+    Piercing: piercing
+    Passion: passion
+    Punish: punish
+    Pale: pale
+    Pump: pump
+    Pussy: pussy
+    Porn Shorts: porn-shorts
+    Puffy Nipples: puffy-nipples
+    Petite: petite
+    Pigtails: pigtails
+    Pantyhose: pantyhose
+    Prison: prison
+    Party: party
+    Philippine: philippine
+    Penis: penis
+    Prolapse: prolapse
+    Plump: plump
+    Pissing: pissing
+    Prostitute: prostitute
+    Pakistani: pakistani
+    Panamanian: panamanian
+    Paraguayan: paraguayan
+    Park: park
+    Parody: parody
+    Private: private
+    Peruvian: peruvian
+    Pool: pool
+    Polish: polish
+    Portuguese: portuguese
+    Prostate: prostate
+    Punk: punk
+    Riding: riding
+    Rim: rim
+    Rough: rough
+    Rubber: rubber
+    Rope: rope
+    "Role Play": role-play
+    Revenge: revenge
+    Redhead: redhead
+    Reality: reality
+    Robot: robot
+    Romanian: romanian
+    Romantic: romantic
+    Russian: russian
+    Sister: sister
+    Squirting: squirting
+    Ssbbw: ssbbw
+    Stepmom: stepmom
+    Spreading: spreading
+    Stroking: stroking
+    Shaved: shaved
+    Shaving: shaving
+    Strapon: strapon
+    Selfsuck: selfsuck
+    Swallowing: swallowing
+    Spanking: spanking
+    Swimsuit: swimsuit
+    Stockings: stockings
+    Sauna: sauna
+    Story: story
+    Shy: shy
+    Shiny: shiny
+    Short Hair: short-hair
+    Short Pants: short-pants
+    Socks: socks
+    Street: street
+    Small Cock: small-cock
+    Satin: satin
+    Sissy: sissy
+    Suck: suck
+    Shower: shower
+    School: school
+    Share: share
+    Screaming: screaming
+    Stripping: stripping
+    Sport: sport
+    Shoes: shoes
+    Sunglasses: sunglasses
+    Stranger: stranger
+    Saggy Tits: saggy-tits
+    Sleeping: sleeping
+    Sexy: sexy
+    Swing: swing
+    Scottish: scottish
+    Slim: slim
+    Scandal: scandal
+    Scandinavian: scandinavian
+    Slave: slave
+    Sex slave: sex-slave
+    Slovak: slovak
+    Spanish: spanish
+    Spy: spy
+    Sri Lankan: sri-lankan
+    Spa: spa
+    Striptease: striptease
+    Student: student
+    Skirt: skirt
+    Skinny: skinny
+    Sorority: sorority
+    Seduce: seduce
+    Smoking: smoking
+    Slut: slut
+    "Small Tits": small-tits
+    Shoejob: shoejob
+    Submissive: submissive
+    Surprise: surprise
+    Salvadorian: salvadorian
+    Saudi: saudi
+    Swedish: swedish
+    Swiss: swiss
+    Secretary: secretary
+    Senegalese: senegalese
+    Sensual: sensual
+    Serbian: serbian
+    Shemale: shemale
+    Singaporean: singaporean
+    Syrian: syrian
+    Sudanese: sudanese
+    Solarium: solarium
+    Solo: solo
+    South African: south-african
+    Sybian: sybian
+    Teen: teen
+    Threesome: threesome
+    Tall: tall
+    Tied: tied
+    Tight: tight
+    Tricked: tricked
+    Topless: topless
+    Tit fuck: tit-fuck
+    Toys: toys
+    Train: train
+    Toes: toes
+    Thin: thin
+    Toon: toon
+    Tiny: tiny
+    Throat: throat
+    Twins: twins
+    Tease: tease
+    Toilet: toilet
+    Teacher: teacher
+    Taboo: taboo
+    Tajikistani: tajikistani
+    Thai: thai
+    Taiwanese: taiwanese
+    Tattoo: tattoo
+    Tongan: tongan
+    Tunisian: tunisian
+    Turkish: turkish
+    Underwater: underwater
+    Ugly: ugly
+    Uniform: uniform
+    Upskirt: upskirt
+    Uncensored: uncensored
+    Ukrainian: ukrainian
+    Uruguayan: uruguayan
+    Vintage: vintage
+    Voyeur: voyeur
+    Vagina: vagina
+    Vacation: vacation
+    Virgin: virgin
+    Virtual Reality: virtual-reality
+    Vampire: vampire
+    Venezuelan: venezuelan
+    Vibrator: vibrator
+    Vietnamese: vietnamese
+    Weebcams: webcams
+    Workout: workout
+    Work: work
+    Wet: wet
+    White: white
+    Wedding: wedding
+    Wrestling: wrestling
+    Wanking: wanking
+    Wife: wife
+    Whipping: whipping
+    Welsh: welsh
+    Whore: whore
+    Wild: wild
+    Young: young
+    Yoga: yoga
+    Zambian: zambian
+    Zimbabwean: zimbabwean

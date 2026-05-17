@@ -1,0 +1,76 @@
+enable: true
+displayindex: 407
+displayname: Sexxxxhub
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://sexxxxhub.com
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Лучшее: top-rated/{page}/
+    Популярнаe: most-popular/{page}/
+  categories:
+    format: categories/{cat}/{page}/
+    Pregnant: pregnant
+    High Heels: high-heels
+    Big Clit: big-clit
+    Car: car
+    Footjob: footjob
+    Femdom: femdom
+    Voyeur: voyeur
+    Bukkake: bukkake
+    Foot Fetish: foot-fetish
+    Vintage: vintage
+    Ukrainian: ukrainian
+    Saggy Tits: saggy-tits
+    Clit: clit
+    Skinny: skinny
+    Thai: thai
+    Seduce: seduce
+    Party: party
+    Colombian: colombian
+    African: african
+    College: college
+    Massage: massage
+    Pantyhose: pantyhose
+    Close-up: close-up
+    Stranger: stranger
+    Teacher: teacher
+    Sex Toy: sex-toy
+    Cougar: cougar
+    American: american
+    Moaning: moaning
+    Swingers: swingers
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[@class='item th']
+  name:
+    node: .//div[@class='card-title']
+  duration:
+    node: .//div[@class='sticky']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-webp
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["video_url", "video_alt_url"]
+    pattern: "{value}:[\t ]+'([^']+)'"

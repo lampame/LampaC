@@ -1,9 +1,8 @@
-﻿namespace Shared.Models.Proxy
-{
-    public class ProxyManagerModel
-    {
-        public string proxyip { get; set; }
+﻿namespace Shared.Models.Proxy;
 
-        public int errors { get; set; }
-    }
+public class ProxyManagerModel
+{
+    public string proxyip { get; set; }
+
+    public int errors { get; set; }
 }

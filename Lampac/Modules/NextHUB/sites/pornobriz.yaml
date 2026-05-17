@@ -1,0 +1,117 @@
+enable: true
+displayindex: 350
+displayname: Porno Briz
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://pornobriz.com
+priorityBrowser: http
+
+menu:
+  sort:
+    Новинки: ""
+    Топ рейтинга: top/page{page}/
+    Популярнаe: best/page{page}/
+  categories:
+    format: "{cat}/page{page}/"
+    Азиатки: asian
+    Анальный секс: anal
+    БДСМ: bdsm
+    Блондинки: blonde
+    Большая жопа: big_ass
+    Большие сиськи: big_tits
+    Большой член: big_dick
+    Бритая киска: shaved
+    Брюнетки: brunette
+    В одежде: clothes
+    Волосатые киски: hairy
+    Глотают сперму: swallow
+    Глубокая глотка: deepthroat
+    Групповой секс: group
+    Двойное проникновение: double_penetration
+    Длинноволосые девушки: long_hair
+    Дрочат: wanking
+    Жесткий секс: hardcore
+    ЖМЖ порно: ffm
+    Игрушки: toys
+    Казашки: kazakh
+    Камшот: cumshot
+    Кончают в рот: cum_in_mouth
+    Красивая задница: perfect_ass
+    Красивое белье: lingerie
+    Красивые девушки: beautiful
+    Красивые сиськи: beautiful_tits
+    Крупным планом: close_up
+    Кунилингус: pussy_licking
+    Лесбиянки: lesbian
+    Любительское порно: amateur
+    Маленькие девушки: petite
+    Маленькие сиськи: small_tits
+    Мамочки: milf
+    Мастурбация: masturbation
+    Межрасовое: interracial
+    МЖМ порно: mfm
+    Милашки: cute
+    Минет: blowjob
+    Молодые: seks-molodye
+    На природе: outdoor
+    На публике: public
+    Наездницы: riding
+    Негритянки: ebony
+    Оргазм: orgasm
+    От первого лица: pov
+    Писают: peeing
+    Поцелуи: kissing
+    Рвотные позывы: gagging
+    Реальный секс: reality
+    Римминг: rimming
+    Романтическое: romantic
+    Русское порно: russian
+    Рыжие: redhead
+    С японками: japanese
+    Секс втроем: threesome
+    Секс раком: doggystyle
+    Симпатичные: babe
+    Сквиртинг: squirting
+    Соло девушек: solo_girl
+    Сперма в жопе: creampie
+    Сперма на груди: cum_on_tits
+    Сперма на лице: facial
+    Страпон: strap-on
+    Стриптиз: striptease
+    Темноволосые: black-haired
+    Фетиш: fetish
+    Фингеринг: fingering
+    Фистинг: fisting
+    Худые девушки: skinny
+    Чулки: stockings
+    Эротика: erotika
+
+list:
+  uri: new/page{page}/
+
+search:
+  uri: search/{search}/page{page}/
+
+contentParse:
+  nodes: //div[contains(@class, 'thumb_main')]
+  name:
+    node: .//div[@class='th-title']
+  href:
+    node: .//a
+    attribute: href
+    format: '{value.Replace("/video/", "/embed/")}'
+  img:
+    node: .//img
+    attribute: data-original
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//video
+    attribute: data-preview
+
+view:
+  viewsource: true
+  regexMatch:
+    matches: ["720", "480", "240"]
+    pattern: 'src="([^"]+)" type="video/mp4" size="{value}"'

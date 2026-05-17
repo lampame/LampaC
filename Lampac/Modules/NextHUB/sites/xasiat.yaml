@@ -1,0 +1,59 @@
+enable: true
+displayindex: 409
+displayname: Xasiat
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://www.xasiat.com
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  sort:
+    Новинки: ""
+    Лучшее: top-rated/{page}/
+    Популярнаe: most-popular/{page}/
+  categories:
+    format: tags/{cat}/{page}/
+    Азиатки: asian
+    Японское: japanese
+    Китайское: chinese
+    Корейское: korean
+    Тайское: thai
+    Вьетнамское: vietnamese
+    Индийское: indian
+    Подростки 18+: teen-18
+    Любительское: amateur
+    Домашнее: homemade
+    Минет: blowjob
+    Анал: anal
+    Хентай: hentai
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[contains(@class,'item ')]
+  name:
+    node: .//strong
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-webp
+  duration:
+    node: .//div[@class='duration']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  eval: |
+    {include:kt_player.eval}
+    return decode();

@@ -1,0 +1,140 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Modules/">
+    <Project Path="Modules/AdminPanel/AdminPanel.csproj" />
+    <Project Path="Modules/Proxy/CacheMedia/CacheMedia.csproj" />
+    <Project Path="Modules/Catalog/Catalog.csproj" />
+    <Project Path="Modules/DLNA/DLNA.csproj" />
+    <Project Path="Modules/ExternalBind/ExternalBind.csproj" />
+    <Project Path="Modules/JacRed/JacRed.csproj" />
+    <Project Path="Modules/Kit/Kit.csproj" />
+    <Project Path="Modules/LampaWeb/LampaWeb.csproj" />
+    <Project Path="Modules/MsxNative/MsxNative.csproj" />
+    <Project Path="Modules/NextHUB/NextHUB.csproj" />
+    <Project Path="Modules/PidTor/PidTor.csproj" />
+    <Project Path="Modules/TorrServer/TorrServer.csproj" />
+    <Project Path="Modules/Tracks/Tracks.csproj" />
+    <Project Path="Modules/Transcoding/Transcoding.csproj" />
+    <Project Path="Modules/WatchTogether/WatchTogether.csproj" />
+    <Project Path="Modules/WebLog/WebLog.csproj" />
+  </Folder>
+  <Folder Name="/Modules/Adult/">
+    <Project Path="Modules/Adult/BongaCams/BongaCams.csproj" />
+    <Project Path="Modules/Adult/Chaturbate/Chaturbate.csproj" />
+    <Project Path="Modules/Adult/Ebalovo/Ebalovo.csproj" />
+    <Project Path="Modules/Adult/Eporner/Eporner.csproj" />
+    <Project Path="Modules/Adult/HQporner/HQporner.csproj" />
+    <Project Path="Modules/Adult/PornHub/PornHub.csproj" />
+    <Project Path="Modules/Adult/Porntrex/Porntrex.csproj" />
+    <Project Path="Modules/Adult/Runetki/Runetki.csproj" />
+    <Project Path="Modules/Adult/Spankbang/Spankbang.csproj" />
+    <Project Path="Modules/Adult/Tizam/Tizam.csproj" />
+    <Project Path="Modules/Adult/Xhamster/Xhamster.csproj" />
+    <Project Path="Modules/Adult/Xnxx/Xnxx.csproj" />
+    <Project Path="Modules/Adult/Xvideos/Xvideos.csproj" />
+    <Project Path="Modules/Adult/XvideosRED/XvideosRED.csproj" />
+  </Folder>
+  <Folder Name="/Modules/Community/">
+    <Project Path="Modules/Community/TelegramAuth/TelegramAuth.csproj" />
+    <Project Path="Modules/Community/TelegramAuthBot/TelegramAuthBot.csproj" />
+  </Folder>
+  <Folder Name="/Modules/ForkPlayerXML/">
+    <Project Path="Modules/ForkPlayerXML/ForkXML.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlineAnime/">
+    <Project Path="Modules/OnlineAnime/AniLiberty/AniLiberty.csproj" />
+    <Project Path="Modules/OnlineAnime/AniLibria/AniLibria.csproj" />
+    <Project Path="Modules/OnlineAnime/Animebesst/Animebesst.csproj" />
+    <Project Path="Modules/OnlineAnime/AniMedia/AniMedia.csproj" />
+    <Project Path="Modules/OnlineAnime/AnimeGo/AnimeGo.csproj" />
+    <Project Path="Modules/OnlineAnime/AnimeLib/AnimeLib.csproj" />
+    <Project Path="Modules/OnlineAnime/AnimeON/AnimeON.csproj" />
+    <Project Path="Modules/OnlineAnime/Animevost/Animevost.csproj" />
+    <Project Path="Modules/OnlineAnime/Dreamerscast/Dreamerscast.csproj" />
+    <Project Path="Modules/OnlineAnime/Kodik/Kodik.csproj" />
+    <Project Path="Modules/OnlineAnime/Mikai/Mikai.csproj" />
+    <Project Path="Modules/OnlineAnime/MoonAnime/MoonAnime.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlineENG/">
+    <Project Path="Modules/OnlineENG/AutoEmbed/AutoEmbed.csproj" />
+    <Project Path="Modules/OnlineENG/HydraFlix/HydraFlix.csproj" />
+    <Project Path="Modules/OnlineENG/MovPI/MovPI.csproj" />
+    <Project Path="Modules/OnlineENG/PlayEmbed/PlayEmbed.csproj" />
+    <Project Path="Modules/OnlineENG/RgShows/RgShows.csproj" />
+    <Project Path="Modules/OnlineENG/SmashyStream/SmashyStream.csproj" />
+    <Project Path="Modules/OnlineENG/TwoEmbed/TwoEmbed.csproj" />
+    <Project Path="Modules/OnlineENG/Videasy/Videasy.csproj" />
+    <Project Path="Modules/OnlineENG/VidLink/VidLink.csproj" />
+    <Project Path="Modules/OnlineENG/VidSrc/VidSrc.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlineGEO/">
+    <Project Path="Modules/OnlineGEO/AsiaGe/AsiaGe.csproj" />
+    <Project Path="Modules/OnlineGEO/Geosaitebi/Geosaitebi.csproj" />
+    <Project Path="Modules/OnlineGEO/Kinoflix/Kinoflix.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlinePaid/">
+    <Project Path="Modules/OnlinePaid/Alloha/Alloha.csproj" />
+    <Project Path="Modules/OnlinePaid/Filmix/Filmix.csproj" />
+    <Project Path="Modules/OnlinePaid/GetsTV/GetsTV.csproj" />
+    <Project Path="Modules/OnlinePaid/IptvOnline/IptvOnline.csproj" />
+    <Project Path="Modules/OnlinePaid/iRemux/iRemux.csproj" />
+    <Project Path="Modules/OnlinePaid/KinoPub/KinoPub.csproj" />
+    <Project Path="Modules/OnlinePaid/Rezka/Rezka.csproj" />
+    <Project Path="Modules/OnlinePaid/VoKino/VoKino.csproj" />
+    <Project Path="Modules/OnlinePaid/SakhTV/SakhTV.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlineRUS/">
+    <Project Path="Modules/OnlineRUS/CDNvideohub/CDNvideohub.csproj" />
+    <Project Path="Modules/OnlineRUS/Collaps/Collaps.csproj" />
+    <Project Path="Modules/OnlineRUS/FanCDN/FanCDN.csproj" />
+    <Project Path="Modules/OnlineRUS/FlixCDN/FlixCDN.csproj" />
+    <Project Path="Modules/OnlineRUS/HDVB/HDVB.csproj" />
+    <Project Path="Modules/OnlineRUS/Kinobase/Kinobase.csproj" />
+    <Project Path="Modules/OnlineRUS/Kinogo/Kinogo.csproj" />
+    <Project Path="Modules/OnlineRUS/Kinotochka/Kinotochka.csproj" />
+    <Project Path="Modules/OnlineRUS/LeProduction/LeProduction.csproj" />
+    <Project Path="Modules/OnlineRUS/Mirage/Mirage.csproj" />
+    <Project Path="Modules/OnlineRUS/Phantom/Phantom.csproj" />
+    <Project Path="Modules/OnlineRUS/PizdatoeHD/PizdatoeHD.csproj" />
+    <Project Path="Modules/OnlineRUS/RutubeMovie/RutubeMovie.csproj" />
+    <Project Path="Modules/OnlineRUS/Spectre/Spectre.csproj" />
+    <Project Path="Modules/OnlineRUS/VeoVeo/VeoVeo.csproj" />
+    <Project Path="Modules/OnlineRUS/Vibix/Vibix.csproj" />
+    <Project Path="Modules/OnlineRUS/VideoDB/VideoDB.csproj" />
+    <Project Path="Modules/OnlineRUS/Videoseed/Videoseed.csproj" />
+    <Project Path="Modules/OnlineRUS/VkMovie/VkMovie.csproj" />
+    <Project Path="Modules/OnlineRUS/Zetflix/Zetflix.csproj" />
+    <Project Path="Modules/OnlineRUS/ZetflixDB/ZetflixDB.csproj" />
+  </Folder>
+  <Folder Name="/Modules/OnlineUKR/">
+    <Project Path="Modules/OnlineUKR/Ashdi/Ashdi.csproj" />
+    <Project Path="Modules/OnlineUKR/BamBoo/BamBoo.csproj" />
+    <Project Path="Modules/OnlineUKR/Eneyida/Eneyida.csproj" />
+    <Project Path="Modules/OnlineUKR/HdvbUA/HdvbUA.csproj" />
+    <Project Path="Modules/OnlineUKR/KinoUkr/KinoUkr.csproj" />
+    <Project Path="Modules/OnlineUKR/Tortuga/Tortuga.csproj" />
+    <Project Path="Modules/OnlineUKR/UAFilm/UAFilm.csproj" />
+    <Project Path="Modules/OnlineUKR/UaKino/UaKino.csproj" />
+  </Folder>
+  <Folder Name="/Modules/Proxy/">
+    <Project Path="Modules/Proxy/Corseu/Corseu.csproj" />
+    <Project Path="Modules/Proxy/CorsMedia/CorsMedia.csproj" />
+    <Project Path="Modules/Proxy/CubProxy/CubProxy.csproj" />
+    <Project Path="Modules/Proxy/ProxyLimiter/ProxyLimiter.csproj" />
+    <Project Path="Modules/Proxy/TmdbProxy/TmdbProxy.csproj" />
+  </Folder>
+  <Folder Name="/Modules/Sync/">
+    <Project Path="Modules/Sync/Storage/Storage.csproj" />
+    <Project Path="Modules/Sync/Sync/Sync.csproj" />
+    <Project Path="Modules/Sync/SyncEvents/SyncEvents.csproj" />
+    <Project Path="Modules/Sync/TimeCode/TimeCode.csproj" />
+  </Folder>
+  <Project Path="Core/Core.csproj" />
+  <Project Path="Online/Online.csproj" />
+  <Project Path="Shared/Shared.csproj" />
+  <Project Path="SISI/SISI.csproj" />
+</Solution>

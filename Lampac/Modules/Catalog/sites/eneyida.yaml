@@ -1,0 +1,114 @@
+enable: true
+displayindex: 35
+displayname: Eneyida
+host: https://eneyida.tv
+
+search:
+  uri: index.php?do=search&subaction=search&story={search}
+
+movie_cats:
+  - films
+  - cartoon
+
+serial_cats:
+  - series
+  - cartoon-series
+  - anime
+
+catalog_key: Новинки
+
+menu:
+  - categories:
+      "[movie]Фільми": films
+      "[tv]Серіали": series
+      "[cartoons]Мультфільми": cartoon
+      "Мультсеріали": cartoon-series
+      "[anime]Аніме": anime
+    sort:
+      Новинки: update
+      Популярні: views
+      Рейтинг: rating
+    format:
+      sort: |
+        int catId = 1;
+        switch (cat)
+        {
+            case "series":
+                catId = 2;
+                break;
+            case "cartoon":
+                catId = 3;
+                break;
+            case "cartoon-series":
+                catId = 4;
+                break;
+            case "anime":
+                catId = 5;
+                break;
+        }
+
+        if (sort == "update")
+            return page > 1 ? $"{cat}/page/{page}/" : cat;
+
+        string basePath = $"f/p.cat={catId}/sort={sort}/order=desc/";
+        return page > 1 ? $"{basePath}page/{page}/" : basePath;
+
+
+content:
+  serial_regex: "(?i)(сезон|серія|серії|завершений)"
+  nodes: //article[contains(@class,'short') and contains(@class,'related_item')]
+  name:
+    node: .//a[@class='short_title']
+  href:
+    node: .//a[@class='short_title']
+    attribute: href
+  image:
+    node: .//a[contains(@class,'short_img')]//img
+    attribute: data-src
+  year:
+    node: .//div[contains(@class,'short_subtitle')]/a[1]
+    format: 'Regex.Match(value, "\\d{4}").Value'
+  total_pages:
+    node: //span[contains(@class,'navigation')]/a[last()]
+  args:
+    - name_arg: release_quality
+      node: .//div[contains(@class,'label_quel') and not(contains(@class,'metaBottom'))]
+      format: |
+        string q = Regex.Match(value.Trim(), " ([0-9]+p)$").Groups[1].Value;
+        return string.IsNullOrEmpty(q) ? value : q;
+
+
+card_parse:
+  name:
+    node: //div[contains(@class,'full_header-title')]/h1
+  original_name:
+    node: //div[contains(@class,'full_header-subtitle')]
+  image:
+    node: //header[contains(@class,'full_header')]//img
+    attribute: src
+  year:
+    node: //ul[contains(@class,'full_info')]/li[span='Рік:']/a
+    format: 'Regex.Match(value, "\\d{4}").Value'
+  description:
+    node: //article[contains(@class,'full_content-desc')]
+
+
+card_args:
+  - name_arg: runtime
+    node: //ul[contains(@class,'full_info')]/li[span='Тривалість:']
+    format: |
+      var match = Regex.Match(value, @"(\d{1,2}):(\d{2}):(\d{2})");
+      if (match.Success)
+          return int.Parse(match.Groups[1].Value) * 60 + int.Parse(match.Groups[2].Value);
+      match = Regex.Match(value, @"(\d+)[^0-9]+хв");
+      return match.Success ? int.Parse(match.Groups[1].Value) : (int?)null;
+  - name_arg: production_countries
+    node: //ul[contains(@class,'full_info')]/li[span='Країна:']//a
+  - name_arg: genres
+    node: //ul[contains(@class,'full_info')]/li[span='Жанр:']//a
+  - name_arg: imdb_rating
+    node: //div[contains(@class,'r_imdb')]/span
+
+
+tmdb_injects:
+  - default

@@ -1,0 +1,100 @@
+enable: true
+displayindex: 240
+displayname: Huyamba
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://sxp.huyamba.mobi
+priorityBrowser: http
+streamproxy_preview: true
+
+menu:
+  route:
+    sort: "{host}/videos/?by={sort}&from={page}"
+    cat: "{host}/categories/{cat}/videos/?from={page}"
+    catsort: "{host}/categories/{cat}/?by={sort}&from={page}"
+  sort:
+    Новинки: ""
+    Лучшие: video_viewed_week
+    Топовые: rating_week
+  categories:
+    Куколд порно, измена, рогоносцы: cuckold-porn
+    Худые, порно с худыми: skinny-porn-videos
+    Сперма, сквиртинг: sperm-squirt-porn-videos
+    Большие толстые члены: big-dick-porn-videos
+    Минет, ручная работа: blowjob-porn-videos
+    Межрассовое Порно: interracial-porn-videos
+    Соло, стриптиз, мастурбация: solo-porn
+    Порно знаменитостей: celebrities-porn-videos
+    Фистинг, инсершн, страпон: fisting-porn-videos
+    Азиатки: asian-porn-videos
+    Порно пародии: xxx-porn-parody
+    Старушки, порно со зрелыми: granny-porn-videos
+    Анал и Анальный секс: anal-porn-videos
+    Секс игрушки: sex-toys-porn-videos
+    Орал, анилингус, куннилингус: oral-porn-videos
+    Порно молодых: teen-porn-videos
+    Домашнее порно видео: homemade-porn-videos
+    Русское порно: russian-porn
+    Групповое порно, свингеры: group-porn-videos
+    Сексуальные девушки: lesbians-porn-videos
+    Толстушки, порно с толстыми: tolstushki-porn-videos
+    Классика, любовь, поцелуи, эротика: classic-porn
+    Порно с переводом: porno-s-russkim-perevodom
+    Публичное порно: public-porn-videos
+    Скрытая камера: hidden-cameras-porn-videos
+    Полнометражные порно фильмы: full-length-porn-movies
+    Русские порно фильмы: russian-porn-movies
+    БДСМ, доминирование, Садо Мазо: bdsm-porn-videos
+    Эротические фильмы: eroticheskie-filmy
+    Секс машины: sex-mashines-porn-videos
+    Порно Ужасы: horror
+    Виртуальное порно VR 360: vr-porn-videos
+
+list:
+  uri: videos/?from={page}
+
+search:
+  uri: search/{search}/?from_videos={page}
+
+contentParse:
+  nodes: //div[contains(@class, 'item thumb')]
+  name:
+    node: .//div[@class='title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-webp
+  duration:
+    node: .//div[@class='box']
+  preview:
+    node: .//img
+    attribute: data-preview
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["video_alt_url2", "video_alt_url", "video_url"]
+    pattern: "{value}: '([^']+)'"
+
+#view:
+#  related: true
+#  viewsource: true
+#  eval: |
+#    {include:kt_player.eval}
+#    return decode();
+
+#view:
+#  related: true
+#  addInitScript: localStorage.setItem('kvsplayer_selected_format', '1080p');
+#  abortMedia: false
+#  fullCacheJS: true
+#  patternWhiteRequest: (\.css|kt_player\.)
+#  playbtn: "#kt_player"
+#  NetworkIdle: true
+#  nodeFile:
+#    node: //video
+#    attribute: src

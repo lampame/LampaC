@@ -1,0 +1,154 @@
+{
+  "repo_notes": [
+    {
+      "author": "Lampac maintainers",
+      "content": "Repository: Lampac Next Generation — self-hosted ASP.NET Core (.NET 10) backend that extends the Lampa TV client via plugin JSON APIs and optional browser automation. Default port 9118.\n\nSOURCE LAYOUT (this tree): Core/ (host, Program/Startup, middleware, Core/wwwroot for SISI SPA fragments, stats, buy pages, Core/plugins for NWS/RCH clients); Shared/ (cross-cutting library: CoreInit, AppConf models, BaseController, HTTP pools, caching, Playwright, module loading hooks); Online/ (VOD core: online.js, shared controllers, ModInit); SISI/ (18+ core: sisi.js, SQLite bookmarks/history, SisiApi — individual adult SITE implementations live under Modules/Adult/<Name>/, one project per provider); Modules/ (feature modules: Catalog, JacRed, DLNA, LampaWeb, NextHUB, TorrServer, Transcoding, Tracks, Sync subtree, AdminPanel, Kit, ExternalBind, Community/TelegramAuth*, Proxy/TmdbProxy and CubProxy, WatchTogether, PidTor, WebLog, plus all OnlineRUS/OnlinePaid/OnlineAnime/OnlineENG/OnlineUKR/OnlineGEO provider projects); TestModules/ (samples published under mods/); config/ (example init.conf / base.conf).\n\nRUNTIME VS REPO: After dotnet publish, Core.csproj copies module sources into module/ and mods/ next to Core.dll; precompiled assemblies also load from runtimes/references/. User overlays go in mods/. Each loadable unit uses manifest.json with \"enable\": true|false and typically ModInit.cs implementing Shared module interfaces (e.g. IModuleLoaded / IModuleConfigure).\n\nDOCUMENTATION PRIORITIES: (1) Explain how Core wires middleware and discovers modules. (2) Map Online/ + Modules/Online* to Lampa plugin routes and provider patterns (ModInit, Controller, manifest). (3) Split SISI/ (shared 18+ pipeline) vs Modules/Adult/* (per-site routes). (4) NextHUB YAML under Modules/NextHUB/sites/. (5) Docker: Dockerfile and docker-compose.yaml at REPO ROOT (there is no docker/ directory). (6) CI: .github/workflows. (7) When describing static assets, distinguish Core/wwwroot from plugin JS under Modules/LampaWeb/plugins and Core/plugins — do not treat every SVG under wwwroot as architectural signal.\n\nANTI-PATTERNS: Do not describe a simplified \"modules-only\" workspace; Core and Shared are in-repo. Do not merge Kit/AdminPanel security details with generic API docs — call out auth paths and accsdb/WAF from Shared models. Keep config examples non-secret (no real tokens)."
+    }
+  ],
+  "pages": [
+    {
+      "title": "Lampac NextGen — Project Overview",
+      "purpose": "High-level introduction: self-hosted .NET 10 media-aggregator backend for Lampa; how Core, Shared, Online, SISI, and Modules cooperate; default port 9118; link to child sections and to README architecture diagram."
+    },
+    {
+      "title": "Getting Started, Docker & Repository Layout",
+      "purpose": "Installation: Dockerfile and root-level docker-compose.yaml / docker-compose.dev.yaml (no docker/ directory), install.sh / build.sh, default port 9118. Configuration: config/ examples and runtime init.conf / init.yaml, passwd, accsdb. Repository map: Core/, Shared/, Online/, SISI/, Modules/, TestModules/, NextGen.slnx, .github/workflows — and how publish maps sources to module/ and mods/ via Core/Core.csproj.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "Core Application — Bootstrap & Request Pipeline",
+      "purpose": "Core project: Program.cs and Startup.cs, dynamic loading of module/ and mods/, relationship to Shared and runtimes/references/. Link to middleware, controllers, proxy, websockets, static files.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "Middleware Pipeline",
+      "purpose": "Each middleware in Core/Middlewares registered from Startup: responsibilities (WAF, accsdb, limits, static cache, headers, module integration, proxy image, etc.) and request ordering.",
+      "parent": "Core Application — Bootstrap & Request Pipeline"
+    },
+    {
+      "title": "Media Proxy Subsystem",
+      "purpose": "Core/Middlewares/ProxyMedia and related: HLS/DASH/MPD handling, ProxyAPI dispatch, ProxyLink encryption, buffering options from Shared server-proxy models.",
+      "parent": "Core Application — Bootstrap & Request Pipeline"
+    },
+    {
+      "title": "Core Controllers & API Endpoints",
+      "purpose": "Core/Controllers: version, geo, diagnostics, Chromium iframe, statistics, RCH ingestion — attribute routes and how they relate to Lampa and admin use cases.",
+      "parent": "Core Application — Bootstrap & Request Pipeline"
+    },
+    {
+      "title": "WebSocket & RCH (Remote Client Hub)",
+      "purpose": "Native WebSocket /nws path, RchClient bridging to HTTP, and Core/plugins JS clients (nws-client, invc variants) consumed by Lampa-side integrations.",
+      "parent": "Core Application — Bootstrap & Request Pipeline"
+    },
+    {
+      "title": "Static Assets & Web UI",
+      "purpose": "Core/wwwroot: SISI UI (sisi/), MSX assets, buy/, stats/; Core/plugins for server-delivered JS helpers. Contrast with Modules/LampaWeb/plugins (Lampa client plugin sources copied with that module).",
+      "parent": "Core Application — Bootstrap & Request Pipeline"
+    },
+    {
+      "title": "Shared Library — Services & Models",
+      "purpose": "Shared as the common library: BaseController, CoreInit, module interfaces, major service folders. Child pages for AppConf, HTTP, cache, pools, security, Playwright.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "Configuration Models (AppConf)",
+      "purpose": "Shared/Models/AppConf: listen, accsdb/WAF, online/sisi/kit/rch/cache/puppeteer/pool settings; how CoreInit loads init.conf / init.yaml and hot-reload events.",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "HTTP Client & Request Services",
+      "purpose": "Shared HTTP helpers and named HttpClientFactory clients: proxy routing, headers, spans, and EventListener hooks used by Online/SISI scrapers.",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "Caching — HybridCache & Staticache",
+      "purpose": "Hybrid file/memory caches, response caching, Staticache middleware and relevant AppConf keys (type, extend, memExtend).",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "Object Pools & Performance Utilities",
+      "purpose": "Shared/Services/Pools and related performance types (buffers, JSON pools, streams) plus CSharpEval / Roslyn compilation used for runtime module compilation and NextHUB scripting.",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "Security & Geo Utilities",
+      "purpose": "Crypto helpers, proxy link AES, GeoIP / CIDR matching, AccsDb resolution, Cloudflare IP lists — how they support WAF and access control without duplicating secret values.",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "Playwright Browser Automation",
+      "purpose": "Playwright pools and contexts in Shared; how Online and SISI controllers request rendered pages when plain HTTP is insufficient.",
+      "parent": "Shared Library — Services & Models"
+    },
+    {
+      "title": "Online Module — Video Streaming Sources",
+      "purpose": "Online/ project: ModInit, online.js plugin surface, OnlineApi, relationship to per-provider projects under Modules/OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "Online Controller Architecture & Base Classes",
+      "purpose": "Patterns for VOD controllers in Online/ and Modules/Online*: base classes, episode/season resolution, subtitles, spider/search, SQL cache under Online/SQL if present, shared services.",
+      "parent": "Online Module — Video Streaming Sources"
+    },
+    {
+      "title": "Supported Streaming Providers",
+      "purpose": "Catalog by folder: Modules/OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO — representative providers (Rezka, Filmix, Kodik, HDVB, Collaps, VidSrc, Kinoflix, etc.) and where per-provider config lives (Online/Config and module ModuleConf).",
+      "parent": "Online Module — Video Streaming Sources"
+    },
+    {
+      "title": "SISI Module — Adult Content Aggregator",
+      "purpose": "SISI/ core: plugins (sisi.js), SQLite persistence, WAF limits, SisiApi entry — explicitly state that each third-party SITE integration is a separate project under Modules/Adult/<SiteName>/.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "SISI Controllers & Site Integrations",
+      "purpose": "Document Modules/Adult/* projects (manifest, ModInit, Controller/Service patterns), bookmark/history flow through SISI core, and route naming conventions; reference SISI/README.md route tables.",
+      "parent": "SISI Module — Adult Content Aggregator"
+    },
+    {
+      "title": "NextHUB — Dynamic YAML-Driven Site Engine",
+      "purpose": "Modules/NextHUB: sites/*.yaml, ListController/ViewController, Roslyn-evaluated scripts, integration with Playwright; how to add a site YAML safely.",
+      "parent": "SISI Module — Adult Content Aggregator"
+    },
+    {
+      "title": "Modules — Pluggable Feature Extensions",
+      "purpose": "Cross-cutting module loading: manifest.json, IModuleLoaded/IModuleConfigure, FileSystemWatcher hot reload, ApplicationPartManager. Overview of major module families with links to child pages.",
+      "parent": "Lampac NextGen — Project Overview"
+    },
+    {
+      "title": "Catalog Module",
+      "purpose": "Modules/Catalog: YAML sites under sites/, catalog plugin endpoints, list/card controllers and mapping to online sources.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "JacRed Module — Torrent Indexer Proxy",
+      "purpose": "Modules/JacRed: Jackett-compatible API, engines, models, tracker-specific code under Controllers and Engine.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "DLNA Module — Local Media Server",
+      "purpose": "Modules/DLNA: torrent integration, local browsing, thumbnails, UPnP/DLNA discovery, background jobs.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "LampaWeb, Sync, Community, Proxies & Satellite Modules",
+      "purpose": "Modules/LampaWeb (Lampa UI/plugin hosting, lampainit.js family, telegram gate plugins). Modules/Sync subtree (sync.js, bookmarks, storage, timecode). Modules/Community/TelegramAuth and TelegramAuthBot (HTTP API, bot sessions — link Community READMEs). Modules/Proxy/TmdbProxy and CubProxy. TorrServer, Transcoding, Tracks, WebLog, WatchTogether, PidTor — each: manifest, ModInit, main routes or jobs.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "AdminPanel Module — Web Configuration UI",
+      "purpose": "Modules/AdminPanel: /adminpanel UI, API for reading/patching init sections, auth model — align with mods/AdminPanel README conventions if present in tree.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "ExternalBind Module — Remote Device Binding",
+      "purpose": "Modules/ExternalBind: EventListener hooks, IsLocalIp overrides for lite bind routes, security notes and manifest defaults (often disabled).",
+      "parent": "Modules — Pluggable Feature Extensions"
+    },
+    {
+      "title": "Kit Module — Encrypted User Configuration & Service Binding",
+      "purpose": "Modules/Kit: encrypted kit store, unite flows, BindController for third-party OAuth/credentials; storage paths and consumption by paid provider modules.",
+      "parent": "Modules — Pluggable Feature Extensions"
+    }
+  ]
+}

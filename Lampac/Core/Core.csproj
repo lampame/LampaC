@@ -1,0 +1,123 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Core -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <UserSecretsId>7a9d4585-3e95-4564-a350-5fe756d1351f</UserSecretsId>
+    <AssemblyName>Core</AssemblyName>
+    <RootNamespace>Core</RootNamespace>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <!-- Emit Core.exe (Windows) / apphost for publish RID; Docker/Linux can still use `dotnet
+    Core.dll`. -->
+    <UseAppHost>true</UseAppHost>
+    <!-- After publish, move managed dependency DLLs + satellite culture folders into
+    runtimes/references (same as lampac). Program.Main preloads that folder. Set false to keep a
+    flat publish root. -->
+    <LayoutPublishDependenciesInRuntimeReferences
+      Condition="'$(LayoutPublishDependenciesInRuntimeReferences)' == ''">true</LayoutPublishDependenciesInRuntimeReferences>
+  </PropertyGroup>
+
+  <!-- Playwright drivers: Shared sets `all` only for local `dotnet build`. Publish/Docker: pass
+  `-p:PlaywrightPlatform=<RID>` (Dockerfile does). -->
+
+  <ItemGroup>
+    <Compile Remove="cache\**" />
+    <Compile Remove="database\**" />
+    <Content Remove="cache\**" />
+    <Content Remove="database\**" />
+    <Content Remove="$(NuGetPackageRoot)microsoft.playwright/**" />
+    <EmbeddedResource Remove="cache\**" />
+    <EmbeddedResource Remove="database\**" />
+    <None Remove="cache\**" />
+    <None Remove="database\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Production.json" CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\bookmarks\img\" />
+    <Folder Include="wwwroot\bookmarks\preview\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="plugins\**\*">
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <None Update="plugins\**\*">
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="data\**\*">
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <None Update="data\**\*">
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Modules -->
+  <ItemGroup>
+    <None Include="..\Modules\**\*"
+      Exclude="..\Modules\**\bin\**;..\Modules\**\obj\**;..\Modules\**\Properties\**"
+      CopyToPublishDirectory="Always" Visible="false"
+      TargetPath="module\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\TestModules\**\*"
+      Exclude="..\TestModules\**\bin\**;..\TestModules\**\obj\**;..\TestModules\**\Properties\**"
+      CopyToPublishDirectory="Always" Visible="false"
+      TargetPath="mods\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\Online\**\*"
+      Exclude="..\Online\**\bin\**;..\Online\**\obj\**;..\Online\**\Properties\**"
+      CopyToPublishDirectory="Always" Visible="false"
+      TargetPath="module\Online\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\SISI\**\*"
+      Exclude="..\SISI\**\bin\**;..\SISI\**\obj\**;..\SISI\**\Properties\**"
+      CopyToPublishDirectory="Always" Visible="false"
+      TargetPath="module\SISI\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\config\**\*"
+      Exclude="..\config\**\bin\**;..\config\**\obj\**"
+      CopyToPublishDirectory="Always" Visible="false"
+      TargetPath="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Targets -->
+  <Target Name="LayoutManagedReferencesInRuntimeFolder" AfterTargets="Publish"
+    Condition="'$(LayoutPublishDependenciesInRuntimeReferences)' == 'true'">
+    <MakeDir Directories="$(PublishDir)runtimes\references" />
+    <ItemGroup>
+      <_RefsDlls Include="$(PublishDir)*.dll"
+        Exclude="$(PublishDir)Core.dll;$(PublishDir)Shared.dll" />
+      <_RefsPdbs Include="$(PublishDir)*.pdb"
+        Exclude="$(PublishDir)Core.pdb;$(PublishDir)Shared.pdb" />
+    </ItemGroup>
+    <Move SourceFiles="@(_RefsDlls)" DestinationFolder="$(PublishDir)runtimes\references"
+      Condition="'@(_RefsDlls)' != ''" />
+    <Move SourceFiles="@(_RefsPdbs)" DestinationFolder="$(PublishDir)runtimes\references"
+      Condition="'@(_RefsPdbs)' != ''" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" WorkingDirectory="$(PublishDir)"
+      Command="sh -c 'for d in cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant; do if [ -d &quot;$d&quot; ]; then rm -rf &quot;runtimes/references/$d&quot;; mv &quot;$d&quot; runtimes/references/; fi; done'" />
+    <Exec Condition="'$(OS)' == 'Windows_NT'" WorkingDirectory="$(PublishDir)"
+      Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$c='cs','de','es','fr','it','ja','ko','pl','pt-BR','ru','tr','zh-Hans','zh-Hant'; foreach ($x in $c) { if (Test-Path -LiteralPath $x -PathType Container) { $dest = Join-Path 'runtimes\references' $x; if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }; Move-Item -LiteralPath $x -Destination 'runtimes\references\' } }&quot;" />
+  </Target>
+
+  <!-- Targets -->
+  <Target Name="PrunePublishOutput" AfterTargets="Publish"
+    DependsOnTargets="LayoutManagedReferencesInRuntimeFolder">
+    <Delete Files="$(PublishDir)Core.pdb" Condition="Exists('$(PublishDir)Core.pdb')" />
+    <Delete Files="$(PublishDir)Shared.pdb" Condition="Exists('$(PublishDir)Shared.pdb')" />
+    <Delete Files="$(PublishDir)Core.staticwebassets.endpoints.json"
+      Condition="Exists('$(PublishDir)Core.staticwebassets.endpoints.json')" />
+    <Delete Files="$(PublishDir)playwright.ps1" Condition="Exists('$(PublishDir)playwright.ps1')" />
+    <Delete Files="$(PublishDir)runtimes\references\Shared.pdb"
+      Condition="Exists('$(PublishDir)runtimes\references\Shared.pdb')" />
+  </Target>
+
+</Project>

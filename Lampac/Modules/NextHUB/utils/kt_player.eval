@@ -1,0 +1,176 @@
+
+string decode()
+{
+	string link = null;
+	string license = Regex.Match(html, "license_code:[\n\r\t ]+'([^']+)'", RegexOptions.IgnoreCase).Groups[1].Value;
+
+	foreach (string q in new string[] { "alt_url5", "alt_url4", "alt_url3", "alt_url2", "alt_url", "url" })
+	{
+		string l = Regex.Match(html, $"video_{q}:[\t ]+'([^']+)'", RegexOptions.IgnoreCase).Groups[1].Value;
+		if (!string.IsNullOrEmpty(l) && l.Contains("/get_file/"))
+		{
+			link = l;
+			break;
+		}
+	}
+
+	if (string.IsNullOrEmpty(link))
+	{
+		foreach (string q in new string[] { "1080p", "720p", "480p", "360p" })
+		{
+			link = Regex.Match(html, $"(https?://[^/]+/get_file/[^\"]+_{q}\\.mp4([^\"]+)?)('|\")", RegexOptions.IgnoreCase).Groups[1].Value;
+			if (!string.IsNullOrEmpty(link))
+				break;
+		}
+	}
+
+	if (string.IsNullOrEmpty(link))
+	{
+		link = Regex.Match(html, "(https?://[^/]+/get_file/[^'\"]+\\.mp4([^'\"]+)?)('|\")", RegexOptions.IgnoreCase).Groups[1].Value;
+		if (string.IsNullOrEmpty(link))
+			return null;
+	}
+
+	link = link.Replace("function/0/", "");
+	return GenerateTrueLink(link, license);
+}
+
+
+/// <summary>
+/// Transforms a fake link to a true link using the provided license code
+/// </summary>
+/// <param name="fakeLink">The original fake link</param>
+/// <param name="license">The license code used for hash calculation</param>
+/// <returns>The transformed true link</returns>
+string GenerateTrueLink(string fakeLink, string license)
+{
+	string[] arr = fakeLink.Split('/');
+	arr[5] = CalcHash(arr[5], license);
+	return string.Join("/", arr);
+}
+
+/// <summary>
+/// Calculates the hash based on the fake hash and license code
+/// </summary>
+/// <param name="fakeHash">The fake hash to transform</param>
+/// <param name="licenseCode">The license code</param>
+/// <returns>The calculated true hash</returns>
+string CalcHash(string fakeHash, string licenseCode)
+{
+	string h = fakeHash.Substring(0, 32);
+	string i = E(licenseCode);
+	string j = h;
+
+	for (int k = h.Length - 1; k >= 0; k--)
+	{
+		int l = k;
+		for (int m = k; m < i.Length; m++)
+		{
+			l += int.Parse(i[m].ToString());
+		}
+
+		while (l >= h.Length)
+		{
+			l -= h.Length;
+		}
+
+		string n = "";
+		for (int o = 0; o < h.Length; o++)
+		{
+			if (o == k)
+				n += h[l];
+			else if (o == l)
+				n += h[k];
+			else
+				n += h[o];
+		}
+		h = n;
+	}
+
+	return fakeHash.Replace(j, h);
+}
+
+/// <summary>
+/// Helper function E from the original JavaScript code
+/// </summary>
+/// <param name="licenseCode">The license code to process</param>
+/// <returns>Processed string for hash calculation</returns>
+string E(string licenseCode)
+{
+	string d = licenseCode;
+	string f = "";
+
+	// Extract digits from license code (skip first character)
+	// JavaScript logic: o(d[g]) ? o(d[g]) : 1
+	// This means: if parseInt(d[g]) is truthy (not 0, not NaN), use it, else use 1
+	for (int g = 1; g < d.Length; g++)
+	{
+		if (char.IsDigit(d[g]))
+		{
+			int digit = int.Parse(d[g].ToString());
+			// In JavaScript, parseInt("0") returns 0, but 0 is falsy, so we use 1
+			f += (digit != 0) ? digit.ToString() : "1";
+		}
+		else
+		{
+			f += "1";
+		}
+	}
+
+	int j = f.Length / 2;
+	
+	// Handle substring parsing more safely
+	string leftPart = f.Substring(0, j + 1);
+	string rightPart = f.Substring(j);
+	
+	long k = long.Parse(leftPart);
+	long l = long.Parse(rightPart);
+
+	long g1 = l - k;
+	if (g1 < 0) g1 = -g1;
+
+	long g2 = k - l;
+	if (g2 < 0) g2 = -g2;
+
+	// In JavaScript: f = g1; f += g2; f *= 2;
+	long fValue = g1;
+	fValue += g2;
+	fValue *= 2;
+	f = fValue.ToString();
+
+	int i = 16 / 2 + 2; // = 10
+	string m = "";
+
+	for (int g = 0; g < j + 1; g++)
+	{
+		for (int h = 1; h <= 4; h++)
+		{
+			// o(d[g + h]) - JavaScript parseInt logic
+			int charValue1 = 0;
+			if (g + h < d.Length)
+			{
+				if (char.IsDigit(d[g + h]))
+				{
+					charValue1 = int.Parse(d[g + h].ToString());
+				}
+				// In JavaScript, parseInt of non-digit returns NaN, which is falsy, so we use 0
+			}
+
+			// o(f[g]) - JavaScript parseInt logic  
+			int charValue2 = 0;
+			if (g < f.Length && char.IsDigit(f[g]))
+			{
+				charValue2 = int.Parse(f[g].ToString());
+			}
+
+			int n = charValue1 + charValue2;
+
+			if (n >= i)
+				n -= i;
+
+			m += n.ToString();
+		}
+	}
+
+	return m;
+}

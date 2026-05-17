@@ -1,230 +1,270 @@
-﻿using Microsoft.Playwright;
-using Shared.Models;
-using Shared.Models.Base;
+using Microsoft.Playwright;
+using Shared.Models.Events;
 
-namespace Shared.PlaywrightCore
+namespace Shared.PlaywrightCore;
+
+public class PlaywrightBrowser : IDisposable
 {
-    public class PlaywrightBrowser : IDisposable
+    static readonly Serilog.ILogger Log = Serilog.Log.ForContext<PlaywrightBrowser>();
+
+    public static PlaywrightStatus Status
     {
-        public static PlaywrightStatus Status
+        get
         {
-            get
-            {
-                if (Chromium.Status == PlaywrightStatus.NoHeadless || Firefox.Status != PlaywrightStatus.disabled)
-                    return PlaywrightStatus.NoHeadless;
+            if (Chromium.Status == PlaywrightStatus.NoHeadless || Firefox.Status != PlaywrightStatus.disabled)
+                return PlaywrightStatus.NoHeadless;
 
-                if (Chromium.Status == PlaywrightStatus.headless)
-                    return PlaywrightStatus.headless;
+            if (Chromium.Status == PlaywrightStatus.headless)
+                return PlaywrightStatus.headless;
 
-                return PlaywrightStatus.disabled;
-            }
+            return PlaywrightStatus.disabled;
+        }
+    }
+
+    public bool IsCompleted
+    {
+        get
+        {
+            if (chromium != null)
+                return chromium.IsCompleted;
+
+            return firefox.IsCompleted;
+        }
+    }
+
+    public TaskCompletionSource<string> completionSource
+    {
+        get
+        {
+            if (chromium != null)
+                return chromium.completionSource;
+
+            return firefox.completionSource;
+        }
+    }
+
+
+    public Chromium chromium = null;
+
+    public Firefox firefox = null;
+
+
+    public PlaywrightBrowser(string priorityBrowser = null)
+    {
+        if (priorityBrowser == "firefox" && Firefox.Status != PlaywrightStatus.disabled)
+        {
+            firefox = new Firefox();
+            return;
         }
 
-        public bool IsCompleted
+        chromium = new Chromium();
+    }
+
+    public void SetFailedUrl(string url)
+    {
+        if (chromium != null)
         {
-            get
-            {
-                if (chromium != null)
-                    return chromium.IsCompleted;
-
-                return firefox.IsCompleted;
-            }
+            chromium.failedUrl = url;
         }
-
-        public TaskCompletionSource<string> completionSource
+        else
         {
-            get
-            {
-                if (chromium != null)
-                    return chromium.completionSource;
-
-                return firefox.completionSource;
-            }
+            firefox.failedUrl = url;
         }
+    }
 
-
-        public Chromium chromium = null;
-
-        public Firefox firefox = null;
-
-
-        public PlaywrightBrowser(string priorityBrowser = null)
+    async public Task<IPage> NewPageAsync(string plugin, Dictionary<string, string> headers = null, (string ip, string username, string password) proxy = default, bool keepopen = true, bool imitationHuman = false, bool deferredDispose = false)
+    {
+        try
         {
-            if (priorityBrowser == "firefox" && Firefox.Status != PlaywrightStatus.disabled)
-            {
-                firefox = new Firefox();
-                return;
-            }
+            if (chromium == null && firefox == null)
+                return default;
 
-            chromium = new Chromium();
+            IPage page = default;
+
+            if (chromium != null)
+                page = await chromium.NewPageAsync(plugin, headers, proxy, keepopen: keepopen, imitationHuman: imitationHuman, deferredDispose: deferredDispose).ConfigureAwait(false);
+            else
+                page = await firefox.NewPageAsync(plugin, headers, proxy, keepopen: keepopen).ConfigureAwait(false);
+
+            return page;
         }
+        catch { return default; }
+    }
 
-        public void SetFailedUrl(string url)
+
+    public void SetPageResult(string val)
+    {
+        try
         {
             if (chromium != null)
             {
-                chromium.failedUrl = url;
+                chromium.IsCompleted = true;
+                chromium.completionSource.SetResult(val);
             }
             else
             {
-                firefox.failedUrl = url;
+                firefox.IsCompleted = true;
+                firefox.completionSource.SetResult(val);
             }
         }
-
-        async public Task<IPage> NewPageAsync(string plugin, Dictionary<string, string> headers = null, (string ip, string username, string password) proxy = default, bool keepopen = true, bool imitationHuman = false, bool deferredDispose = false)
+        catch (System.Exception ex)
         {
-            try
-            {
-                if (chromium == null && firefox == null)
-                    return default;
-
-                IPage page = default;
-
-                if (chromium != null)
-                    page = await chromium.NewPageAsync(plugin, headers, proxy, keepopen: keepopen, imitationHuman: imitationHuman, deferredDispose: deferredDispose).ConfigureAwait(false);
-                else
-                    page = await firefox.NewPageAsync(plugin, headers, proxy, keepopen: keepopen).ConfigureAwait(false);
-
-                return page;
-            }
-            catch { return default; }
+            Log.Error(ex, "CatchId={CatchId}", "id_tjv9tao1");
         }
+    }
 
-
-        public void SetPageResult(string val)
+    public Task<string> WaitPageResult(int seconds = 10)
+    {
+        try
         {
-            try
-            {
-                if (chromium != null)
-                {
-                    chromium.IsCompleted = true;
-                    chromium.completionSource.SetResult(val);
-                }
-                else
-                {
-                    firefox.IsCompleted = true;
-                    firefox.completionSource.SetResult(val);
-                }
-            }
-            catch { }
+            if (chromium != null)
+                return chromium.WaitPageResult(seconds);
+
+            return firefox.WaitPageResult(seconds);
         }
+        catch { return default; }
+    }
 
-        public Task<string> WaitPageResult(int seconds = 10)
+
+    public Task WaitForAnySelectorAsync(IPage page, params string[] selectors)
+    {
+        var tasks = selectors.Select(selector =>
+            page.WaitForSelectorAsync(selector)
+        ).ToArray();
+
+        return Task.WhenAny(tasks);
+    }
+
+
+    async public Task ClearContinueAsync(IRoute route, IPage page)
+    {
+        var cookies = await page.Context.CookiesAsync();
+        if (cookies == null || cookies.Count == 0)
         {
-            try
-            {
-                if (chromium != null)
-                    return chromium.WaitPageResult(seconds);
-
-                return firefox.WaitPageResult(seconds);
-            }
-            catch { return default; }
-        }
-
-
-        public Task WaitForAnySelectorAsync(IPage page, params string[] selectors)
-        {
-            var tasks = selectors.Select(selector =>
-                page.WaitForSelectorAsync(selector)
-            ).ToArray();
-
-            return Task.WhenAny(tasks);
-        }
-
-
-        async public Task ClearContinueAsync(IRoute route, IPage page)
-        {
-            var cookies = await page.Context.CookiesAsync();
-            if (cookies == null || cookies.Count == 0)
-            {
-                // нету куки, продолжаем
-                await route.ContinueAsync();
-                return;
-            }
-
-            var filteredCookies = cookies.Where(c => c.Name != "cf_clearance").Select(c => new Cookie
-            {
-                Name = c.Name,
-                Value = c.Value,
-                Domain = c.Domain,
-                Path = c.Path,
-                Expires = c.Expires,
-                HttpOnly = c.HttpOnly,
-                Secure = c.Secure,
-                SameSite = c.SameSite
-            }).ToList();
-
-            if (filteredCookies.Count == cookies.Count)
-            {
-                // Если куки не содержат cf_clearance, продолжаем
-                await route.ContinueAsync();
-                return;
-            }
-
-            if (filteredCookies.Count == 0)
-            {
-                // после удаления cf_clearance не осталось других куки
-                await page.Context.ClearCookiesAsync();
-                await route.ContinueAsync();
-                return;
-            }
-
-            await page.Context.ClearCookiesAsync();
-            await page.Context.AddCookiesAsync(filteredCookies);
-
+            // нету куки, продолжаем
             await route.ContinueAsync();
+            return;
         }
 
-
-        public void Dispose()
+        var filteredCookies = cookies.Where(c => c.Name != "cf_clearance").Select(c => new Cookie
         {
-            chromium?.Dispose();
-            firefox?.Dispose();
+            Name = c.Name,
+            Value = c.Value,
+            Domain = c.Domain,
+            Path = c.Path,
+            Expires = c.Expires,
+            HttpOnly = c.HttpOnly,
+            Secure = c.Secure,
+            SameSite = c.SameSite
+        }).ToList();
+
+        if (filteredCookies.Count == cookies.Count)
+        {
+            // Если куки не содержат cf_clearance, продолжаем
+            await route.ContinueAsync();
+            return;
         }
 
-
-
-
-        async public static Task<string> Get(BaseSettings init, string url, List<HeadersModel> headers = null, (string ip, string username, string password) proxy = default, List<Cookie> cookies = null)
+        if (filteredCookies.Count == 0)
         {
-            try
+            // после удаления cf_clearance не осталось других куки
+            await page.Context.ClearCookiesAsync();
+            await route.ContinueAsync();
+            return;
+        }
+
+        await page.Context.ClearCookiesAsync();
+        await page.Context.AddCookiesAsync(filteredCookies);
+
+        await route.ContinueAsync();
+    }
+
+
+    public void Dispose()
+    {
+        chromium?.Dispose();
+        firefox?.Dispose();
+    }
+
+
+
+
+    async public static Task<string> Get(BaseSettings init, string url, List<HeadersModel> headers = null, (string ip, string username, string password) proxy = default, List<Cookie> cookies = null, bool viewsource = true)
+    {
+        IResponse response = default;
+        string result = null;
+
+        try
+        {
+            using (var browser = new PlaywrightBrowser(init?.priorityBrowser))
             {
-                using (var browser = new PlaywrightBrowser(init?.priorityBrowser))
+                var page = await browser.NewPageAsync(init?.plugin, headers?.ToDictionary(), proxy).ConfigureAwait(false);
+                if (page == null)
+                    return null;
+
+                if (cookies != null)
+                    await page.Context.AddCookiesAsync(cookies).ConfigureAwait(false);
+
+                if (browser.firefox != null)
                 {
-                    var page = await browser.NewPageAsync(init?.plugin, headers?.ToDictionary(), proxy).ConfigureAwait(false);
-                    if (page == null)
-                        return null;
-
-                    if (cookies != null)
-                        await page.Context.AddCookiesAsync(cookies).ConfigureAwait(false);
-
-                    IResponse response = default;
-
-                    if (browser.firefox != null)
-                    {
-                        response = await page.GotoAsync(url, new PageGotoOptions() { WaitUntil = WaitUntilState.DOMContentLoaded }).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        response = await page.GotoAsync($"view-source:{url}", new PageGotoOptions()
-                        {
-                            Timeout = 10_000,
-                            WaitUntil = WaitUntilState.DOMContentLoaded
-                        }).ConfigureAwait(false);
-                    }
-
-                    if (response != null)
-                    {
-                        string result = await response.TextAsync().ConfigureAwait(false);
-                        PlaywrightBase.WebLog(response.Request, response, result, proxy);
-
-                        return result;
-                    }
+                    response = await page.GotoAsync(url, new PageGotoOptions() { WaitUntil = WaitUntilState.DOMContentLoaded }).ConfigureAwait(false);
                 }
-            }
-            catch { }
+                else
+                {
+                    response = await page.GotoAsync(viewsource ? $"view-source:{url}" : url, new PageGotoOptions()
+                    {
+                        Timeout = 10_000,
+                        WaitUntil = WaitUntilState.DOMContentLoaded
+                    }).ConfigureAwait(false);
+                }
 
-            return null;
+                if (response != null)
+                    result = await response.TextAsync().ConfigureAwait(false);
+            }
+
+            if (EventListener.PlaywrightHttpResponse != null)
+            {
+                await SendPlaywrightHttpResponseEvent(
+                    new EventPlaywrightHttpResponse(
+                        url: url,
+                        method: response?.Request?.Method,
+                        status: response?.Status ?? 0,
+                        requestHeaders: response?.Request?.Headers,
+                        responseHeaders: response?.Headers,
+                        result: result,
+                        error: null
+                    )
+                ).ConfigureAwait(false);
+            }
+
+            return result;
         }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, "CatchId={CatchId}", "id_i56q6uea");
+
+            if (EventListener.PlaywrightHttpResponse != null)
+            {
+                await SendPlaywrightHttpResponseEvent(
+                    new EventPlaywrightHttpResponse(
+                        url: url,
+                        method: response?.Request?.Method,
+                        status: response?.Status ?? 0,
+                        requestHeaders: response?.Request?.Headers,
+                        responseHeaders: response?.Headers,
+                        result: result,
+                        error: ex.ToString()
+                    )
+                ).ConfigureAwait(false);
+            }
+        }
+
+        return null;
+    }
+
+    async static Task SendPlaywrightHttpResponseEvent(EventPlaywrightHttpResponse eventData)
+    {
+        foreach (Func<EventPlaywrightHttpResponse, Task> handler in EventListener.PlaywrightHttpResponse.GetInvocationList())
+            await handler.Invoke(eventData).ConfigureAwait(false);
     }
 }

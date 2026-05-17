@@ -1,0 +1,72 @@
+enable: true
+displayindex: 250
+displayname: Pornk
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://ps.pornk.top
+priorityBrowser: http
+
+menu:
+  route:
+    sort: "{host}/{sort}/week/{page}/"
+    cat: "{host}/categories/{cat}/{page}/"
+    catsort: '{host}/categories/{cat}/{sort.Replace("most-popular", "most-viewed")}/{page}/'
+  sort:
+    Новинки: ""
+    Топ рейтинга: top-rated
+    Популярное: most-popular
+  categories:
+    Красотки: krasotki
+    БДСМ: bdsm
+    Гангбанг: gangbang
+    Сквиртинг: skvirting
+    Нижнее белье: nijnee-bele
+    Куколд: kukold
+    Толстые: tolstye
+    Зрелые: zrelye
+    Ретро: retro
+    Групповуха: gruppovuha
+    Дрочка: drochka
+    Игрушки: igrushki
+    Выстрелы спермы: vystrely-spermy
+    На природе: na-prirode
+    Мастурбация: masturbatsiya
+    Двойное проникновение: dvoiynoe-proniknovenie
+    Лесби: lesbi
+    Любительское: lyubitelskoe
+    Блондинки: blondinki
+
+list:
+  uri: latest-updates/{page}/
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //a[contains(@class, 'preview')]
+  name:
+    node: .//span[@class='preview-title']
+  href:
+    attribute: href
+  img:
+    node: .//img
+    attribute: src
+  duration:
+    node: .//span[@class='preview-duration']
+
+view:
+  related: true
+  viewsource: true
+  regexMatch:
+    matches: ["1080p", "720p", "480p", "360p"]
+    pattern: "/(get_file/[^', ]+_{value}.mp4)"
+    format: "{host}/{value}"
+
+#view:
+#  related: true
+#  addInitScript: localStorage.setItem('pljsquality', '720p');
+#  playbtn: "#oframeplayer"
+#  patternFile: /get_file/
+#  patternWhiteRequest: playerjs\.js
+#  waitLocationFile: true

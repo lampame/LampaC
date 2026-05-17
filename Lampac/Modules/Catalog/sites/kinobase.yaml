@@ -1,0 +1,112 @@
+enable: true
+displayindex: 15
+displayname: Kinobase
+host: https://kinobase.org
+
+search:
+  uri: search?query={search}
+
+movie_cats:
+  - films
+
+serial_cats:
+  - serials
+
+catalog_key: Обновления
+
+menu:
+  - categories:
+      Фильмы: films
+      Сериалы: serials
+      Телепередачи: tv
+      Мультфильмы: animation
+    sort:
+      Обновления: default
+      Текущий год: year
+      Популярные за сутки: viewed_day
+      Популярные за неделю: viewed_week
+      Популярные за месяц: viewed_month
+      Популярные за все время: viewed_all
+      Рейтинг пользователей: rating
+      Рейтинг Кинопоиск: kp_rating
+      Рейтинг IMDb: imdb_rating
+    format:
+      sort: |
+        string query = string.Empty;
+        if (sort != "default")
+            query = $"sort={sort}";
+        if (page > 1)
+            query = string.IsNullOrEmpty(query) ? $"page={page}" : $"{query}&page={page}";
+        return string.IsNullOrEmpty(query) ? cat : $"{cat}?{query}";
+
+
+content:
+  serial_regex: 'href="/serial/'
+  nodes: //ul[contains(@class,'items')]/li[contains(@class,'item')]
+  name:
+    node: .//div[@class='title']/a
+  href:
+    node: .//div[@class='title']/a
+    attribute: href
+  image:
+    node: .//div[@class='poster']//img
+    attribute: src
+  year:
+    node: .//span[contains(@class,'year')]
+    format: 'value.Split(",")[0]'
+  total_pages:
+    node: //div[@id='pg_full']//ul[contains(@class,'pagination')]/li[a and not(a[contains(@class,"next")])][last()]/a
+  args:
+    - name_arg: release_quality
+      node: //span[@class='year']
+      format: 'Regex.Match(value, "[0-9]+, (.*)").Groups[1].Value'
+    - name_arg: vote_average
+      node: //span[@class='rating']
+
+
+card_parse:
+  name:
+    node: //div[@id='title']/h1
+  original_name:
+    node: //div[@class='info_item'][div[@class='key']='Название']/div[@class='value']
+  image:
+    node: //meta[@property='og:image']
+    attribute: content
+  year:
+    node: //div[@class='info_item'][div[@class='key']='Год']//div[@class='value']
+  description:
+    node: //div[@itemprop='description']
+
+
+card_args:
+  - name_arg: runtime
+    node: //div[@class='info_item'][div[@class='key']='Время']/div[@class='value']
+    format: |
+      int total = 0;
+      var hourMatch = Regex.Match(value, @"(\d+)\s*час");
+      if (hourMatch.Success)
+          total += int.Parse(hourMatch.Groups[1].Value) * 60;
+      var minuteMatch = Regex.Match(value, @"(\d+)\s*мин");
+      if (minuteMatch.Success)
+          total += int.Parse(minuteMatch.Groups[1].Value);
+      if (total == 0 && int.TryParse(value.Trim().Split(' ')[0], out var minutes))
+          total = minutes;
+      return total == 0 ? (int?)null : total;
+  - name_arg: production_countries
+    node: //div[@class='info_item'][div[@class='key']='Страна']/div[@class='value']
+  - name_arg: genres
+    node: //div[@class='info_item'][div[@class='key']='Жанр']/div[@class='value']
+  - name_arg: kp_rating
+    node: //span[contains(@class,'rating_kp')]/following-sibling::a
+  - name_arg: kinopoisk_id
+    node: //span[contains(@class,'rating_kp')]/following-sibling::a
+    attribute: href
+    format: 'Regex.Match(value, "/([0-9]+)/?$").Groups[1].Value'
+  - name_arg: imdb_rating
+    node: //span[contains(@class,'rating_imdb')]
+    attribute: title
+    format: 'Regex.Match(value, @"([0-9]+(?:[\.,][0-9]+)?)").Groups[1].Value.Replace(",", ".")'
+
+
+tmdb_injects:
+  - default

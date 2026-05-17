@@ -1,44 +1,56 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
-	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
-		<OutputType>library</OutputType>
-		<IsPackable>true</IsPackable>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-	</PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>library</OutputType>
+    <IsPackable>true</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Prevent SDK implicit glob from colliding with Playwright's buildTransitive LICENSE item -->
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+  </PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
-		<PackageReference Include="HtmlKit" Version="1.2.0" />
-		<PackageReference Include="LiteDB" Version="5.0.21" />
-		<PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.9" />
-		<PackageReference Include="BencodeNET" Version="5.0.0" />
-		<PackageReference Include="Chaos.NaCl.Standard" Version="1.0.0" />
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
-		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
-		<PackageReference Include="Microsoft.Playwright" Version="1.50.0" />
-		<PackageReference Include="MaxMind.GeoIP2" Version="5.4.1" />
-		<PackageReference Include="MonoTorrent" Version="3.0.2" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="Npgsql" Version="10.0.1" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="7.0.20">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="MongoDB.Driver" Version="3.6.0" />
-		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
-		<PackageReference Include="StackExchange.Redis" Version="2.10.1" />
-		<PackageReference Include="System.Management" Version="9.0.8" />
-		<PackageReference Include="NetVips" Version="3.2.0" />
-		<PackageReference Include="NetVips.Native" Version="8.18.0" />
-		<PackageReference Include="Microsoft.Extensions.DependencyModel" Version="9.0.8" />
-		<PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.2" />
-		<PackageReference Include="System.Text.Json" Version="10.0.2" />
-		<PackageReference Include="Titanium.Web.Proxy" Version="3.2.0" />
-		<PackageReference Include="YamlDotNet" Version="16.3.0" />
-	</ItemGroup>
+  <!-- Do not set PlaywrightPlatform in a static PropertyGroup: for ProjectReference builds,
+       $(RuntimeIdentifier) is often unset at parse time, so "all" blocked Playwright's RID
+       logic and pulled every node driver. -->
+  <Target Name="LampacPlaywrightPlatformLocalDev" BeforeTargets="CopyPlaywrightFilesToOutput">
+    <PropertyGroup>
+      <!-- Local `dotnet build`: bundle all drivers.
+           Publish/Docker: use -r and Dockerfile passes -p:PlaywrightPlatform
+           (RID may not flow to this project). -->
+      <PlaywrightPlatform
+        Condition="'$(PlaywrightPlatform)' == ''
+                                  and '$(RuntimeIdentifier)' == ''
+                                  and '$(DeployOnBuild)' != 'true'">
+        all</PlaywrightPlatform>
+    </PropertyGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+    <PackageReference Include="HtmlKit" Version="1.2.0" />
+    <PackageReference Include="Jint" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.50.0" />
+    <PackageReference Include="MaxMind.GeoIP2" Version="5.4.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Management" Version="10.0.7" />
+    <PackageReference Include="NetVips" Version="3.2.0" />
+    <PackageReference Include="NetVips.Native" Version="8.18.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.7" />
+    <PackageReference Include="YamlDotNet" Version="17.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
 
 </Project>

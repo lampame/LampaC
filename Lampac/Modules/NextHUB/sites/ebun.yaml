@@ -1,0 +1,147 @@
+enable: true
+displayindex: 340
+displayname: Ebun
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web
+host: https://www1.ebun.tv
+priorityBrowser: http
+
+menu:
+  route:
+    sort: "{host}/{sort}/{page}/"
+    cat: "{host}/categories/{cat}/{page}/"
+    catsort: "{host}/categories/{cat}/{sort}/{page}/"
+  sort:
+    Новинки: ""
+    Топ рейтинга: top-rated
+    Популярнаe: most-popular
+  categories:
+    Азиатки: aziatki
+    Американское: amerikanskoe
+    Анал: anal
+    Анилингус: anilingus
+    Арабское порно: arabskoe-porno
+    БДСМ: bdsm
+    Блондинки: blondinki
+    Большие сиськи: bolshie-siski
+    Большие члены: bolshie-chleny
+    Бондаж: bondaj
+    Брюнетки: bryunetki
+    В ванной: v-vannoy
+    В машине: v-mashine
+    Веб камера: veb-kamera
+    Вечеринки и вписки: vecherinki-i-vpiski
+    Волосатые: volosatye
+    Врачи и медсестры: vrachi-i-medsestry
+    Ганг банг: gang-bang
+    Гетры: getry
+    Глубокая глотка: glubokaya-glotka
+    Групповое: gruppovoe
+    Двойное проникновение: dvoynoe-proniknovenie
+    Дедушки: dedushki
+    Дилдо: dildo
+    Для женщин: dlya-jenshchin
+    Домашнее: domashnee
+    Дрочка: drochka
+    Ебля: eblya
+    Женское доминирование: jenskoe-dominirovanie
+    Жены: jeny
+    Жесткое: jestkoe
+    ЖМЖ: jmj
+    Жопы: jopy
+    За деньги: za-dengi
+    Зрелые: zrelye
+    Зрелые с молодыми: zrelye-s-molodymi
+    Игрушки: igrushki
+    Измена: izmena
+    Кастинг: kasting
+    Кастинг Вудмана: kasting-vudmana
+    Кончил в рот: konchil-v-rot
+    Красивые девушки: krasivye-devushki
+    Красивые сиськи: krasivye-siski
+    Кремпай: krempay
+    Крупным планом: krupnym-planom
+    Кунилингус: kunilingus
+    Латинки: latinki
+    Маленькие сиськи: malenkie-siski
+    Мамки: mamki
+    Массаж: massaj
+    Мастурбация: masturbaciya
+    Межрассовое: mejrassovoe
+    МЖМ: mjm
+    Минет: minet
+    Молодые: molodye
+    Мулатки: mulatki
+    На кухне: na-kuhne
+    На природе: na-prirode
+    На телефон: na-telefon
+    Негритянки: negrityanki
+    Негры: negry
+    Нежное: nejnoe
+    Немецкое: nemeckoe
+    Оргазмы: orgazmy
+    Оргия: orgiya
+    От первого лица: ot-pervogo-lica
+    Офис: ofis
+    Пизда крупно: pizda-krupno
+    Пикап: pikap
+    Подчинение: podchinenie
+    Порно ВК: porno-vk
+    Порно подборка: porno-podborka
+    Порно с разговорами: porno-s-razgovorami
+    Презерватив: prezervativ
+    Пьяные: pyanye
+    Раком: rakom
+    Русское: russkoe
+    Рыжие: ryjie
+    Свингеры: svingery
+    Секретарши: sekretarshi
+    Секс втроем: seks-vtroem
+    Сексвайф и куколд: seksvayf-i-kukold
+    Сквиртинг: skvirting
+    Скрытая камера: skrytaya-kamera
+    Сперма: sperma
+    Спящие: spyashchie
+    Страпон: strapon
+    Студенты: studenty
+    Татуировки: tatuirovki
+    Толстые: tolstye
+    Тренер: trener
+    Учитель: uchitel
+    Фетиш: fetish
+    Фильмы: porno-filmy
+    Фитоняшки: fitonyashki
+    Фут-фетиш: fut-fetish
+    Худые: hudye
+    Чешское: cheshskoe
+    Чулки и колготки: chulki-i-kolgotki
+    Эротика: erotika
+    Японское: yaponskoe
+
+list:
+  uri: "latest-updates/{page}/"
+
+search:
+  uri: search/{search}/{page}/
+
+contentParse:
+  nodes: //div[contains(@class, 'item th-item item_new')]
+  name:
+    node: .//div[@class='item-title']
+  href:
+    node: .//a
+    attribute: href
+  img:
+    node: .//img
+    attribute: data-src
+  duration:
+    node: .//div[@class='meta-time']
+
+view:
+  viewsource: true
+  iframe:
+    pattern: '<iframe[^>]+ src="([^"]+)"'
+  regexMatch:
+    matches: ["video_alt_url", "video_url"]
+    pattern: "{value}:[\t ]+'([^']+)'"

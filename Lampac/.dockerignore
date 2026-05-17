@@ -1,0 +1,11 @@
+**
+!config
+!Core
+!Modules
+!TestModules
+!Online
+!SISI
+!Shared
+bin/**
+obj/**
+.DS_Store

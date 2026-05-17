@@ -1,27 +1,32 @@
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-namespace Shared.Models.AppConf
+namespace Shared.Models.AppConf;
+
+public class ListenConf
 {
-    public class ListenConf
-    {
-        public string ip { get; set; }
+    public bool version { get; set; }
 
-        public int port { get; set; }
+    public string ip { get; set; }
 
-        public bool compression { get; set; }
+    public int port { get; set; }
 
-        public string sock { get; set; }
+    public bool compression { get; set; }
 
-        public string scheme { get; set; }
+    public string sock { get; set; }
 
-        public string host { get; set; }
+    public string scheme { get; set; }
 
-        public string frontend { get; set; }
+    public string host { get; set; }
 
-        public string localhost { get; set; }
+    public string frontend { get; set; }
 
-        public int? keepalive { get; set; }
+    public string localhost { get; set; }
 
-        public HttpProtocols? endpointDefaultsProtocols { get; set; }
-    }
+    public int? keepalive { get; set; }
+
+    public int LimitHttpRequests { get; set; }
+
+    public int ResponseCancelAfter { get; set; }
+
+    public HttpProtocols? endpointDefaultsProtocols { get; set; }
 }

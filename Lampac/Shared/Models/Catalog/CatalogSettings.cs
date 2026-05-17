@@ -1,64 +1,61 @@
-﻿using Shared.Models.Base;
+﻿namespace Shared.Models.Catalog;
 
-namespace Shared.Models.Catalog
+public class CatalogSettings : BaseSettings, ICloneable
 {
-    public class CatalogSettings : BaseSettings, ICloneable
+    public CatalogSettings()
     {
-        public CatalogSettings()
-        {
-            cache_time = 5;
-        }
+        cache_time = 5;
+    }
 
-        public string args { get; set; }
+    public string args { get; set; }
 
-        public bool hide { get; set; }
+    public bool hide { get; set; }
 
-        public bool? jsonPath { get; set; }
+    public bool? jsonPath { get; set; }
 
-        public bool search_lazy { get; set; } = true;
+    public bool search_lazy { get; set; } = true;
 
-        public bool debug { get; set; }
+    public bool debug { get; set; }
 
-        public int timeout { get; set; } = 10;
+    public int timeout { get; set; } = 10;
 
-        public bool useDefaultHeaders { get; set; } = true;
+    public bool useDefaultHeaders { get; set; } = true;
 
-        public List<Microsoft.Playwright.Cookie> cookies { get; set; }
+    public List<Microsoft.Playwright.Cookie> cookies { get; set; }
 
-        public bool ignore_no_picture { get; set; } = true;
+    public bool ignore_no_picture { get; set; } = true;
 
 
-        public string[] serial_cats { get; set; }
+    public string[] serial_cats { get; set; }
 
-        public string[] movie_cats { get; set; }
+    public string[] movie_cats { get; set; }
 
-        public string catalog_key { get; set; }
+    public string catalog_key { get; set; }
 
-        public List<MenuSettings> menu { get; set; }
-
-
-        public ListSettings search { get; set; }
-
-        public ListSettings list { get; set; }
-
-        public ContentParseSettings content { get; set; }
+    public List<MenuSettings> menu { get; set; }
 
 
-        public CardParseSettings card_parse { get; set; }
+    public ListSettings search { get; set; }
 
-        public List<SingleNodeSettings> card_args { get; set; }
+    public ListSettings list { get; set; }
 
-        public string[] tmdb_injects { get; set; }
+    public ContentParseSettings content { get; set; }
 
 
-        public CatalogSettings Clone()
-        {
-            return (CatalogSettings)MemberwiseClone();
-        }
+    public CardParseSettings card_parse { get; set; }
 
-        object ICloneable.Clone()
-        {
-            return MemberwiseClone();
-        }
+    public List<SingleNodeSettings> card_args { get; set; }
+
+    public string[] tmdb_injects { get; set; }
+
+
+    public CatalogSettings Clone()
+    {
+        return (CatalogSettings)MemberwiseClone();
+    }
+
+    object ICloneable.Clone()
+    {
+        return MemberwiseClone();
     }
 }
