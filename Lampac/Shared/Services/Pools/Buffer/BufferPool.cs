@@ -8,6 +8,28 @@ public sealed class BufferPool : IDisposable
 {
     static readonly ConcurrentBag<NativeBuffer<byte>> _pool = new();
 
+    #region maxCount
+    static int? _maxCount;
+
+    /// <summary>
+    /// ~500Mb
+    /// </summary>
+    static int maxCount
+    {
+        get
+        {
+            if (_maxCount.HasValue)
+                return _maxCount.Value;
+
+            _maxCount = (CoreInit.conf?.pool?.BufferMax ?? 500_000000) / PoolInvk.bufferSize;
+            if (1 > _maxCount.Value)
+                _maxCount = 1;
+
+            return _maxCount.Value;
+        }
+    }
+    #endregion
+
     #region OpenStat
     public static int Free
         => _pool.Count;
@@ -39,9 +61,6 @@ public sealed class BufferPool : IDisposable
             return;
 
         bool IsExpires = _nbuf.IsExpires;
-        int maxCount = (CoreInit.conf?.pool?.BufferMax ?? 500_000000) / PoolInvk.bufferSize; // ~500Mb
-        if (1 > maxCount)
-            maxCount = 1;
 
         if (IsExpires || _pool.Count >= maxCount)
         {

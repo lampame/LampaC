@@ -8,28 +8,25 @@ namespace Shared.Services.Pools;
 public sealed class BufferWriterPool<T> : IBufferWriter<T>, IDisposable where T : unmanaged
 {
     #region pool
-    public static readonly int sizePool = 1 * 1024 * 1024;
-    static readonly ConcurrentBag<NativeBuffer<T>> _pool = new();
+    public const int sizePool = 1 * 1024 * 1024;
+    public const int sizeLargePool = 10 * 1024 * 1024;
 
-    public static readonly int sizeLargePool = 10 * 1024 * 1024;
-    static readonly ConcurrentBag<NativeBuffer<T>> _poolLarge = new();
-
-    static int smailMaxCount
-        => CoreInit.conf.pool.BufferWriterSmallMaxCount;
-    static int largeMaxCount
-        => CoreInit.conf.pool.BufferWriterLargeMaxCount;
+    static readonly ConcurrentDictionary<byte, BufferPoolInfo<T>> pool = new ConcurrentDictionary<byte, BufferPoolInfo<T>>
+    {
+        [1] = new BufferPoolInfo<T>(sizePool, CoreInit.conf.pool.BufferWriterSmallMaxCount),
+        [2] = new BufferPoolInfo<T>(sizeLargePool, CoreInit.conf.pool.BufferWriterLargeMaxCount)
+    };
     #endregion
 
     #region OpenStat
-    public static int Free
-        => _pool.Count;
+    public static long Free
+        => pool[1].currentCount;
 
-    public static int FreeLarge
-        => _poolLarge.Count;
+    public static long FreeLarge
+        => pool[2].currentCount;
 
-    static long _disposeCount;
     public static long DisposeCount
-        => Interlocked.Read(ref _disposeCount);
+        => pool.Sum(i => i.Value.disposeCount);
     #endregion
 
     private NativeBuffer<T> _nbuf;
@@ -39,7 +36,8 @@ public sealed class BufferWriterPool<T> : IBufferWriter<T>, IDisposable where T 
 
     public BufferWriterPool(bool largePool = false)
     {
-        _large = largePool;
+        if (CoreInit.conf.lowMemoryMode == false)
+            _large = largePool;
     }
 
     public ReadOnlySpan<T> WrittenSpan
@@ -79,24 +77,13 @@ public sealed class BufferWriterPool<T> : IBufferWriter<T>, IDisposable where T 
 
         if (_nbuf == null)
         {
-            if (_large && largeMaxCount > _poolLarge.Count && CoreInit.conf.lowMemoryMode == false)
-            {
-                if (!_poolLarge.TryTake(out _nbuf))
-                    _nbuf = new NativeBuffer<T>(sizeLargePool);
-            }
-            else if (smailMaxCount > _pool.Count)
-            {
-                if (!_pool.TryTake(out _nbuf))
-                    _nbuf = new NativeBuffer<T>(sizePool);
-            }
-            else
-            {
-                const int minrent = 128 * 1024;
-                if (minrent > sizeHint)
-                    sizeHint = minrent;
+            const int minSize = 128 * 1024;
 
-                _nbuf = new NativeBuffer<T>(sizeHint);
-            }
+            if (minSize > sizeHint)
+                sizeHint = minSize;
+
+            var p = pool[_large ? (byte)2 : (byte)1];
+            _nbuf = p.Rent(sizeHint);
         }
 
         int newsize = _index + sizeHint;
@@ -111,29 +98,7 @@ public sealed class BufferWriterPool<T> : IBufferWriter<T>, IDisposable where T 
         if (_nbuf == null || Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        if (_nbuf.IsExpires)
-        {
-            ((IDisposable)_nbuf).Dispose();
-            return;
-        }
-        else
-        {
-            if (_nbuf.Memory.Length == sizePool)
-                _pool.Add(_nbuf);
-            else if (_nbuf.Memory.Length == sizeLargePool)
-                _poolLarge.Add(_nbuf);
-            else
-            {
-                int bufferSize = _nbuf.Memory.Length;
-                Interlocked.Increment(ref _disposeCount);
-                ((IDisposable)_nbuf).Dispose();
-
-                Serilog.Log.Error(
-                    "dispose buffer size. CatchId={CatchId} Size={BufferSize}",
-                    "id_exzytjlp",
-                    bufferSize
-                );
-            }
-        }
+        var p = pool[_large ? (byte)2 : (byte)1];
+        p.Return(_nbuf);
     }
 }
