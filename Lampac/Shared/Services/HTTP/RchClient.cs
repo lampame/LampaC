@@ -7,6 +7,8 @@ using Shared.Models.Events;
 using Shared.Services.Pools.Json;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -25,6 +27,8 @@ public class RchClientInfo
 public class RchClient
 {
     #region static
+    public static INws Nws { get; set; }
+
     static bool logEnable => CoreInit.conf.serilog;
     static readonly Serilog.ILogger Log = Serilog.Log.ForContext<RchClient>();
 
@@ -59,10 +63,6 @@ public class RchClient
 
     public static string ErrorMsg
         => CoreInit.conf.rch.enable ? "rhub не работает с данным балансером" : "Включите rch в init.conf";
-
-    public record class hubEntry(string connectionId, string rchId, string url, string data, Dictionary<string, string> headers, bool returnHeaders);
-
-    public static EventHandler<hubEntry> hub = null;
 
     public record class clientEntry(string ip, string host, RchClientInfo info, NwsConnection connection);
 
@@ -383,7 +383,7 @@ public class RchClient
     #region SendHub
     async Task<string> SendHub(string url, string data = null, IReadOnlyList<HeadersModel> headers = null, bool useDefaultHeaders = true, bool returnHeaders = false, bool waiting = true, Action<ReadOnlySpan<char>> spanAction = null, Action<MemoryStream> msAction = null)
     {
-        if (hub == null)
+        if (Nws == null)
             return null;
 
         var clientInfo = SocketClient();
@@ -451,7 +451,53 @@ public class RchClient
             }
             #endregion
 
-            hub.Invoke(null, new hubEntry(connectionId, rchId, url, data, Http.NormalizeHeaders(send_headers), returnHeaders));
+            #region Nws SendAsync
+            using (var utf8Buf = new BufferWriterPool<byte>(BufferWriterPoolType.Tiny))
+            {
+                using (var ujw = new Utf8JsonWriter(utf8Buf))
+                {
+                    ujw.WriteStartObject();
+
+                    ujw.WriteString("method"u8, "RchClient");
+
+                    ujw.WriteStartArray("args"u8);
+
+                    ujw.WriteStringValue(rchId);
+                    ujw.WriteStringValue(url);
+                    ujw.WriteStringValue(data);
+
+                    if (headers is null)
+                    {
+                        ujw.WriteNullValue();
+                    }
+                    else
+                    {
+                        ujw.WriteStartObject();
+
+                        foreach (var header in headers)
+                        {
+                            if (header.name is null)
+                                continue;
+
+                            if (header.val is null)
+                                ujw.WriteNull(header.name);
+                            else
+                                ujw.WriteString(header.name, header.val);
+                        }
+
+                        ujw.WriteEndObject();
+                    }
+
+                    ujw.WriteBooleanValue(returnHeaders);
+
+                    ujw.WriteEndArray();
+
+                    ujw.WriteEndObject();
+                }
+
+                await Nws.SendConnectionAsync(clientInfo.data.connection, utf8Buf.WrittenMemory, WebSocketMessageType.Text, true, cts.Token).ConfigureAwait(false);
+            }
+            #endregion
 
             if (!waiting)
                 return null;
@@ -512,6 +558,7 @@ public class RchClient
 
 
     #region IsNotConnected
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsNotConnected()
     {
         if (!enableRhub)
@@ -588,7 +635,7 @@ public class RchClient
         }
 
         // указан webcorshost или включен corseu
-        if (!string.IsNullOrWhiteSpace(init.webcorshost) || init.corseu)
+        if (!string.IsNullOrEmpty(init.webcorshost) || init.corseu)
             return false;
 
         if (CoreInit.conf.rch.notSupportMsg != null)
@@ -630,6 +677,7 @@ public class RchClient
     #endregion
 
     #region IsCheckSearchRequest
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     bool IsCheckSearchRequest()
     {
         return httpContext != null
@@ -640,6 +688,7 @@ public class RchClient
     #endregion
 
     #region InfoConnected
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RchClientInfo InfoConnected()
     {
         return SocketClient().data?.info;
