@@ -30,7 +30,7 @@ public class SpectreController : BaseOnlineController<ModuleConf>
 
     [HttpGet]
     [Route("lite/spectre")]
-    async public Task<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, int serial, string original_language, int year, int t = -1, int s = -1, bool origsource = false, bool rjson = false, bool similar = false)
+    async public Task<ActionResult> Index(string orid, string imdb_id, long kinopoisk_id, string title, string original_title, byte serial, string original_language, short year, int t = -1, short s = -1, bool origsource = false, bool rjson = false, bool similar = false)
     {
         if (similar)
             return await RouteSpiderSearch(title, origsource, rjson);
@@ -51,7 +51,14 @@ public class SpectreController : BaseOnlineController<ModuleConf>
         if (result.category_id is 1 or 3)
         {
             #region Фильм
-            var videos = frame.all["theatrical"].ToObject<Dictionary<string, Dictionary<string, JObject>>>();
+            var videosToken = frame.all["theatrical"];
+
+            if (videosToken == null || videosToken.Type != JTokenType.Object || !videosToken.HasValues)
+                videosToken = frame.all["directors"];
+
+            var videos = videosToken?.Type == JTokenType.Object
+                ? videosToken.ToObject<Dictionary<string, Dictionary<string, JObject>>>()
+                : new Dictionary<string, Dictionary<string, JObject>>();
 
             var mtpl = new MovieTpl(title, original_title, videos.Count);
 
@@ -62,7 +69,13 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                 string translation = file.Value<string>("translation");
                 string quality = file.Value<string>("quality");
                 long id = file.Value<long>("id");
-                bool uhd = init.m4s ? file.Value<bool>("uhd") : false;
+
+                var uhdToken = file["uhd"];
+
+                bool uhd = init.m4s && (
+                    uhdToken?.Type == JTokenType.Boolean && uhdToken.Value<bool>() ||
+                    uhdToken?.Type == JTokenType.Integer && uhdToken.Value<int>() == 1
+                );
 
                 string link = $"{host}/lite/spectre/video?id_file={id}&token_movie={data.Value<string>("token_movie")}";
                 mtpl.Append(
@@ -189,13 +202,13 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                         foreach (var voice in episode
                             .ToObject<Dictionary<string, JObject>>()
                             .Select(i => i.Value)
-                            .OrderBy(e => e.Value<int>("episode")))
+                            .OrderBy(e => e.Value<short>("episode")))
                         {
                             if (voice.Value<int>("id_translation") != t)
                                 continue;
 
                             string translation = voice.Value<string>("translation");
-                            int e = voice.Value<int>("episode");
+                            short e = voice.Value<short>("episode");
 
                             string link = $"{host}/lite/spectre/video?id_file={voice.Value<long>("id")}&token_movie={data.Value<string>("token_movie")}";
                             string streamlink = accsArgs($"{link.Replace("/video", "/video.m3u8")}&play=true");
@@ -205,8 +218,8 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                                 etpl.Append(
                                     $"{e} серия",
                                     title ?? original_title,
-                                    sArhc,
-                                    e.ToString(),
+                                    s,
+                                    e,
                                     link,
                                     "call",
                                     voice_name: translation,
@@ -257,13 +270,13 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                             {
                                 foreach (var episode in sjob
                                     .ToObject<Dictionary<string, JObject>>()
-                                    .OrderBy(e => e.Value.Value<int>("episode")))
+                                    .OrderBy(e => e.Value.Value<short>("episode")))
                                 {
                                     if (episode.Value.Value<int>("id_translation") != t)
                                         continue;
 
                                     string translation = episode.Value.Value<string>("translation");
-                                    int e = episode.Value.Value<int>("episode");
+                                    short e = episode.Value.Value<short>("episode");
 
                                     string link = $"{host}/lite/spectre/video?id_file={episode.Value.Value<long>("id")}&token_movie={data.Value<string>("token_movie")}";
                                     string streamlink = accsArgs($"{link.Replace("/video", "/video.m3u8")}&play=true");
@@ -273,8 +286,8 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                                         etpl.Append(
                                             $"{e} серия",
                                             title ?? original_title,
-                                            sArhc,
-                                            e.ToString(),
+                                            s,
+                                            e,
                                             link,
                                             "call",
                                             voice_name: translation,
@@ -327,7 +340,7 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                             etpl.Append(
                                 $"{episode.Key} серия",
                                 title ?? original_title,
-                                sArhc,
+                                s,
                                 episode.Key,
                                 link,
                                 "call",
@@ -383,7 +396,6 @@ public class SpectreController : BaseOnlineController<ModuleConf>
             "auto",
             streamquality: result.streams,
             vast: init.vast,
-            hls_manifest_timeout: (int)TimeSpan.FromSeconds(30).TotalMilliseconds,
             httpContext: HttpContext
         ));
     }
@@ -431,7 +443,7 @@ public class SpectreController : BaseOnlineController<ModuleConf>
 
 
     #region search
-    async ValueTask<(bool refresh_proxy, int category_id, JToken data)> search(string token_movie, string imdb_id, long kinopoisk_id, string title, int serial, string original_language, int year)
+    async ValueTask<(bool refresh_proxy, int category_id, JToken data)> search(string token_movie, string imdb_id, long kinopoisk_id, string title, byte serial, string original_language, short year)
     {
         string memKey = $"mirage:view:{kinopoisk_id}:{imdb_id}";
         if (0 >= kinopoisk_id && string.IsNullOrEmpty(imdb_id))
@@ -461,7 +473,7 @@ public class SpectreController : BaseOnlineController<ModuleConf>
                     {
                         if (item.Value<string>("name")?.ToLowerAndTrim() == stitle)
                         {
-                            int y = item.Value<int>("year");
+                            short y = item.Value<short>("year");
                             if (y > 0 && (y == year || y == (year - 1) || y == (year + 1)))
                             {
                                 if (original_language == "ru" && item.Value<string>("country")?.ToLowerAndTrim() != "россия")

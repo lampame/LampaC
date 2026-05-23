@@ -4,8 +4,8 @@ namespace Shared.Services;
 
 public static class FileCache
 {
-    record DbModel(DateTime lockTime, string value);
-    static ConcurrentDictionary<string, DbModel> db = new();
+    private readonly record struct CacheEntry(DateTime lockTime, string value);
+    private readonly static ConcurrentDictionary<string, CacheEntry> db = new();
 
     public static string ReadAllText(string path)
         => ReadAllText(path, null, true);
@@ -13,34 +13,45 @@ public static class FileCache
     public static string ReadAllText(string path, string mypath)
         => ReadAllText(path, mypath, true);
 
-    public static string ReadAllText(string path, string mypath, bool saveCache)
+    public static string ReadAllText(string path, string overridePath, bool saveCache)
     {
-        var secondCache = DateTime.Now.AddMinutes(10);
-
         try
         {
-            string key = $"{path}:{mypath}";
+            string key = overridePath ?? path;
+            var now = DateTime.UtcNow;
 
-            if (db.TryGetValue(key, out DbModel cache))
+            if (db.TryGetValue(key, out CacheEntry cache))
             {
-                if (cache.lockTime > DateTime.Now)
+                if (cache.lockTime > now)
                     return cache.value;
             }
 
-            if (!string.IsNullOrEmpty(mypath) && File.Exists($"plugins/override/{mypath}"))
+            bool isOverride = false;
+            if (overridePath != null)
             {
-                path = $"plugins/override/{mypath}";
+                string testPath = $"plugins/override/{overridePath}";
+                if (File.Exists(testPath))
+                {
+                    isOverride = true;
+                    path = testPath;
+                }
             }
-            else if (!File.Exists(path))
+
+            if (isOverride == false)
             {
-                db.TryAdd(path, new(DateTime.Now.AddMinutes(1), string.Empty));
-                return string.Empty;
+                if (File.Exists(path) == false)
+                {
+                    if (saveCache)
+                        db[key] = new(now.AddMinutes(1), string.Empty);
+
+                    return string.Empty;
+                }
             }
 
             string value = File.ReadAllText(path);
 
             if (saveCache)
-                return db.GetOrAdd(key, _ => new(secondCache, value)).value;
+                db[key] = new(now.AddMinutes(10), value);
 
             return value;
         }
