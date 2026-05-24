@@ -6,6 +6,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -111,8 +112,11 @@ public class RequestInfo
             UserAgent = httpContext.Request.Headers.UserAgent
         };
 
-        if (httpContext.Request.Headers.TryGetValue("X-Kit-AesGcm", out StringValues aesGcmKey) && aesGcmKey.Count > 0)
-            req.AesGcmKey = aesGcmKey;
+        if (CoreInit.conf.kit.enable)
+        {
+            if (httpContext.Request.Headers.TryGetValue("X-Kit-AesGcm", out StringValues aesGcmKey) && aesGcmKey.Count > 0)
+                req.AesGcmKey = aesGcmKey;
+        }
 
         if (!string.IsNullOrEmpty(CoreInit.conf.accsdb.domainId_pattern))
         {
@@ -154,6 +158,7 @@ public class RequestInfo
     #region getuid
     static readonly string[] uids = ["token", "account_email", "uid", "box_mac"];
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static string getuid(HttpContext httpContext)
     {
         foreach (string id in uids)
@@ -166,37 +171,36 @@ public class RequestInfo
                     if (!CoreInit.conf.BaseModule.ValidateIdentity)
                         return val[0];
 
-                    if (IsValidUid(val[0]))
+                    ReadOnlySpan<char> value = val[0];
+                    if (value.IsEmpty)
+                        continue;
+
+                    bool hasValid = true;
+                    foreach (char ch in value)
+                    {
+                        if
+                        (
+                            (ch >= 'a' && ch <= 'z') ||
+                            (ch >= 'A' && ch <= 'Z') ||
+                            (ch >= '0' && ch <= '9') ||
+                            ch == '_' || ch == '+' || ch == '.' || ch == '-' || ch == '@' || ch == '='
+                        )
+                        {
+                            // valid character
+                        }
+                        else
+                        {
+                            hasValid = false;
+                        }
+                    }
+
+                    if (hasValid)
                         return val[0];
                 }
             }
         }
 
         return null;
-    }
-
-    static bool IsValidUid(ReadOnlySpan<char> value)
-    {
-        if (value.IsEmpty)
-            return false;
-
-        foreach (char ch in value)
-        {
-            if
-            (
-                (ch >= 'a' && ch <= 'z') ||
-                (ch >= 'A' && ch <= 'Z') ||
-                (ch >= '0' && ch <= '9') ||
-                ch == '_' || ch == '+' || ch == '.' || ch == '-' || ch == '@' || ch == '='
-            )
-            {
-                continue;
-            }
-
-            return false;
-        }
-
-        return true;
     }
     #endregion
 }

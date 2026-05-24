@@ -135,28 +135,33 @@ public static class Http
     #region Handler
     public static HttpClientHandler Handler(string url, WebProxy proxy, CookieContainer cookieContainer = null)
     {
-        var handler = new HttpClientHandler()
+        var handler = HandlerOrNull(url, proxy, cookieContainer);
+        if (handler != null)
+            return handler;
+
+        handler = new HttpClientHandler()
         {
             AllowAutoRedirect = true,
             AutomaticDecompression = DecompressionMethods.Brotli | DecompressionMethods.GZip | DecompressionMethods.Deflate,
             ServerCertificateCustomValidationCallback = AlwaysAllowCertificate
         };
 
-        if (proxy != null)
+        if (EventListener.HttpHandler != null)
         {
-            handler.UseProxy = true;
-            handler.Proxy = proxy;
-        }
-        else
-        {
-            handler.UseProxy = false;
+            var em = new EventHttpHandler(url, handler, proxy, cookieContainer);
+
+            foreach (Action<EventHttpHandler> eventHandler in EventListener.HttpHandler.GetInvocationList())
+                eventHandler.Invoke(em);
         }
 
-        if (cookieContainer != null)
-        {
-            handler.CookieContainer = cookieContainer;
-            handler.UseCookies = true; //<-- Enable the use of cookies.
-        }
+        return handler;
+    }
+    #endregion
+
+    #region HandlerOrNull
+    public static HttpClientHandler HandlerOrNull(string url, WebProxy proxy, CookieContainer cookieContainer = null)
+    {
+        bool createHandler = proxy != null || cookieContainer != null || EventListener.HttpHandler != null;
 
         try
         {
@@ -182,9 +187,8 @@ public static class Http
                         else if (p.useAuth)
                             credentials = new NetworkCredential(p.username, p.password);
 
-                        handler.UseProxy = true;
-                        handler.Proxy = new WebProxy(proxyip, p.BypassOnLocal, null, credentials);
-
+                        createHandler = true;
+                        proxy = new WebProxy(proxyip, p.BypassOnLocal, null, credentials);
                         break;
                     }
                 }
@@ -196,15 +200,45 @@ public static class Http
                 Log.Error(ex, "CatchId={CatchId}", "id_6g2snq8w");
         }
 
-        if (EventListener.HttpHandler != null)
+        if (createHandler)
         {
-            var em = new EventHttpHandler(url, handler, proxy, cookieContainer);
+            var handler = new HttpClientHandler()
+            {
+                AllowAutoRedirect = true,
+                AutomaticDecompression = DecompressionMethods.Brotli | DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                ServerCertificateCustomValidationCallback = AlwaysAllowCertificate
+            };
 
-            foreach (Action<EventHttpHandler> eventHandler in EventListener.HttpHandler.GetInvocationList())
-                eventHandler.Invoke(em);
+            if (proxy != null)
+            {
+                handler.UseProxy = true;
+                handler.Proxy = proxy;
+            }
+            else
+            {
+                handler.UseProxy = false;
+            }
+
+            if (cookieContainer != null)
+            {
+                handler.CookieContainer = cookieContainer;
+                handler.UseCookies = true; //<-- Enable the use of cookies.
+            }
+
+            if (EventListener.HttpHandler != null)
+            {
+                var em = new EventHttpHandler(url, handler, proxy, cookieContainer);
+
+                foreach (Action<EventHttpHandler> eventHandler in EventListener.HttpHandler.GetInvocationList())
+                    eventHandler.Invoke(em);
+            }
+
+            return handler;
         }
-
-        return handler;
+        else
+        {
+            return null;
+        }
     }
     #endregion
 
@@ -212,37 +246,37 @@ public static class Http
     #region DefaultRequestHeaders
     public static void DefaultRequestHeaders(string url, HttpRequestMessage client, string cookie, string referer, IReadOnlyList<HeadersModel> headers, bool useDefaultHeaders = true, string prefixCacheHeader = null)
     {
-        if (prefixCacheHeader != null && cacheDefaultRequestHeaders.TryGetValue(prefixCacheHeader, out IReadOnlyDictionary<string, string> _cacheHeaders))
+        if (useDefaultHeaders && (headers == null || headers.Count == 0) && cookie == null && referer == null)
         {
-            #region Cache Headers
-            foreach (var h in _cacheHeaders)
-            {
-                if (h.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Content-Type, Content-Length, Content-Encoding, Content-Disposition
-                    client.Content?.Headers.TryAddWithoutValidation(h.Key, h.Value);
-                }
-                else
-                {
-                    if (client.Headers.TryAddWithoutValidation(h.Key, h.Value)) { }
-                    else if (client.Content?.Headers != null)
-                    {
-                        client.Content.Headers.TryAddWithoutValidation(h.Key, h.Value);
-                    }
-                }
-            }
-            #endregion
+            foreach (var h in defaultNormalizeHeaders)
+                client.Headers.TryAddWithoutValidation(h.Key, h.Value);
         }
         else
         {
-            if (useDefaultHeaders && (headers == null || headers.Count == 0) && cookie == null && referer == null)
+            if (prefixCacheHeader != null && cacheDefaultRequestHeaders.TryGetValue(prefixCacheHeader, out IReadOnlyDictionary<string, string> _cacheHeaders))
             {
-                foreach (var h in defaultNormalizeHeaders)
-                    client.Headers.TryAddWithoutValidation(h.Key, h.Value);
+                #region Cache Headers
+                foreach (var h in _cacheHeaders)
+                {
+                    if (h.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Content-Type, Content-Length, Content-Encoding, Content-Disposition
+                        client.Content?.Headers.TryAddWithoutValidation(h.Key, h.Value);
+                    }
+                    else
+                    {
+                        if (client.Headers.TryAddWithoutValidation(h.Key, h.Value)) { }
+                        else if (client.Content?.Headers != null)
+                        {
+                            client.Content.Headers.TryAddWithoutValidation(h.Key, h.Value);
+                        }
+                    }
+                }
+                #endregion
             }
             else
             {
-                #region User Headers
+                #region New Headers
                 var addHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 if (useDefaultHeaders)
@@ -306,14 +340,14 @@ public static class Http
                 }
                 #endregion
             }
+        }
 
-            if (EventListener.HttpRequestHeaders != null)
-            {
-                var em = new EventHttpHeaders(url, client, cookie, referer, headers, useDefaultHeaders);
+        if (EventListener.HttpRequestHeaders != null)
+        {
+            var em = new EventHttpHeaders(url, client, cookie, referer, headers, useDefaultHeaders);
 
-                foreach (Action<EventHttpHeaders> handler in EventListener.HttpRequestHeaders.GetInvocationList())
-                    handler.Invoke(em);
-            }
+            foreach (Action<EventHttpHeaders> handler in EventListener.HttpRequestHeaders.GetInvocationList())
+                handler.Invoke(em);
         }
     }
     #endregion
@@ -381,9 +415,6 @@ public static class Http
     #region GetLocation
     async public static Task<string> GetLocation(string url, string referer = null, int timeoutSeconds = 8, IReadOnlyList<HeadersModel> headers = null, int httpversion = 1, bool allowAutoRedirect = false, WebProxy proxy = null)
     {
-        var handler = Handler(url, proxy);
-        handler.AllowAutoRedirect = allowAutoRedirect;
-
         var client = FriendlyHttp.MessageClient(
             httpversion switch
             {
@@ -391,8 +422,9 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            handler,
-            out bool disposeHttpClient
+            HandlerOrNull(url, proxy),
+            out bool disposeHttpClient,
+            allowAutoRedirect: allowAutoRedirect
         );
 
         try
@@ -445,9 +477,6 @@ public static class Http
     #region ResponseHeaders
     async public static Task<HttpResponseMessage> ResponseHeaders(string url, int timeoutSeconds = 8, IReadOnlyList<HeadersModel> headers = null, int httpversion = 1, bool allowAutoRedirect = false, WebProxy proxy = null)
     {
-        var handler = Handler(url, proxy);
-        handler.AllowAutoRedirect = allowAutoRedirect;
-
         var client = FriendlyHttp.MessageClient(
             httpversion switch
             {
@@ -455,8 +484,9 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            handler,
-            out bool disposeHttpClient
+            HandlerOrNull(url, proxy),
+            out bool disposeHttpClient,
+            allowAutoRedirect: allowAutoRedirect
         );
 
         try
@@ -578,7 +608,7 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            Handler(url, proxy, cookieContainer),
+            HandlerOrNull(url, proxy, cookieContainer),
             out bool disposeHttpClient,
             MaxResponseContentBufferSize,
             httpClient
@@ -713,38 +743,41 @@ public static class Http
 
         try
         {
-            var req = await BasePostReaderAsync(async e =>
+            using (var dataContent = new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"))
             {
-                try
+                var req = await BasePostReaderAsync(async e =>
                 {
-                    msm = PoolInvk.msm.GetStream();
-
-                    using (var byteBuf = new BufferPool())
+                    try
                     {
-                        int bytesRead;
-                        var memBuf = byteBuf.Memory;
+                        msm = PoolInvk.msm.GetStream();
 
-                        while ((bytesRead = await e.stream.ReadAsync(memBuf, e.ct).ConfigureAwait(false)) > 0)
-                            msm.Write(memBuf.Span.Slice(0, bytesRead));
+                        using (var byteBuf = new BufferPool())
+                        {
+                            int bytesRead;
+                            var memBuf = byteBuf.Memory;
+
+                            while ((bytesRead = await e.stream.ReadAsync(memBuf, e.ct).ConfigureAwait(false)) > 0)
+                                msm.Write(memBuf.Span.Slice(0, bytesRead));
+                        }
+
+                        msm.Position = 0;
+
+                        OwnerTo.Span(msm, encoding != default ? encoding : Encoding.UTF8, span =>
+                        {
+                            if (span.IsEmpty)
+                                return;
+
+                            spanAction.Invoke(span);
+                        });
                     }
+                    catch { }
+                },
+                    url, dataContent,
+                    cookie, MaxResponseContentBufferSize, timeoutSeconds, headers, proxy, httpversion, cookieContainer, useDefaultHeaders, statusCodeOK, httpClient
+                ).ConfigureAwait(false);
 
-                    msm.Position = 0;
-
-                    OwnerTo.Span(msm, encoding != default ? encoding : Encoding.UTF8, span =>
-                    {
-                        if (span.IsEmpty)
-                            return;
-
-                        spanAction.Invoke(span);
-                    });
-                }
-                catch { }
-            },
-                url, new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"),
-                cookie, MaxResponseContentBufferSize, timeoutSeconds, headers, proxy, httpversion, cookieContainer, useDefaultHeaders, statusCodeOK, httpClient
-            ).ConfigureAwait(false);
-
-            return req.success;
+                return req.success;
+            }
         }
         finally
         {
@@ -771,7 +804,7 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            Handler(url, proxy, cookieContainer),
+            HandlerOrNull(url, proxy, cookieContainer),
             out bool disposeHttpClient,
             MaxResponseContentBufferSize,
             httpClient
@@ -857,9 +890,12 @@ public static class Http
     #region Post
     public static Task<string> Post(string url, string data, string cookie = null, int MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, IReadOnlyList<HeadersModel> headers = null, WebProxy proxy = null, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, bool removeContentType = false, Encoding encoding = default, bool statusCodeOK = true, HttpClient httpClient = null)
     {
-        return Post(url, new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"),
-            encoding, cookie, MaxResponseContentBufferSize, timeoutSeconds, headers, proxy, httpversion, cookieContainer, useDefaultHeaders, removeContentType, statusCodeOK, httpClient
-        );
+        using (var dataContent = new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"))
+        {
+            return Post(url, dataContent,
+                encoding, cookie, MaxResponseContentBufferSize, timeoutSeconds, headers, proxy, httpversion, cookieContainer, useDefaultHeaders, removeContentType, statusCodeOK, httpClient
+            );
+        }
     }
 
     async public static Task<string> Post(string url, HttpContent data, Encoding encoding = default, string cookie = null, int MaxResponseContentBufferSize = 0, int timeoutSeconds = 15, IReadOnlyList<HeadersModel> headers = null, WebProxy proxy = null, int httpversion = 1, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, bool removeContentType = false, bool statusCodeOK = true, HttpClient httpClient = null)
@@ -880,7 +916,7 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            Handler(url, proxy, cookieContainer),
+            HandlerOrNull(url, proxy, cookieContainer),
             out bool disposeHttpClient,
             MaxResponseContentBufferSize,
             httpClient
@@ -969,9 +1005,12 @@ public static class Http
     #region Post<T>
     public static Task<T> Post<T>(string url, string data, string cookie = null, int timeoutSeconds = 15, IReadOnlyList<HeadersModel> headers = null, Encoding encoding = default, WebProxy proxy = null, bool IgnoreDeserializeObject = false, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, int httpversion = 1, int MaxResponseContentBufferSize = 0, bool statusCodeOK = true, HttpClient httpClient = null, bool textJson = false)
     {
-        return Post<T>(url, new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"),
-            cookie, timeoutSeconds, headers, encoding, proxy, IgnoreDeserializeObject, cookieContainer, useDefaultHeaders, httpversion, MaxResponseContentBufferSize, statusCodeOK, httpClient, textJson
-        );
+        using (var dataContent = new StringContent(data, Encoding.UTF8, "application/x-www-form-urlencoded"))
+        {
+            return Post<T>(url, dataContent,
+                cookie, timeoutSeconds, headers, encoding, proxy, IgnoreDeserializeObject, cookieContainer, useDefaultHeaders, httpversion, MaxResponseContentBufferSize, statusCodeOK, httpClient, textJson
+            );
+        }
     }
 
     async public static Task<T> Post<T>(string url, HttpContent data, string cookie = null, int timeoutSeconds = 15, IReadOnlyList<HeadersModel> headers = null, Encoding encoding = default, WebProxy proxy = null, bool IgnoreDeserializeObject = false, CookieContainer cookieContainer = null, bool useDefaultHeaders = true, int httpversion = 1, int MaxResponseContentBufferSize = 0, bool statusCodeOK = true, HttpClient httpClient = null, bool textJson = false)
@@ -1051,7 +1090,7 @@ public static class Http
                 3 => "http3",
                 _ => "base"
             },
-            Handler(url, proxy, cookieContainer),
+            HandlerOrNull(url, proxy, cookieContainer),
             out bool disposeHttpClient,
             MaxResponseContentBufferSize,
             httpClient
@@ -1145,7 +1184,7 @@ public static class Http
     {
         var client = FriendlyHttp.MessageClient(
             "base",
-            Handler(url, proxy),
+            HandlerOrNull(url, proxy),
             out bool disposeHttpClient,
             MaxResponseContentBufferSize
         );
@@ -1192,37 +1231,37 @@ public static class Http
     #region DownloadFile
     async public static Task<bool> DownloadFile(string url, string path, int timeoutSeconds = 20, IReadOnlyList<HeadersModel> headers = null, WebProxy proxy = null)
     {
+        var client = FriendlyHttp.MessageClient(
+            "base",
+            HandlerOrNull(url, proxy),
+            out bool disposeHttpClient
+        );
+
         try
         {
-            using (var handler = Handler(url, proxy))
+            using (var req = new HttpRequestMessage(HttpMethod.Get, url)
             {
-                using (var client = new HttpClient(handler))
+                Version = HttpVersion.Version11
+            })
+            {
+                DefaultRequestHeaders(url, req, null, null, headers, true);
+
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(20, timeoutSeconds))))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
-
-                    bool setDefaultUseragent = true;
-
-                    if (headers != null)
+                    using (HttpResponseMessage response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
                     {
-                        foreach (var item in headers)
+                        if (response.StatusCode != HttpStatusCode.OK)
+                            return false;
+
+                        HttpContent content = response.Content;
+
+                        await using (var stream = await content.ReadAsStreamAsync())
                         {
-                            if (item.name.Equals("user-agent", StringComparison.OrdinalIgnoreCase))
-                                setDefaultUseragent = false;
-
-                            if (!client.DefaultRequestHeaders.Contains(item.name))
-                                client.DefaultRequestHeaders.Add(item.name, item.val);
-                        }
-                    }
-
-                    if (setDefaultUseragent)
-                        client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-
-                    await using (var stream = await client.GetStreamAsync(url))
-                    {
-                        await using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PoolInvk.bufferSize, options: FileOptions.Asynchronous))
-                        {
-                            await stream.CopyToAsync(fileStream);
-                            return true;
+                            await using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PoolInvk.bufferSize, options: FileOptions.Asynchronous))
+                            {
+                                await stream.CopyToAsync(fileStream);
+                                return true;
+                            }
                         }
                     }
                 }
@@ -1231,6 +1270,11 @@ public static class Http
         catch
         {
             return false;
+        }
+        finally
+        {
+            if (disposeHttpClient)
+                client.Dispose();
         }
     }
     #endregion
@@ -1288,7 +1332,7 @@ public static class Http
 
     #region Helpers
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static bool HasUserAgent(IReadOnlyList<HeadersModel> headers)
+    private static bool HasUserAgent(IReadOnlyList<HeadersModel> headers)
     {
         if (headers == null)
             return false;

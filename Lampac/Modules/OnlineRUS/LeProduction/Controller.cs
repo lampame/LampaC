@@ -19,8 +19,7 @@ public class LeProductionController : BaseOnlineController
 {
     public LeProductionController() : base(ModInit.conf) { }
 
-    [HttpGet]
-    [Staticache]
+    [HttpGet, Staticache(manually: true)]
     [Route("lite/leproduction")]
     async public Task<ActionResult> Index(string title, string original_title, byte clarification, byte serial, bool similar = false, string href = null)
     {

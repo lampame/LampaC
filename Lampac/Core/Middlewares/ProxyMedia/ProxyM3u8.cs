@@ -8,6 +8,7 @@ using System;
 using System.Buffers;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,7 +28,6 @@ public partial class ProxyAPI
                 httpContext.Response.ContentType = "text/plain; charset=utf-8";
                 httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 httpContext.Response.BodyWriter.Write("bigfile"u8);
-                await httpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                 return;
             }
 
@@ -251,7 +251,6 @@ public partial class ProxyAPI
                     httpContext.Response.ContentType = "text/plain; charset=utf-8";
                     httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
                     httpContext.Response.BodyWriter.Write("m3u8 length empty"u8);
-                    await httpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                     return;
                 }
                 #endregion
@@ -294,7 +293,7 @@ public partial class ProxyAPI
                 writer.Advance(bytesUsed);
                 #endregion
 
-                await writer.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
+                //await writer.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
             }
         }
         else
@@ -359,6 +358,7 @@ public partial class ProxyAPI
     /// <summary>
     /// Regex.Match(decryptLink.uri, "(https?://[^/]+)/").Groups[1].Value
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static ReadOnlySpan<char> FindHlsHost(ReadOnlySpan<char> decrypturl)
     {
         // найдём "://"
@@ -380,6 +380,7 @@ public partial class ProxyAPI
     /// <summary>
     /// Regex.Match(decryptLink.uri, "(https?://[^\n\r]+/)([^/]+)$").Groups[1].Value
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static ReadOnlySpan<char> FindHlsPath(ReadOnlySpan<char> decrypturl)
     {
         int lastSlash = decrypturl.LastIndexOf('/');

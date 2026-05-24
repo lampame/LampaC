@@ -44,7 +44,6 @@ public partial class ProxyAPI
             httpContext.Response.ContentType = "text/plain; charset=utf-8";
             httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
             httpContext.Response.BodyWriter.Write("decryptLink"u8);
-            await httpContext.Response.BodyWriter.FlushAsync(httpContext.RequestAborted).ConfigureAwait(false);
             return;
         }
 
@@ -66,7 +65,6 @@ public partial class ProxyAPI
             httpContext.Response.ContentType = "text/plain; charset=utf-8";
             httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
             httpContext.Response.BodyWriter.Write("servUri empty"u8);
-            await httpContext.Response.BodyWriter.FlushAsync(httpContext.RequestAborted).ConfigureAwait(false);
             return;
         }
         #endregion
@@ -202,26 +200,11 @@ public partial class ProxyAPI
 
                     try
                     {
-                        var hdlr = new HttpClientHandler
-                        {
-                            AllowAutoRedirect = true,
-                            ServerCertificateCustomValidationCallback = Http.AlwaysAllowCertificate
-                        };
-
-                        if (decryptLink.proxy != null)
-                        {
-                            hdlr.UseProxy = true;
-                            hdlr.Proxy = decryptLink.proxy;
-                        }
-                        else
-                        {
-                            hdlr.UseProxy = false;
-                        }
-
                         var clientor = FriendlyHttp.MessageClient(
                             "base",
-                            hdlr,
-                            out bool disposeHttpClientor
+                            Http.HandlerOrNull(servUri, decryptLink.proxy),
+                            out bool disposeHttpClientor,
+                            findNoRedirectClient: false
                         );
 
                         try
@@ -267,8 +250,9 @@ public partial class ProxyAPI
 
                 var client = FriendlyHttp.MessageClient(
                     "proxy",
-                    proxyHandler ?? baseHandler,
-                    out bool disposeHttpClient
+                    proxyHandler,
+                    out bool disposeHttpClient,
+                    findNoRedirectClient: false
                 );
 
                 try

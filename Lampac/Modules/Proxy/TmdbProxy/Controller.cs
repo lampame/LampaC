@@ -113,9 +113,6 @@ public class TmdbProxyController : BaseController
 
                 using (var writer = new Utf8JsonWriter(new ChunkBufferWriter<byte>(bodyWriter), jsonWriterOptions))
                     JsonSerializer.Serialize(writer, entryCache.value.json);
-
-                await bodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
-                return;
             }
             else
             {
@@ -142,7 +139,6 @@ public class TmdbProxyController : BaseController
                     proxyManager?.Refresh();
                     httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     bodyWriter.Write("{\"error\":true,\"msg\":\"json null\"}"u8);
-                    await bodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                     return;
                 }
 
@@ -158,8 +154,6 @@ public class TmdbProxyController : BaseController
 
                 using (var writer = new Utf8JsonWriter(new ChunkBufferWriter<byte>(bodyWriter), jsonWriterOptions))
                     JsonSerializer.Serialize(writer, result.content);
-
-                await bodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
             }
         }
     }
@@ -231,8 +225,9 @@ public class TmdbProxyController : BaseController
 
                 var client = FriendlyHttp.MessageClient(
                     "proxyimg",
-                    Http.Handler(uri, proxyManager?.Get()),
+                    Http.HandlerOrNull(uri, proxyManager?.Get()),
                     out bool disposeHttpClient,
+                    findNoRedirectClient: false,
                     httpClient: ModInit.conf.httpversion == 2
                         ? http2ImgClient
                         : null
@@ -361,7 +356,7 @@ public class TmdbProxyController : BaseController
     #endregion
 
 
-    #region Utilities
+    #region Helpers
     static ReadOnlySpan<char> RequestPath(string pathString, string route, string tmdbHost)
     {
         ReadOnlySpan<char> path = pathString.AsSpan();
@@ -373,9 +368,9 @@ public class TmdbProxyController : BaseController
             path = path.Slice(5);
 
         if (path.StartsWith("/https:"))
-            path = path.Slice(9 + tmdbApiHost.Length);
+            path = path.Slice(9 + tmdbHost.Length);
         else if (path.StartsWith("/http:"))
-            path = path.Slice(8 + tmdbApiHost.Length);
+            path = path.Slice(8 + tmdbHost.Length);
 
         if (path.StartsWith("//"))
             path = path.Slice(1);

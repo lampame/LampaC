@@ -24,6 +24,7 @@ namespace CubProxy;
 public class CubProxyController : BaseController
 {
     static readonly string[] adEmpty = [];
+    static readonly Regex regexMedia = new Regex("\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     [HttpGet]
     [AllowAnonymous]
@@ -89,7 +90,7 @@ public class CubProxyController : BaseController
                     var ct = HttpContext.Request.ContentType;
                     if (ct != null && ct.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
                     {
-                        using (var reader = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, false, PoolInvk.bufferSize, leaveOpen: true))
+                        using (var reader = new StreamReader(HttpContext.Request.Body, Encoding.UTF8, false, leaveOpen: true))
                         {
                             string form = await reader.ReadToEndAsync();
 
@@ -107,7 +108,6 @@ public class CubProxyController : BaseController
                 HttpContext.Response.ContentType = "text/plain; charset=utf-8";
                 HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 HttpContext.Response.BodyWriter.Write("ok"u8);
-                await HttpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                 return;
             }
             #endregion
@@ -118,7 +118,6 @@ public class CubProxyController : BaseController
                 HttpContext.Response.ContentType = "application/json; charset=utf-8";
                 HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 HttpContext.Response.BodyWriter.Write("[]"u8);
-                await HttpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                 return;
             }
             #endregion
@@ -129,7 +128,6 @@ public class CubProxyController : BaseController
                 HttpContext.Response.ContentType = "application/json; charset=utf-8";
                 HttpContext.Response.StatusCode = StatusCodes.Status200OK;
                 HttpContext.Response.BodyWriter.Write("{\"secuses\":true}"u8);
-                await HttpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                 return;
             }
 
@@ -153,7 +151,7 @@ public class CubProxyController : BaseController
 
             var proxy = proxyManager?.Get();
 
-            bool isMedia = Regex.IsMatch(path, "\\.(jpe?g|png|gif|webp|ico|svg|mp4|js|css)", RegexOptions.IgnoreCase);
+            bool isMedia = regexMedia.IsMatch(path);
 
             if (0 >= init.cache_api || !HttpMethods.IsGet(HttpContext.Request.Method) || isMedia ||
                 (subdomain is "imagetmdb" or "cdn" or "ad") ||
@@ -202,7 +200,8 @@ public class CubProxyController : BaseController
                     var client = FriendlyHttp.MessageClient(
                         "proxyRedirect",
                         handler,
-                        out bool disposeHttpClient
+                        out bool disposeHttpClient,
+                        findNoRedirectClient: false
                     );
 
                     try
@@ -328,7 +327,6 @@ public class CubProxyController : BaseController
                         HttpContext.Response.ContentType = "text/plain; charset=utf-8";
                         HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
                         HttpContext.Response.BodyWriter.Write("502 Bad Gateway"u8);
-                        await HttpContext.Response.BodyWriter.FlushAsync(ctsHttp.Token).ConfigureAwait(false);
                         return;
                     }
 

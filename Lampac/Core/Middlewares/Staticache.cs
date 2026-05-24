@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Primitives;
 using Shared;
-using Shared.Models.AppConf;
 using Shared.Attributes;
+using Shared.Models.AppConf;
 using Shared.Models.Base;
 using Shared.Models.Events;
 using Shared.Services.Pools;
@@ -12,6 +12,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -122,7 +123,7 @@ public class Staticache
                 }
             }
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             Log.Error(ex, "CatchId={CatchId}", "id_h3352g2f");
         }
@@ -138,7 +139,7 @@ public class Staticache
             if (File.Exists($"{file}.gz"))
                 File.Delete($"{file}.gz");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             Log.Error(ex, "CatchId={CatchId}", "id_wfl5s3rn");
         }
@@ -163,6 +164,7 @@ public class Staticache
         if (requestInfo.AesGcmKey != null || requestInfo.IsWsRequest || requestInfo.IsProxyRequest || requestInfo.IsProxyImg)
             return _next(httpContext);
 
+        #region EventListener
         if (EventListener.Staticache != null)
         {
             var em = new EventStaticache(httpContext, requestInfo);
@@ -173,6 +175,7 @@ public class Staticache
                     return _next(httpContext);
             }
         }
+        #endregion
 
         StaticacheRoute route = null;
 
@@ -193,7 +196,7 @@ public class Staticache
             var endpoint = httpContext.GetEndpoint();
             var staticache = endpoint?.Metadata.GetMetadata<StaticacheAttribute>();
 
-            if (staticache == null)
+            if (staticache == null || staticache.manually)
                 return _next(httpContext);
 
             if (init.minimalCacheMinutes > staticache.cacheMinutes)
@@ -225,11 +228,13 @@ public class Staticache
         }
 
         httpContext.Features.Set(new StaticacheFeature(route, cachekey));
+
         return _next(httpContext);
     }
 
 
-    static string getQueryKeys(HttpContext httpContext, string[] keys)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string getQueryKeys(HttpContext httpContext, string[] keys)
     {
         if (keys == null || keys.Length == 0)
             return string.Empty;
@@ -265,6 +270,7 @@ public class Staticache
         return CrypTo.md5(sb);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string getFilePath(string cachekey, DateTimeOffset ex, string contentType)
     {
         return $"cache/static/{cachekey}-{ex.ToUnixTimeMilliseconds()}.{(contentType?.Contains("text/html") == true ? "html" : "json")}";

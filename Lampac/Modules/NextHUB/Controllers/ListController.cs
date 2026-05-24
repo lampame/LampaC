@@ -15,8 +15,7 @@ public class ListController : BaseSisiController<NxtSettings>
 {
     public ListController() : base(default) { }
 
-    [HttpGet]
-    [Staticache]
+    [HttpGet, Staticache]
     [Route("nexthub")]
     async public Task<ActionResult> Index(string plugin, string search, string sort, string cat, string model, int pg = 1)
     {
@@ -295,7 +294,7 @@ public class ListController : BaseSisiController<NxtSettings>
                     model = new ModelItem()
                     {
                         name = mname,
-                        uri = $"nexthub?plugin={CrypTo.EncryptQuery(plugin)}&model={CrypTo.EncryptQuery(mhref)}"
+                        uri = $"nexthub?plugin={AesTo.Encrypt(plugin)}&model={AesTo.Encrypt(mhref)}"
                     };
                 }
             }
@@ -310,7 +309,7 @@ public class ListController : BaseSisiController<NxtSettings>
                 {
                     string arg = nodeValue(a);
                     if (!string.IsNullOrEmpty(arg))
-                        args += $"&{a.name}={CrypTo.EncryptQuery(arg)}";
+                        args += $"&{a.name}={AesTo.Encrypt(arg)}";
                 }
             }
             #endregion
@@ -393,7 +392,7 @@ public class ListController : BaseSisiController<NxtSettings>
                 var pl = new PlaylistItem()
                 {
                     name = clearText(name),
-                    video = $"nexthub/vidosik?uri={CrypTo.EncryptQuery($"{plugin}_-:-_{href}")}" + args,
+                    video = $"nexthub/vidosik?uri={AesTo.Encrypt($"{plugin}_-:-_{href}")}" + args,
                     preview = preview,
                     picture = img,
                     time = clearText(duration),

@@ -1,10 +1,16 @@
 ﻿using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Shared.Services.Pools;
 
 public class ChunkBufferWriter<T> : IBufferWriter<T> where T : struct
 {
     readonly IBufferWriter<T> writer;
+    const int _chunk4 = 4 * 1024;
+    const int _chunk16 = 16 * 1024;
+    const int _chunk32 = 32 * 1024;
+    const int _chunk64 = 64 * 1024;
+    const int _chunk128 = 128 * 1024;
 
     public ChunkBufferWriter(IBufferWriter<T> writer)
     {
@@ -26,14 +32,13 @@ public class ChunkBufferWriter<T> : IBufferWriter<T> where T : struct
         return writer.GetSpan(ChunkSizeHint(sizeHint));
     }
 
-    static int ChunkSizeHint(int sizeHint) => sizeHint switch
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ChunkSizeHint(int sizeHint) => sizeHint switch
     {
-        <= 4 * 1024 => 4 * 1024,
-        <= 16 * 1024 => 16 * 1024,
-        <= 32 * 1024 => 32 * 1024,
-        <= 64 * 1024 => 64 * 1024,
-        <= 128 * 1024 => 128 * 1024,
-        <= 256 * 1024 => 256 * 1024,
-        _ => sizeHint
+        <= _chunk4 => _chunk4,
+        <= _chunk16 => _chunk16,
+        <= _chunk32 => _chunk32,
+        <= _chunk64 => _chunk64,
+        _ => _chunk128
     };
 }

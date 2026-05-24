@@ -15,7 +15,7 @@ public static class FriendlyHttp
     readonly record struct HttpClientModel(DateTime lifetime, HttpClient http);
     readonly record struct ProxyClientKey(string Host, int Port, string UserName, string Password, long MaxBufferSize, bool AllowAutoRedirect);
 
-    static ConcurrentDictionary<ProxyClientKey, HttpClientModel> _clients = new();
+    static readonly ConcurrentDictionary<ProxyClientKey, HttpClientModel> _clients = new();
 
     static readonly RemoteCertificateValidationCallback AcceptAnyCertificate = AcceptAnyCertificateHandler;
     static bool AcceptAnyCertificateHandler(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
@@ -62,7 +62,7 @@ public static class FriendlyHttp
     #endregion
 
     #region MessageClient
-    public static HttpClient MessageClient(string factoryClient, HttpClientHandler handler, out bool disposeHttpClient, long MaxResponseContentBufferSize = -1, HttpClient httpClient = null)
+    public static HttpClient MessageClient(string factoryClient, HttpClientHandler handler, out bool disposeHttpClient, long MaxResponseContentBufferSize = -1, HttpClient httpClient = null, bool allowAutoRedirect = true, bool findNoRedirectClient = true)
     {
         // 10MB
         long maxBufferSize = 10_000_000;
@@ -72,65 +72,90 @@ public static class FriendlyHttp
         if (handler?.CookieContainer?.Count > 0 || Http.httpClientFactory == null)
         {
             disposeHttpClient = true;
+
+            if (handler == null)
+            {
+                handler = new HttpClientHandler()
+                {
+                    AllowAutoRedirect = allowAutoRedirect,
+                    AutomaticDecompression = DecompressionMethods.Brotli | DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                    ServerCertificateCustomValidationCallback = Http.AlwaysAllowCertificate
+                };
+            }
+
             return new HttpClient(handler)
             {
                 MaxResponseContentBufferSize = maxBufferSize
             };
         }
-
-        disposeHttpClient = false;
-        var webProxy = handler?.Proxy as WebProxy;
-
-        if (webProxy == null)
-        {
-            if (httpClient != null)
-                return httpClient;
-
-            string targetClient = handler?.AllowAutoRedirect == false
-                ? factoryClient switch
-                {
-                    "base" => "baseNoRedirect",
-                    "http2" => "http2NoRedirect",
-                    _ => factoryClient
-                }
-                : factoryClient;
-
-            var factory = Http.httpClientFactory.CreateClient(targetClient);
-
-            if (maxBufferSize > factory.MaxResponseContentBufferSize)
-                factory.MaxResponseContentBufferSize = maxBufferSize;
-
-            return factory;
-        }
         else
         {
-            int port = 0;
-            string ip = null, username = null, password = null;
+            disposeHttpClient = false;
+            var webProxy = handler?.Proxy as WebProxy;
 
-            ip = webProxy.Address?.Host;
-            port = webProxy.Address?.Port ?? 0;
-
-            if (webProxy.Credentials is NetworkCredential credentials)
+            if (webProxy == null)
             {
-                username = credentials.UserName;
-                password = credentials.Password;
-            }
+                if (httpClient != null)
+                    return httpClient;
 
-            var key = new ProxyClientKey(
-                ip,
-                port,
-                username,
-                password,
-                maxBufferSize,
-                handler?.AllowAutoRedirect == true
-            );
+                string targetClient = factoryClient;
 
-            return _clients.GetOrAdd(key, static (key, state)
-                => new HttpClientModel(DateTime.UtcNow.AddMinutes(30), new HttpClient(state.Handler)
+                if (findNoRedirectClient)
                 {
-                    MaxResponseContentBufferSize = key.MaxBufferSize
-                }), new { Handler = handler }
-            ).http;
+                    if ((handler != null && handler.AllowAutoRedirect == false) || allowAutoRedirect == false)
+                    {
+                        targetClient = factoryClient switch
+                        {
+                            "base" => "baseNoRedirect",
+                            "http2" => "http2NoRedirect",
+                            "http3" => "http3NoRedirect",
+                            _ => factoryClient
+                        };
+                    }
+                }
+
+                var factory = Http.httpClientFactory.CreateClient(targetClient);
+
+                if (maxBufferSize > factory.MaxResponseContentBufferSize)
+                    factory.MaxResponseContentBufferSize = maxBufferSize;
+
+                return factory;
+            }
+            else
+            {
+                if (handler != null)
+                {
+                    handler = new HttpClientHandler()
+                    {
+                        AllowAutoRedirect = allowAutoRedirect,
+                        AutomaticDecompression = DecompressionMethods.Brotli | DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                        ServerCertificateCustomValidationCallback = Http.AlwaysAllowCertificate
+                    };
+                }
+
+                var address = webProxy.Address;
+                var credentials = webProxy.Credentials as NetworkCredential;
+
+                var key = new ProxyClientKey(
+                    address?.Host,
+                    address?.Port ?? 0,
+                    credentials?.UserName,
+                    credentials?.Password,
+                    maxBufferSize,
+                    handler?.AllowAutoRedirect == true
+                );
+
+                return _clients.GetOrAdd(
+                    key,
+                    static (key, handler) => new HttpClientModel(
+                        DateTime.UtcNow.AddMinutes(30),
+                        new HttpClient(handler)
+                        {
+                            MaxResponseContentBufferSize = key.MaxBufferSize
+                        }),
+                    handler
+                ).http;
+            }
         }
     }
     #endregion
