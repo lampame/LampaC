@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Primitives;
+using Microsoft.Net.Http.Headers;
 using Shared;
 using Shared.Attributes;
 using Shared.Models.AppConf;
 using Shared.Models.Base;
 using Shared.Models.Events;
-using Shared.Services.Pools;
 using Shared.Services.Utilities;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -19,9 +21,7 @@ using System.Threading.Tasks;
 
 namespace Core.Middlewares;
 
-public record CacheModel(DateTimeOffset ex, string contentType, string inFile);
-
-public record StaticacheFeature(StaticacheRoute route, string cachekey);
+public readonly record struct CacheModel(long ex, string ext, short statusCode = 200, int contentLength = 0);
 
 public class Staticache
 {
@@ -34,69 +34,49 @@ public class Staticache
 
     public static void Initialization()
     {
-        Directory.CreateDirectory("cache/static");
+        long now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
 
-        var now = DateTime.Now;
+        string cacheDir = Path.Combine("cache", "static");
+        BucketFolders.Create(cacheDir);
 
-        foreach (string inFile in Directory.EnumerateFiles("cache/static", "*"))
+        foreach (string inFile in Directory.EnumerateFiles(cacheDir, "*", SearchOption.AllDirectories))
         {
             try
             {
-                // cacheKey-<time>.<type>
+                /// cache\static\62\-DDVxczeTgFWOm32NktG6A-1779890234674_26362.jpg
                 ReadOnlySpan<char> fileName = inFile.AsSpan();
-                int lastSlash = fileName.LastIndexOfAny('\\', '/');
-                if (lastSlash >= 0)
-                    fileName = fileName.Slice(lastSlash + 1);
 
-                int dash = fileName.IndexOf('-');
-                if (dash <= 0)
+                /// cacheKey-<time>_<length>.<type>
+                fileName = fileName.Slice(fileName.LastIndexOfAny('\\', '/') + 1);
+
+                int dotIndex = fileName.LastIndexOf('.');
+
+                /// jpg
+                string ext = fileName.Slice(dotIndex + 1).ToString();
+
+                /// cacheKey-<time>_<length>
+                fileName = fileName.Slice(0, dotIndex);
+
+                int dashIndex = fileName.LastIndexOf('-');
+
+                // DDVxczeTgFWOm32NktG6A
+                string cachekey = new string(fileName.Slice(0, dashIndex));
+
+                int underIndex = fileName.LastIndexOf('_');
+
+                /// 26362
+                int contentLength = int.Parse(fileName.Slice(underIndex + 1));
+
+                /// 1779890234674
+                long unixTime = long.Parse(fileName.Slice(0, underIndex).Slice(dashIndex + 1));
+
+                if (now > unixTime || string.IsNullOrEmpty(cachekey) || string.IsNullOrEmpty(ext))
                 {
                     deleteFile(inFile);
                     continue;
                 }
 
-                // '.' после дефиса
-                int dotRel = fileName.Slice(dash + 1).IndexOf('.');
-                if (dotRel < 0)
-                {
-                    deleteFile(inFile);
-                    continue;
-                }
-                int firstDot = dash + 1 + dotRel;
-
-                ReadOnlySpan<char> fileTimeSpan = fileName.Slice(dash + 1, firstDot - dash - 1);
-                if (!long.TryParse(fileTimeSpan, out long fileTime) || fileTime == 0)
-                {
-                    deleteFile(inFile);
-                    continue;
-                }
-
-                // <type> = первое расширение после точки (игнорируем ".gz" и любые суффиксы)
-                int typeEndRel = fileName.Slice(firstDot + 1).IndexOf('.');
-                int typeEnd = typeEndRel < 0 ? fileName.Length : firstDot + 1 + typeEndRel;
-
-                ReadOnlySpan<char> typeSpan = fileName.Slice(firstDot + 1, typeEnd - (firstDot + 1));
-                if (typeSpan.Length == 0)
-                {
-                    deleteFile(inFile);
-                    continue;
-                }
-
-                string cachekey = new string(fileName.Slice(0, dash));
-
-                string contentType = typeSpan.SequenceEqual("html")
-                    ? "text/html; charset=utf-8"
-                    : "application/json; charset=utf-8";
-
-                var ex = DateTimeOffset.FromUnixTimeMilliseconds(fileTime);
-
-                if (now > ex)
-                {
-                    deleteFile(inFile);
-                    continue;
-                }
-
-                cacheFiles.TryAdd(cachekey, new(ex, contentType, inFile));
+                cacheFiles.TryAdd(cachekey, new CacheModel(unixTime, ext, 200, contentLength));
             }
             catch
             {
@@ -109,7 +89,7 @@ public class Staticache
     {
         try
         {
-            var cutoff = DateTimeOffset.Now;
+            var cutoff = DateTimeOffset.Now.ToUnixTimeMilliseconds();
 
             foreach (var _c in cacheFiles)
             {
@@ -118,7 +98,7 @@ public class Staticache
 
                 if (cacheFiles.TryRemove(_c.Key, out _))
                 {
-                    string cachefile = getFilePath(_c.Key, _c.Value.ex, _c.Value.contentType);
+                    string cachefile = GetFilePath(_c.Key, _c.Value.ex, _c.Value.contentLength, _c.Value.ext);
                     deleteFile(cachefile);
                 }
             }
@@ -135,16 +115,13 @@ public class Staticache
         {
             if (File.Exists(file))
                 File.Delete(file);
-
-            if (File.Exists($"{file}.gz"))
-                File.Delete($"{file}.gz");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "CatchId={CatchId}", "id_wfl5s3rn");
         }
     }
-
+    #endregion
 
     private readonly RequestDelegate _next;
 
@@ -152,17 +129,23 @@ public class Staticache
     {
         _next = next;
     }
-    #endregion
 
     public Task Invoke(HttpContext httpContext)
     {
-        var init = CoreInit.conf.Staticache;
-        if (!init.enable)
+        if (!HttpMethods.IsGet(httpContext.Request.Method))
             return _next(httpContext);
 
         var requestInfo = httpContext.Features.Get<RequestModel>();
         if (requestInfo.AesGcmKey != null || requestInfo.IsWsRequest || requestInfo.IsProxyRequest || requestInfo.IsProxyImg)
             return _next(httpContext);
+
+        var endpoint = httpContext.GetEndpoint();
+        var staticache = endpoint?.Metadata?.GetMetadata<StaticacheAttribute>();
+
+        if (staticache == null)
+            return _next(httpContext);
+
+        var init = CoreInit.conf.Staticache;
 
         #region EventListener
         if (EventListener.Staticache != null)
@@ -177,102 +160,170 @@ public class Staticache
         }
         #endregion
 
-        StaticacheRoute route = null;
+        bool customRoute = false;
+        StaticacheRoute route = default;
 
-        if (init.routes?.Count > 0)
+        #region init routes
+        if (init.routes?.Count > 0 && init.enable)
         {
             foreach (var r in init.routes)
             {
-                if (Regex.IsMatch(httpContext.Request.Path.Value, r.pathRex, RegexOptions.IgnoreCase))
+                string path = httpContext.Request.Path.Value;
+
+                if ((r.path != null && path.Equals(r.path))
+                    || (r.pathRex != null && Regex.IsMatch(path, r.pathRex, RegexOptions.IgnoreCase)))
                 {
+                    customRoute = true;
                     route = r;
                     break;
                 }
             }
         }
+        #endregion
 
-        if (route == null)
+        if (customRoute == false)
         {
-            var endpoint = httpContext.GetEndpoint();
-            var staticache = endpoint?.Metadata.GetMetadata<StaticacheAttribute>();
-
-            if (staticache == null || staticache.manually)
+            // кеш отключён для всех кроме always
+            if (!init.enable && !staticache.always)
                 return _next(httpContext);
 
-            if (init.minimalCacheMinutes > staticache.cacheMinutes)
+            // endpoint или настройки init требует явный routes
+            if (staticache.manually || init.manually)
                 return _next(httpContext);
-
-            if (init.disabledPaths?.Any(path => string.Equals(httpContext.Request.Path.Value, path, StringComparison.OrdinalIgnoreCase)) == true)
-                return _next(httpContext);
-
-            string[] queryKeys = endpoint.Metadata
-                .GetMetadata<ControllerActionDescriptor>()?
-                .Parameters?
-                .Select(p => p.Name)
-                .ToArray();
-
-            route = new StaticacheRoute(httpContext.Request.Path.Value, staticache.cacheMinutes, queryKeys);
         }
+
+        if (init.minimalCacheMinutes > staticache.cacheMinutes)
+            return _next(httpContext);
+
+        if (init.disabledPaths != null && init.disabledPaths.Contains(httpContext.Request.Path.Value))
+            return _next(httpContext);
+
+        if (staticache.setHeadersNoCache)
+        {
+            httpContext.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate"; // HTTP 1.1.
+            httpContext.Response.Headers["Pragma"] = "no-cache"; // HTTP 1.0.
+            httpContext.Response.Headers["Expires"] = "0"; // Proxies.
+        }
+
+        if (customRoute == false)
+            route = new();
 
         if (0 >= route.cacheMinutes)
             route.cacheMinutes = 1;
 
-        string cachekey = getQueryKeys(httpContext, route.queryKeys);
+        if (route.queryKeys == null)
+            route.queryKeys = staticache.queryKeys;
+
+        if (route.ignoreQueryKeys == null)
+            route.ignoreQueryKeys = staticache.ignoreQueryKeys;
+
+        var parameters = endpoint.Metadata
+            .GetMetadata<ControllerActionDescriptor>()?
+            .Parameters;
+
+        string cachekey = getQueryKeys(httpContext, route.skipUids || staticache.skipUids, parameters, route.queryKeys, route.ignoreQueryKeys);
 
         if (cacheFiles.TryGetValue(cachekey, out CacheModel _r))
         {
+            httpContext.Response.StatusCode = _r.statusCode;
             httpContext.Response.Headers["X-StatiCache-Status"] = "HIT";
-            httpContext.Response.ContentType = _r.contentType;
 
-            return httpContext.Response.SendFileAsync(_r.inFile);
+            if (_r.contentLength > 0)
+            {
+                httpContext.Response.ContentLength = _r.contentLength;
+                httpContext.Response.Headers[HeaderNames.CacheControl] = "public,max-age=86400,immutable";
+            }
+
+            httpContext.Response.ContentType = _r.ext switch
+            {
+                "html" => "text/html; charset=utf-8",
+                "json" => "application/json; charset=utf-8",
+                "js" => "application/javascript; charset=utf-8",
+                "css" => "text/css; charset=utf-8",
+                "png" => "image/png",
+                "jpg" => "image/jpeg",
+                "svg" => "image/svg+xml",
+                "webp" => "image/webp",
+                _ => "application/octet-stream"
+            };
+
+            string file = GetFilePath(cachekey, _r.ex, _r.contentLength, _r.ext);
+            return httpContext.Response.SendFileAsync(file);
         }
 
-        httpContext.Features.Set(new StaticacheFeature(route, cachekey));
+        httpContext.Features.Set(new StaticacheFeature(route.cacheMinutes, cachekey));
 
         return _next(httpContext);
     }
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string getQueryKeys(HttpContext httpContext, string[] keys)
+    private static string getQueryKeys(HttpContext httpContext, bool skipUids, IList<ParameterDescriptor> parameters, string[] queryKeys, string[] ignoreQueryKeys)
     {
-        if (keys == null || keys.Length == 0)
-            return string.Empty;
+        var hash = Fnv1a.Empty;
 
-        var sb = StringBuilderPool.ThreadInstance;
+        Fnv1a.Append(ref hash, httpContext.Request.Scheme);
+        Fnv1a.Append(ref hash, httpContext.Request.Host.Value);
+        Fnv1a.Append(ref hash, httpContext.Request.Path.Value);
 
-        sb.Append(httpContext.Request.Scheme);
-        sb.Append(":");
+        if (httpContext.Request.Query.TryGetValue("rjson", out StringValues rjson) && rjson.Count > 0)
+            Fnv1a.Append(ref hash, rjson[0]);
 
-        sb.Append(httpContext.Request.Host.Value);
-        sb.Append(":");
-
-        sb.Append(httpContext.Request.Path.Value);
-        sb.Append(":");
-
-        foreach (string key in keys)
+        if (queryKeys != null && queryKeys.Length > 0)
         {
-            if (httpContext.Request.Query.TryGetValue(key, out StringValues value) && value.Count > 0)
+            if (queryKeys.Length == 1 && queryKeys[0] == ".*")
             {
-                sb.Append(key);
-                sb.Append(":");
-                sb.Append(value[0]);
-                sb.Append(":");
+                foreach (var q in httpContext.Request.Query)
+                {
+                    string key = q.Key;
+
+                    if (skipUids && CoreInit.SkipQueryKeys.Contains(key))
+                        continue;
+
+                    if (ignoreQueryKeys != null && ignoreQueryKeys.Contains(key))
+                        continue;
+
+                    Fnv1a.Append(ref hash, key);
+                    Fnv1a.Append(ref hash, q.Value);
+                }
+            }
+            else
+            {
+                foreach (string key in queryKeys)
+                    QueryAppend(ref hash, key, httpContext, skipUids, ignoreQueryKeys);
             }
         }
-
-        if (!keys.Contains("rjson") && httpContext.Request.Query.TryGetValue("rjson", out StringValues rjson) && rjson.Count > 0)
+        else if (parameters != null && parameters.Count > 0)
         {
-            sb.Append("rjson:");
-            sb.Append(rjson[0]);
+            foreach (var param in parameters)
+                QueryAppend(ref hash, param.Name, httpContext, skipUids, ignoreQueryKeys);
         }
 
-        return CrypTo.md5(sb);
+        return Fnv1a.Base64Url(hash);
     }
 
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static string getFilePath(string cachekey, DateTimeOffset ex, string contentType)
+    private static void QueryAppend(ref Fnv1aHash hash, string key, HttpContext httpContext, bool skipUids, string[] ignoreQueryKeys)
     {
-        return $"cache/static/{cachekey}-{ex.ToUnixTimeMilliseconds()}.{(contentType?.Contains("text/html") == true ? "html" : "json")}";
+        if (key == null)
+            return;
+
+        if (skipUids && CoreInit.SkipQueryKeys.Contains(key))
+            return;
+
+        if (ignoreQueryKeys != null && ignoreQueryKeys.Contains(key))
+            return;
+
+        if (httpContext.Request.Query.TryGetValue(key, out StringValues value) && value.Count > 0)
+        {
+            Fnv1a.Append(ref hash, key);
+            Fnv1a.Append(ref hash, value[0]);
+        }
     }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string GetFilePath(string cachekey, long ex, int length, string ext)
+        => Path.Combine("cache", "static", BucketFolders.Name(cachekey[0]), $"{cachekey}-{ex}_{length}.{ext ?? "html"}");
 }

@@ -24,7 +24,6 @@ public class BaseSisiController : BaseSisiController<SisiSettings>
 public class BaseSisiController<T> : BaseController where T : BaseSettings, ICloneable
 {
     #region static
-    static readonly EmptyResult _emptyResult = new();
     static readonly IReadOnlyList<MenuItem> emptyMenu = new List<MenuItem>();
     public static readonly SisiJsonContext jsonContext = SisiJsonContext.Default;
 
@@ -309,11 +308,8 @@ public class BaseSisiController<T> : BaseController where T : BaseSettings, IClo
         }
 
         IBufferWriter<byte> utf8Writer = StatiCacheDisabled
-            ? null
-            : HttpContext.Features.Get<BufferWriterPool<byte>>();
-
-        if (utf8Writer == null)
-            utf8Writer = new ChunkBufferWriter<byte>(Response.BodyWriter);
+            ? new ChunkBufferWriter<byte>(Response.BodyWriter)
+            : StaticacheOrBodyWriter();
 
         Response.ContentType = "application/json; charset=utf-8";
         Response.Headers.CacheControl = "no-cache";
@@ -518,11 +514,8 @@ public class BaseSisiController<T> : BaseController where T : BaseSettings, IClo
         Response.Headers.CacheControl = "no-cache";
 
         IBufferWriter<byte> utf8Writer = StatiCacheDisabled
-            ? null
-            : HttpContext.Features.Get<BufferWriterPool<byte>>();
-
-        if (utf8Writer == null)
-            utf8Writer = new ChunkBufferWriter<byte>(Response.BodyWriter);
+            ? new ChunkBufferWriter<byte>(Response.BodyWriter)
+            : StaticacheOrBodyWriter();
 
         using (var writer = new Utf8JsonWriter(
              utf8Writer,
