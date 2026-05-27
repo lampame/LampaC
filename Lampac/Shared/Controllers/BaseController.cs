@@ -14,6 +14,7 @@ using Shared.Models.Events;
 using Shared.Models.SISI.OnResult;
 using Shared.Models.Templates;
 using Shared.Services;
+using Shared.Services.Buckets;
 using Shared.Services.Kit;
 using System.Buffers;
 using System.Buffers.Text;
@@ -35,8 +36,6 @@ public class BaseController : Controller
     protected static readonly EmptyResult _emptyResult = new();
 
     protected ActionResult badInitMsg { get; set; }
-
-    public bool StatiCacheDisabled { get; set; }
 
     static readonly JsonWriterOptions jsonWriterOptions = new JsonWriterOptions
     {
@@ -322,6 +321,7 @@ public class BaseController : Controller
                     var heads = httpHeaders(conf.host ?? conf.apihost, headers);
                     if (heads != null && heads.Count > 0)
                     {
+                        writer.WriteNumber("hb"u8, BucketHeaders.Hash("payload", headers));
                         writer.WriteNumber("hc"u8, heads.Count);
 
                         writer.WritePropertyName("h"u8);
@@ -611,7 +611,8 @@ public class BaseController : Controller
                 ip,
                 httpHeaders(conf.host, headers),
                 plugin: conf?.plugin,
-                prefix: [apn.host, "/proxy/"]
+                prefix: [apn.host, "/proxy/"],
+                writeHeaders: true
             );
         }
 
@@ -633,6 +634,7 @@ public class BaseController : Controller
                     var heads = httpHeaders(conf.host, headers);
                     if (heads != null && heads.Count > 0)
                     {
+                        writer.WriteNumber("hb"u8, BucketHeaders.Hash("payload", headers));
                         writer.WriteNumber("hc"u8, heads.Count);
 
                         writer.WritePropertyName("h"u8);
@@ -878,6 +880,7 @@ public class BaseController : Controller
     #endregion
 
     #region UpdateStatiCacheFeatures
+    public bool StatiCacheDisabled { get; set; }
     StatiCacheEntry _statiCacheEntry;
 
     void UpdateStatiCacheFeatures(DateTimeOffset ex)
@@ -887,7 +890,7 @@ public class BaseController : Controller
 
         if (_statiCacheEntry == null || _statiCacheEntry.ex > ex)
         {
-            _statiCacheEntry = new StatiCacheEntry(ex);
+            _statiCacheEntry = new StatiCacheEntry(ex, StatiCacheDisabled ? false : true);
             HttpContext.Features.Set(_statiCacheEntry);
         }
     }
@@ -1212,7 +1215,10 @@ public class BaseController : Controller
                 : "text/html; charset=utf-8";
         }
 
-        var stcWriter = HttpContext.Features.Get<RecyclableMemoryStream>();
+        var stcWriter = StatiCacheDisabled
+            ? null
+            : HttpContext.Features.Get<RecyclableMemoryStream>();
+
         if (stcWriter != null)
         {
             var response = HttpContext.Response;
@@ -1221,7 +1227,7 @@ public class BaseController : Controller
             var encoder = Encoding.UTF8.GetEncoder();
             ReadOnlySpan<char> chars = html.AsSpan();
 
-            int chunkSize = PoolInvk.msmBlockSize;
+            int chunkSize = PoolInvk.ChunkSizeBodyWriter(Encoding.UTF8.GetMaxByteCount(chars.Length));
 
             while (!chars.IsEmpty)
             {
@@ -1245,7 +1251,7 @@ public class BaseController : Controller
                     break;
 
                 if (charsUsed == 0 && bytesUsed == 0)
-                    throw new InvalidOperationException("UTF8 encoder made no progress.");
+                    break;
             }
 
             Span<byte> tail = stcWriter.GetSpan(128);
@@ -1271,7 +1277,11 @@ public class BaseController : Controller
     #region StaticacheOrBodyWriter
     public IBufferWriter<byte> StaticacheOrBodyWriter()
     {
-        var staticWriter = HttpContext.Features.Get<RecyclableMemoryStream>();
+        IBufferWriter<byte> staticWriter = default;
+
+        if (!StatiCacheDisabled)
+            staticWriter = HttpContext.Features.Get<RecyclableMemoryStream>();
+
         if (staticWriter != null)
             return staticWriter;
 

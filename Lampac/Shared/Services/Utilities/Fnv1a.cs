@@ -52,6 +52,15 @@ public static class Fnv1a
     }
     #endregion
 
+    #region HashName
+    public static string HashName(ReadOnlySpan<char> value)
+    {
+        var hash = Empty;
+        Append(ref hash, value);
+        return Base64Url(hash);
+    }
+    #endregion
+
     #region Append
     public static void Append(ref Fnv1aHash hash, ReadOnlySpan<char> value)
     {
@@ -75,11 +84,8 @@ public static class Fnv1a
             if (status == OperationStatus.Done)
                 return;
 
-            if (status == OperationStatus.DestinationTooSmall)
-                continue;
-
-            // UTF-8 conversion failed, хз как мы сюда попали, но просто не хэшируем эту часть строки
-            return;
+            if (charsRead == 0 && bytesWritten == 0)
+                return;
         }
     }
 
@@ -100,6 +106,13 @@ public static class Fnv1a
 
         if (status == OperationStatus.Done)
             Append(ref hash, buffer[..bytesWritten]);
+    }
+
+    public static void Append(ref Fnv1aHash hash, long value)
+    {
+        Span<byte> bytes = stackalloc byte[8];
+        BinaryPrimitives.WriteInt64BigEndian(bytes, value);
+        Append(ref hash, bytes);
     }
 
     public static void Append(ref Fnv1aHash hash, ReadOnlySpan<byte> value)
@@ -140,9 +153,6 @@ public static class Fnv1a
     #endregion
 
     #region Base64Url
-    public static string Base64Url(ReadOnlySpan<char> value)
-        => Base64Url(Hash(value));
-
     public static string Base64Url(in Fnv1aHash hash)
     {
         Span<byte> bytes = stackalloc byte[16];

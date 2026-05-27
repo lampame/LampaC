@@ -1,19 +1,30 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.IO;
+using Microsoft.Win32.SafeHandles;
+using Shared.Services.Buckets;
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace Shared.Services;
 
 public class CacheFileWatcher
 {
+    #region CacheFileModel
+    sealed class CacheFileModel
+    {
+        public int Length { get; set; }
+
+        public long Ticks { get; set; }
+    }
+    #endregion
+
     #region static
     static readonly Serilog.ILogger Log = Serilog.Log.ForContext("SourceContext", nameof(CacheFileWatcher));
 
     /// <summary>
-    /// <path, <md5key, CacheFileModel>
+    /// <path, <fileName, CacheFileModel>
     /// </summary>
     static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, CacheFileModel>> cacheFiles = new();
-
-    static readonly ConcurrentDictionary<string, byte> cacheDirectories = new();
     #endregion
 
     #region Configure
@@ -29,41 +40,35 @@ public class CacheFileWatcher
         var cache = cacheFiles[path];
         string folder = Path.Combine("cache", path);
 
-        if (Directory.Exists(folder))
+        BucketFolders.Create(folder);
+
+        Parallel.ForEach(Directory.GetDirectories(folder), new ParallelOptions
         {
-            Parallel.ForEach(Directory.GetDirectories(folder), new ParallelOptions
+            MaxDegreeOfParallelism = Environment.ProcessorCount
+        },
+        dir =>
+        {
+            foreach (var file in new DirectoryInfo(dir).EnumerateFiles("*", new EnumerationOptions
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount
-            },
-            dir =>
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            }))
             {
-                foreach (var file in new DirectoryInfo(dir).EnumerateFiles("*", new EnumerationOptions
+                try
                 {
-                    RecurseSubdirectories = true,
-                    IgnoreInaccessible = true,
-                    AttributesToSkip = FileAttributes.ReparsePoint
-                }))
-                {
-                    try
+                    cache.TryAdd(file.Name, new CacheFileModel()
                     {
-                        cache.TryAdd(file.Name, new CacheFileModel()
-                        {
-                            FullPath = file.FullName,
-                            Length = (int)file.Length,
-                            LastWriteTimeUtc = file.LastWriteTimeUtc,
-                        });
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Log.Error(ex, "CatchId={CatchId}", "id_uv8f7e4q");
-                    }
+                        Length = (int)file.Length,
+                        Ticks = file.LastWriteTimeUtc.Ticks,
+                    });
                 }
-            });
-        }
-        else
-        {
-            Directory.CreateDirectory(folder);
-        }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "CatchId={CatchId}", "id_uv8f7e4q");
+                }
+            }
+        });
 
         if (extend == -1)
             return;
@@ -76,19 +81,19 @@ public class CacheFileWatcher
                 {
                     await Task.Delay(TimeSpan.FromMinutes(1)).ConfigureAwait(false);
 
-                    var cutoff = DateTime.UtcNow.AddMinutes(-extend);
+                    long cutoff = DateTime.UtcNow.AddMinutes(-extend).Ticks;
 
                     foreach (var item in cache)
                     {
                         try
                         {
-                            if (extend == 0 || cutoff > item.Value.LastWriteTimeUtc)
+                            if (extend == 0 || cutoff > item.Value.Ticks)
                             {
                                 if (cache.TryRemove(item.Key, out var _))
-                                    File.Delete(item.Value.FullPath);
+                                    File.Delete(OutFile(path, item.Key));
                             }
                         }
-                        catch (System.Exception ex)
+                        catch (Exception ex)
                         {
                             Log.Error(ex, "CatchId={CatchId}", "id_1ijbvnkf");
                         }
@@ -108,46 +113,94 @@ public class CacheFileWatcher
     }
 
     #region TrySave
-    /// <param name="path">img, tmdb, cub</param>
-    async public Task<bool> TrySave(string md5key, Stream fs)
+    async public Task<bool> TrySave(string fileName, RecyclableMemoryStream msm)
     {
-        if (string.IsNullOrEmpty(md5key) || 2 > md5key.Length)
+        if (string.IsNullOrEmpty(fileName))
             return false;
 
         var cache = cacheFiles[keyPath];
-        string outFile = OutFile(md5key);
+        string outFile = OutFile(fileName);
 
         try
         {
-            EnsureDirectory(md5key);
-
-            await using (var streamFile = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: PoolInvk.bufferSize, options: FileOptions.Asynchronous))
+            using (SafeFileHandle handle = File.OpenHandle(outFile,
+                FileMode.Create, FileAccess.Write, FileShare.None,
+                FileOptions.Asynchronous | FileOptions.SequentialScan,
+                preallocationSize: msm.Length
+            ))
             {
-                using (var nbuf = new BufferPool())
-                {
-                    int bytesRead;
-                    var memBuf = nbuf.Memory;
+                ReadOnlySequence<byte> sequence = msm.GetReadOnlySequence();
 
-                    fs.Position = 0;
-                    while ((bytesRead = fs.Read(memBuf.Span)) > 0)
-                        await streamFile.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
+                if (sequence.IsSingleSegment)
+                {
+                    await RandomAccess.WriteAsync(handle, sequence.First, fileOffset: 0);
+                }
+                else
+                {
+                    List<ReadOnlyMemory<byte>> buffers = new();
+
+                    foreach (ReadOnlyMemory<byte> segment in sequence)
+                    {
+                        if (!segment.IsEmpty)
+                            buffers.Add(segment);
+                    }
+
+                    await RandomAccess.WriteAsync(handle, buffers, fileOffset: 0);
                 }
             }
 
             var md = new CacheFileModel()
             {
-                FullPath = outFile,
-                Length = (int)fs.Length,
-                LastWriteTimeUtc = File.GetLastWriteTimeUtc(outFile)
+                Length = (int)msm.Length,
+                Ticks = File.GetLastWriteTimeUtc(outFile).Ticks
             };
 
-            cache.AddOrUpdate(md5key, md, (k, v) => md);
+            cache.AddOrUpdate(fileName, md, (k, v) => md);
 
             return true;
         }
         catch
         {
-            cache.TryRemove(md5key, out _);
+            cache.TryRemove(fileName, out _);
+
+            try
+            {
+                File.Delete(outFile);
+            }
+            catch { }
+
+            return false;
+        }
+    }
+
+    async public Task<bool> TrySave(string fileName, Stream msm)
+    {
+        if (string.IsNullOrEmpty(fileName))
+            return false;
+
+        var cache = cacheFiles[keyPath];
+        string outFile = OutFile(fileName);
+
+        try
+        {
+            msm.Position = 0;
+
+            await using (var streamFile = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 0, options: FileOptions.Asynchronous))
+                await msm.CopyToAsync(streamFile).ConfigureAwait(false);
+
+            var md = new CacheFileModel()
+            {
+                Length = (int)msm.Length,
+                Ticks = File.GetLastWriteTimeUtc(outFile).Ticks
+            };
+
+            cache.AddOrUpdate(fileName, md, (k, v) => md);
+
+            return true;
+        }
+        catch
+        {
+            cache.TryRemove(fileName, out _);
 
             try
             {
@@ -161,31 +214,29 @@ public class CacheFileWatcher
     #endregion
 
     #region Add
-    /// <param name="path">img, tmdb, cub</param>
-    public bool Add(string md5key, int length)
+    public bool Add(string fileName, int length)
     {
-        if (string.IsNullOrEmpty(md5key) || 2 > md5key.Length)
+        if (string.IsNullOrEmpty(fileName))
             return false;
 
         var cache = cacheFiles[keyPath];
-        string outFile = OutFile(md5key);
+        string outFile = OutFile(fileName);
 
         try
         {
             var md = new CacheFileModel()
             {
-                FullPath = outFile,
                 Length = length,
-                LastWriteTimeUtc = File.GetLastWriteTimeUtc(outFile)
+                Ticks = File.GetLastWriteTimeUtc(outFile).Ticks
             };
 
-            cache.AddOrUpdate(md5key, md, (k, v) => md);
+            cache.AddOrUpdate(fileName, md, (k, v) => md);
 
             return true;
         }
         catch
         {
-            cache.TryRemove(md5key, out _);
+            cache.TryRemove(fileName, out _);
 
             try
             {
@@ -199,46 +250,37 @@ public class CacheFileWatcher
     #endregion
 
     #region Remove
-    /// <param name="path">img, tmdb, cub</param>
-    public void Remove(string md5key)
+    public void Remove(string fileName)
     {
         try
         {
-            if (cacheFiles[keyPath].TryRemove(md5key, out var _f))
-                File.Delete(_f.FullPath);
+            if (cacheFiles[keyPath].TryRemove(fileName, out var _f))
+                File.Delete(OutFile(fileName));
         }
         catch { }
     }
     #endregion
 
-    #region EnsureDirectory
-    public void EnsureDirectory(string md5key)
+    #region TryGetValue
+    public bool TryGetValue(string fileName, out int length)
     {
-        string folder = Path.Combine("cache", keyPath, md5key.Substring(0, 2));
-        cacheDirectories.GetOrAdd(folder, folder =>
+        if (cacheFiles[keyPath].TryGetValue(fileName, out var cache))
         {
-            Directory.CreateDirectory(folder);
-            return 0;
-        });
+            length = cache.Length;
+            return true;
+        }
+
+        length = 0;
+        return false;
     }
     #endregion
 
-    public bool TryGetValue(string md5key, out CacheFileModel value)
-        => cacheFiles[keyPath].TryGetValue(md5key, out value);
+    public string OutFile(string fileName)
+        => OutFile(keyPath, fileName);
 
-    public string OutFile(string md5key)
-        => Path.Combine("cache", keyPath, md5key.Substring(0, 2), md5key);
+    public static string OutFile(string keyPath, string fileName)
+        => Path.Combine("cache", keyPath, BucketFolders.Name(fileName[0]), fileName);
 
     public int FilesCount
         => cacheFiles[keyPath].Count;
-}
-
-
-public class CacheFileModel
-{
-    public string FullPath { get; set; }
-
-    public int Length { get; set; }
-
-    public DateTime LastWriteTimeUtc { get; set; }
 }

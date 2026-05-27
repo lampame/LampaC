@@ -27,7 +27,6 @@ public partial class ProxyAPI
     {
         CacheFileWatcher.Configure("hls", CoreInit.conf.serverproxy.cache_hls);
         fileWatcher = new CacheFileWatcher("hls");
-        EventListener.UpdateInitFile += cacheDefaultRequestHeaders.Clear;
     }
     #endregion
 
@@ -109,7 +108,7 @@ public partial class ProxyAPI
         {
             string md5key = CrypTo.md5(cacheStream.uriKey);
 
-            if (fileWatcher.TryGetValue(md5key, out var _fileCache))
+            if (fileWatcher.TryGetValue(md5key, out int _fileLength))
             {
                 using (var ctsHttp = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted))
                 {
@@ -119,8 +118,8 @@ public partial class ProxyAPI
                     httpContext.Response.Headers["accept-ranges"] = "bytes";
                     httpContext.Response.ContentType = cacheStream.contentType ?? "application/octet-stream";
 
-                    long cacheLength = _fileCache.Length;
-                    string cachePath = _fileCache.FullPath;
+                    long cacheLength = _fileLength;
+                    string cachePath = fileWatcher.OutFile(md5key);
 
                     if (RangeHeaderValue.TryParse(httpContext.Request.Headers["Range"], out var range))
                     {
@@ -150,16 +149,14 @@ public partial class ProxyAPI
 
                             httpContext.Response.StatusCode = StatusCodes.Status206PartialContent;
                             httpContext.Response.Headers["content-range"] = $"bytes {start}-{end}/{cacheLength}";
-
-                            if (init.responseContentLength)
-                                httpContext.Response.ContentLength = length;
+                            httpContext.Response.ContentLength = length;
 
                             await httpContext.Response.SendFileAsync(cachePath, start, length, ctsHttp.Token).ConfigureAwait(false);
                             return;
                         }
                     }
 
-                    if (init.responseContentLength)
+                    if (cacheLength > 0)
                         httpContext.Response.ContentLength = cacheLength;
 
                     await httpContext.Response.SendFileAsync(cachePath, ctsHttp.Token).ConfigureAwait(false);

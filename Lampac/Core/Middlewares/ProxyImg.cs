@@ -37,12 +37,11 @@ public class ProxyImg
     static readonly Serilog.ILogger Log = Serilog.Log.ForContext<ProxyImg>();
 
     static readonly ConcurrentDictionary<string, DateTime> errorDownloads = new();
-    static readonly ConcurrentDictionary<string, ProxyLinkModel> decryptLinks = new();
-
     static Timer errorDownloadsCleanupTimer;
-    static Timer decryptLinksCleanupTimer;
 
     static CacheFileWatcher fileWatcher;
+
+    static readonly Regex rexRsize = ProxyImgRegex.Rsize();
 
     public static int Stat_ContCacheFiles
         => fileWatcher.FilesCount;
@@ -61,11 +60,6 @@ public class ProxyImg
                     errorDownloads.TryRemove(pair.Key, out DateTime _);
             }
         }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(20));
-
-        decryptLinksCleanupTimer = new Timer(_ =>
-        {
-            decryptLinks.Clear();
-        }, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
     }
 
     public ProxyImg(RequestDelegate next) { }
@@ -83,23 +77,9 @@ public class ProxyImg
         #region decrypt link
         bool cacheimg = init.cache;
         var requestInfo = httpContext.Features.Get<RequestModel>();
-        ReadOnlySpan<char> aespath = ExtractEncryptedPath(httpContext.Request.Path.Value);
 
-        ProxyLinkModel decryptLink = null;
-        if (CoreInit.conf.serverproxy.verifyip || CoreInit.conf.lowMemoryMode)
-        {
-            decryptLink = ProxyLink.Decrypt(aespath, requestInfo.IP);
-        }
-        else
-        {
-            string requestPathValue = httpContext.Request.Path.Value;
-            if (!decryptLinks.TryGetValue(requestPathValue, out decryptLink))
-            {
-                decryptLink = ProxyLink.Decrypt(aespath, requestInfo.IP);
-                if (decryptLink != null)
-                    decryptLinks.TryAdd(requestPathValue, decryptLink);
-            }
-        }
+        ReadOnlySpan<char> aespath = ExtractEncryptedPath(httpContext.Request.Path.Value);
+        ProxyLinkModel decryptLink = ProxyLink.Decrypt(aespath, requestInfo.IP);
 
         string href = decryptLink?.uri;
 
@@ -129,7 +109,7 @@ public class ProxyImg
                     if (!cacheimg)
                         cacheimg = init.cache_rsize;
 
-                    var gimg = ProxyImgRegex.Rsize().Match(httpContext.Request.Path.Value).Groups;
+                    var gimg = rexRsize.Match(httpContext.Request.Path.Value).Groups;
                     if (!int.TryParse(gimg[1].Value, out width) || !int.TryParse(gimg[2].Value, out height))
                     {
                         httpContext.Response.ContentType = "text/plain; charset=utf-8";
@@ -140,19 +120,13 @@ public class ProxyImg
                 }
                 #endregion
 
-                string md5key = null;
+                #region md5key / outFile
+                string fileName = null;
                 string outFile = null;
 
                 if (cacheimg)
                 {
-                    md5key = CrypTo.md5Builder(writer =>
-                    {
-                        writer.Append(href);
-                        writer.Append(':');
-                        writer.Append(width);
-                        writer.Append(':');
-                        writer.Append(height);
-                    });
+                    var fnvhash = Fnv1a.Hash(href);
 
                     if (EventListener.ProxyImgMd5key != null)
                     {
@@ -163,15 +137,24 @@ public class ProxyImg
                             string newKey = handler(em);
                             if (newKey != null)
                             {
-                                md5key = CrypTo.md5(newKey);
+                                if (CoreInit.conf.serverproxy.showOrigUri)
+                                    httpContext.Response.Headers["PX-Md5key"] = newKey;
+
+                                fnvhash = Fnv1a.Hash(newKey);
                                 break;
                             }
                         }
                     }
 
-                    outFile = fileWatcher.OutFile(md5key);
-                }
+                    Fnv1a.Append(ref fnvhash, width);
+                    Fnv1a.Append(ref fnvhash, height);
+                    fileName = Fnv1a.Base64Url(fnvhash);
 
+                    outFile = fileWatcher.OutFile(fileName);
+                }
+                #endregion
+
+                #region url_reserve
                 string url_reserve = null;
                 int fallbackSeparator = href.IndexOf(" or ", StringComparison.Ordinal);
                 if (fallbackSeparator >= 0)
@@ -179,31 +162,39 @@ public class ProxyImg
                     url_reserve = href.Substring(fallbackSeparator + 4);
                     href = href.Substring(0, fallbackSeparator);
                 }
+                #endregion
 
+                #region contentType
                 string contentType = href.Contains(".png", StringComparison.OrdinalIgnoreCase)
                     ? "image/png"
-                    : href.Contains(".webp", StringComparison.OrdinalIgnoreCase) ? "image/webp" : "image/jpeg";
+                    : href.Contains(".webp", StringComparison.OrdinalIgnoreCase)
+                        ? "image/webp"
+                        : "image/jpeg";
 
                 if (width > 0 || height > 0)
-                    contentType = href.Contains(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+                {
+                    if (contentType == "image/webp")
+                        contentType = "image/jpeg";
+                }
+                #endregion
 
                 #region cacheFiles
-                if (cacheimg && fileWatcher.TryGetValue(md5key, out var _fileCache))
+                if (cacheimg && fileWatcher.TryGetValue(fileName, out int _fileLength))
                 {
                     httpContext.Response.Headers["X-Cache-Status"] = "HIT";
                     httpContext.Response.ContentType = contentType;
 
-                    if (CoreInit.conf.serverproxy.responseContentLength && _fileCache.Length > 0)
-                        httpContext.Response.ContentLength = _fileCache.Length;
+                    if (_fileLength > 0)
+                        httpContext.Response.ContentLength = _fileLength;
 
                     try
                     {
-                        await httpContext.Response.SendFileAsync(_fileCache.FullPath, ctsHttp.Token).ConfigureAwait(false);
+                        await httpContext.Response.SendFileAsync(outFile, ctsHttp.Token).ConfigureAwait(false);
                         return;
                     }
                     catch (Exception ex)
                     {
-                        fileWatcher.Remove(md5key);
+                        fileWatcher.Remove(fileName);
                         Log.Error(ex, "CatchId={CatchId}", "id_7ong4hmg");
                     }
                 }
@@ -236,16 +227,16 @@ public class ProxyImg
                         return;
 
                     #region cacheFiles
-                    if (cacheimg && fileWatcher.TryGetValue(md5key, out _fileCache))
+                    if (cacheimg && fileWatcher.TryGetValue(fileName, out _fileLength))
                     {
                         httpContext.Response.Headers["X-Cache-Status"] = "HIT";
                         httpContext.Response.ContentType = contentType;
 
-                        if (CoreInit.conf.serverproxy.responseContentLength && _fileCache.Length > 0)
-                            httpContext.Response.ContentLength = _fileCache.Length;
+                        if (_fileLength > 0)
+                            httpContext.Response.ContentLength = _fileLength;
 
                         semaphore?.Release();
-                        await httpContext.Response.SendFileAsync(_fileCache.FullPath, ctsHttp.Token).ConfigureAwait(false);
+                        await httpContext.Response.SendFileAsync(outFile, ctsHttp.Token).ConfigureAwait(false);
                         return;
                     }
                     #endregion
@@ -255,11 +246,16 @@ public class ProxyImg
                     #region proxyManager
                     ProxyManager proxyManager = null;
 
-                    if (decryptLink?.plugin == "posterapi" && CoreInit.conf.posterApi.useproxy)
-                        proxyManager = new ProxyManager("posterapi", CoreInit.conf.posterApi);
-
-                    if (proxyManager == null && init.useproxy)
-                        proxyManager = new ProxyManager("proxyimg", init);
+                    if (decryptLink?.plugin == "posterapi")
+                    {
+                        if (CoreInit.conf.posterApi.useproxy)
+                            proxyManager = new ProxyManager("posterapi", CoreInit.conf.posterApi);
+                    }
+                    else
+                    {
+                        if (init.useproxy)
+                            proxyManager = new ProxyManager("proxyimg", init);
+                    }
 
                     WebProxy proxy = proxyManager?.Get();
                     #endregion
@@ -282,13 +278,14 @@ public class ProxyImg
                         })
                         {
                             bool useDefaultHeaders = ShouldUseDefaultHeaders(decryptLink?.headers);
-                            string prefixCacheHeader = decryptLink.plugin != null ? $"ProxyImg:{decryptLink.plugin}:{useDefaultHeaders}" : null;
-                            Http.DefaultRequestHeaders(href, req, null, null, decryptLink?.headers, useDefaultHeaders: useDefaultHeaders, prefixCacheHeader: prefixCacheHeader);
+
+                            Http.DefaultRequestHeaders(href, req, null, null, decryptLink?.headers, useDefaultHeaders: useDefaultHeaders, prefixCacheHeader: decryptLink.plugin);
 
                             try
                             {
                                 using (HttpResponseMessage response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ctsHttp.Token).ConfigureAwait(false))
                                 {
+                                    #region url_reserve
                                     if (response.StatusCode != HttpStatusCode.OK)
                                     {
                                         if (url_reserve != null)
@@ -305,6 +302,7 @@ public class ProxyImg
                                         httpContext.Response.Redirect(href);
                                         return;
                                     }
+                                    #endregion
 
                                     httpContext.Response.StatusCode = (int)response.StatusCode;
 
@@ -313,80 +311,49 @@ public class ProxyImg
                                     else
                                         httpContext.Response.ContentType = contentType;
 
-                                    if (CoreInit.conf.serverproxy.responseContentLength && response.Content?.Headers?.ContentLength > 0)
-                                    {
-                                        if (!CoreInit.ContainsMimeTypes(httpContext.Response.ContentType))
-                                            httpContext.Response.ContentLength = response.Content.Headers.ContentLength.Value;
-                                    }
-
                                     await using (var responseStream = await response.Content.ReadAsStreamAsync(ctsHttp.Token).ConfigureAwait(false))
                                     {
-                                        using (var nbuf = new BufferPool())
+                                        using (var msm = PoolInvk.msm.GetStream())
                                         {
-                                            int bytesRead;
-                                            var memBuf = nbuf.Memory;
+                                            bool isFullyRead = false;
 
-                                            if (cacheimg)
+                                            using (var nbuf = new BufferPool())
                                             {
-                                                try
+                                                int bytesRead;
+
+                                                while (true)
                                                 {
-                                                    int cacheLength = 0;
-                                                    bool isFullyRead = false;
-                                                    fileWatcher.EnsureDirectory(md5key);
-
-                                                    await using (var cacheStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: PoolInvk.bufferSize, options: FileOptions.Asynchronous))
+                                                    bytesRead = await responseStream.ReadAsync(nbuf.Memory, ctsHttp.Token).ConfigureAwait(false);
+                                                    if (bytesRead <= 0)
                                                     {
-                                                        while (true)
-                                                        {
-                                                            bytesRead = await responseStream.ReadAsync(memBuf, ctsHttp.Token).ConfigureAwait(false);
-                                                            if (bytesRead <= 0)
-                                                            {
-                                                                isFullyRead = true;
-                                                                break;
-                                                            }
-
-                                                            cacheLength += bytesRead;
-                                                            if (ctsHttp.IsCancellationRequested)
-                                                                break;
-
-                                                            await cacheStream.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
-                                                            await httpContext.Response.Body.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
-                                                        }
+                                                        isFullyRead = true;
+                                                        break;
                                                     }
 
-                                                    if (isFullyRead)
-                                                    {
-                                                        if (response.Content.Headers.ContentLength.HasValue)
-                                                        {
-                                                            if (response.Content.Headers.ContentLength.Value == cacheLength)
-                                                            {
-                                                                fileWatcher.Add(md5key, cacheLength);
-                                                            }
-                                                            else
-                                                            {
-                                                                File.Delete(outFile);
-                                                            }
-                                                        }
-                                                        else
-                                                        {
-                                                            fileWatcher.Add(md5key, cacheLength);
-                                                        }
-                                                    }
-                                                }
-                                                catch
-                                                {
-                                                    fileWatcher.Remove(md5key);
-                                                }
-                                            }
-                                            else
-                                            {
-                                                while ((bytesRead = await responseStream.ReadAsync(memBuf, ctsHttp.Token).ConfigureAwait(false)) > 0)
-                                                {
                                                     if (ctsHttp.IsCancellationRequested)
                                                         break;
 
-                                                    await httpContext.Response.Body.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
+                                                    msm.Write(nbuf.Span.Slice(0, bytesRead));
                                                 }
+                                            }
+
+                                            httpContext.Response.ContentLength = msm.Length;
+
+                                            msm.Position = 0;
+                                            await msm.CopyToAsync(httpContext.Response.Body, ctsHttp.Token).ConfigureAwait(false);
+
+                                            if (!isFullyRead && cacheimg)
+                                                MarkDownloadError(href);
+
+                                            if (isFullyRead && cacheimg)
+                                            {
+                                                if (response.Content.Headers.ContentLength.HasValue && response.Content.Headers.ContentLength.Value != msm.Length)
+                                                {
+                                                    MarkDownloadError(href);
+                                                    return;
+                                                }
+
+                                                await fileWatcher.TrySave(fileName, msm).ConfigureAwait(false);
                                             }
                                         }
                                     }
@@ -411,6 +378,7 @@ public class ProxyImg
                         {
                             var result = await Download(inArray, href, ctsHttp.Token, decryptLink.plugin, decryptLink.headers, proxy).ConfigureAwait(false);
 
+                            #region url_reserve
                             if (!result.success)
                             {
                                 if (url_reserve != null)
@@ -427,6 +395,7 @@ public class ProxyImg
                                 httpContext.Response.Redirect(href);
                                 return;
                             }
+                            #endregion
 
                             if (ctsHttp.IsCancellationRequested)
                                 return;
@@ -443,6 +412,7 @@ public class ProxyImg
                                     }
                                     else if (CoreInit.conf.imagelibrary == "ImageMagick" && RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                                     {
+                                        #region ImageMagick
                                         successConvert = await ImageMagick(inArray, outArray, width, height, cacheimg ? outFile : null).ConfigureAwait(false);
 
                                         if (cacheimg)
@@ -453,7 +423,7 @@ public class ProxyImg
                                                 outArray.Dispose();
 
                                                 using (var handle = File.OpenHandle(outFile))
-                                                    fileWatcher.Add(md5key, (int)RandomAccess.GetLength(handle));
+                                                    fileWatcher.Add(fileName, (int)RandomAccess.GetLength(handle));
 
                                                 semaphore?.Release();
                                                 await httpContext.Response.SendFileAsync(outFile, ctsHttp.Token).ConfigureAwait(false);
@@ -464,6 +434,7 @@ public class ProxyImg
                                             httpContext.Response.Redirect(href);
                                             return;
                                         }
+                                        #endregion
                                     }
                                 }
 
@@ -471,20 +442,12 @@ public class ProxyImg
                                     proxyManager?.Success();
 
                                 var resultArray = successConvert ? outArray : inArray;
-
-                                if (CoreInit.conf.serverproxy.responseContentLength)
-                                    httpContext.Response.ContentLength = resultArray.Length;
+                                httpContext.Response.ContentLength = resultArray.Length;
 
                                 try
                                 {
-                                    using (var byteBuf = new BufferBytePool((int)resultArray.Length))
-                                    {
-                                        resultArray.Position = 0;
-                                        var memBuf = byteBuf.Memory;
-                                        int bytesRead = resultArray.Read(memBuf.Span);
-
-                                        await httpContext.Response.Body.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
-                                    }
+                                    resultArray.Position = 0;
+                                    await resultArray.CopyToAsync(httpContext.Response.Body, ctsHttp.Token).ConfigureAwait(false);
                                 }
                                 catch (Exception ex)
                                 {
@@ -493,7 +456,7 @@ public class ProxyImg
                                 finally
                                 {
                                     if (cacheimg)
-                                        await fileWatcher.TrySave(md5key, resultArray).ConfigureAwait(false);
+                                        await fileWatcher.TrySave(fileName, resultArray).ConfigureAwait(false);
                                 }
                             }
                         }
@@ -534,8 +497,7 @@ public class ProxyImg
             })
             {
                 bool useDefaultHeaders = ShouldUseDefaultHeaders(headers);
-                string prefixCacheHeader = plugin != null ? $"ProxyImg:{plugin}:{useDefaultHeaders}" : null;
-                Http.DefaultRequestHeaders(url, req, null, null, headers, useDefaultHeaders: useDefaultHeaders, prefixCacheHeader: prefixCacheHeader);
+                Http.DefaultRequestHeaders(url, req, null, null, headers, useDefaultHeaders: useDefaultHeaders, prefixCacheHeader: plugin);
 
                 using (HttpResponseMessage response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
                 {
@@ -549,10 +511,8 @@ public class ProxyImg
                         using (var byteBuf = new BufferPool())
                         {
                             int bytesRead;
-                            var memBuf = byteBuf.Memory;
-
-                            while ((bytesRead = await stream.ReadAsync(memBuf, cancellationToken).ConfigureAwait(false)) > 0)
-                                ms.Write(memBuf.Span.Slice(0, bytesRead));
+                            while ((bytesRead = await stream.ReadAsync(byteBuf.Memory, cancellationToken).ConfigureAwait(false)) > 0)
+                                ms.Write(byteBuf.Span.Slice(0, bytesRead));
                         }
                     }
 
@@ -594,9 +554,9 @@ public class ProxyImg
     {
         if (_initNetVips == false)
         {
+            _initNetVips = true;
             if (CoreInit.conf.serverproxy.image.NetVipsCache == false || CoreInit.conf.lowMemoryMode)
             {
-                _initNetVips = true;
                 NetVips.Cache.Max = 0;      // 0 операций в кэше
                 NetVips.Cache.MaxMem = 0;   // 0 байт памяти под кэш
                 NetVips.Cache.MaxFiles = 0; // 0 файлов в файловом кэше
@@ -623,7 +583,7 @@ public class ProxyImg
                 }
             }
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             Log.Error(ex, "CatchId={CatchId}", "id_h54cvas0");
         }
@@ -654,18 +614,10 @@ public class ProxyImg
 
         try
         {
-            await using (var streamFile = new FileStream(inputFilePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: PoolInvk.bufferSize, options: FileOptions.Asynchronous))
-            {
-                using (var nbuf = new BufferPool())
-                {
-                    int bytesRead;
-                    var memBuf = nbuf.Memory;
+            inArray.Position = 0;
 
-                    inArray.Position = 0;
-                    while ((bytesRead = inArray.Read(memBuf.Span)) > 0)
-                        await streamFile.WriteAsync(memBuf.Slice(0, bytesRead)).ConfigureAwait(false);
-                }
-            }
+            await using (var streamFile = new FileStream(inputFilePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 0, options: FileOptions.Asynchronous))
+                await inArray.CopyToAsync(streamFile).ConfigureAwait(false);
 
             string argsize = width > 0 && height > 0 ? $"{width}x{height}" : width > 0 ? $"{width}x" : $"x{height}";
 
