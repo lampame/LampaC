@@ -87,7 +87,7 @@ public class RchClient
             }
         }
 
-        clients.AddOrUpdate(connectionId, new clientEntry(ip, host, info, connection), (i, j) => new clientEntry(ip, host, info, connection));
+        clients[connectionId] = new clientEntry(ip, host, info, connection);
 
         if (EventListener.RchRegistry != null)
         {
@@ -179,7 +179,7 @@ public class RchClient
     #region Eval
     public void EvalRun(string data)
     {
-        _ = SendHub("evalrun", data).ConfigureAwait(false);
+        _ = SendHub("evalrun", data, waiting: false).ConfigureAwait(false);
     }
 
     public Task<string> Eval(string data)
@@ -393,24 +393,29 @@ public class RchClient
         if (string.IsNullOrEmpty(connectionId))
             return null;
 
-        string rchId = Guid.NewGuid().ToString("N");
+        string rchId = Fnv1a.Base64Url(Fnv1a.RandomHash());
 
         var ms = PoolInvk.msm.GetStream();
         CancellationTokenSource cts = null;
 
-        if (httpContext != null)
-        {
-            cts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted);
-            cts.CancelAfter(TimeSpan.FromSeconds(10));
-        }
-        else
-        {
-            cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        }
-
         try
         {
-            var rchHub = new rchIdEntry(ms, new TaskCompletionSource<string>(), cts.Token);
+            if (httpContext != null)
+            {
+                cts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted);
+                cts.CancelAfter(TimeSpan.FromSeconds(10));
+            }
+            else
+            {
+                cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            }
+
+            var rchHub = new rchIdEntry(
+                ms,
+                new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously),
+                cts.Token
+            );
+
             rchIds[rchId] = rchHub;
 
             #region send_headers
@@ -510,18 +515,18 @@ public class RchClient
                     ujw.WriteEndObject();
                 }
 
-                await Nws.SendConnectionAsync(clientInfo.data.connection, utf8Buf.WrittenMemory, WebSocketMessageType.Text, true, cts.Token).ConfigureAwait(false);
+                await Nws.SendConnectionAsync(clientInfo.data.connection, utf8Buf.WrittenMemory, WebSocketMessageType.Text, true, cts.Token);
             }
             #endregion
 
             if (!waiting)
                 return null;
 
-            string stringValue = await rchHub.tcs.Task.WaitAsync(cts.Token).ConfigureAwait(false);
+            string stringValue = await rchHub.tcs.Task.WaitAsync(cts.Token);
 
             if (stringValue != null)
             {
-                if (string.IsNullOrWhiteSpace(stringValue))
+                if (string.IsNullOrEmpty(stringValue))
                     return null;
 
                 spanAction?.Invoke(stringValue);
