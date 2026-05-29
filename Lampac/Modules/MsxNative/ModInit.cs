@@ -46,7 +46,7 @@ public class ModInit : IModuleLoaded
         return true;
     }
 
-    Task<ActionResult> BadInitialization(EventBadInitialization e)
+    ActionResult BadInitialization(EventBadInitialization e)
     {
         if (Utilities.IsMsxPlayer(e.httpContext))
         {
@@ -54,6 +54,6 @@ public class ModInit : IModuleLoaded
             e.init.streamproxy = true;
         }
 
-        return Task.FromResult<ActionResult>(default);
+        return default;
     }
 }
