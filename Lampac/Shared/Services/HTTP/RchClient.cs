@@ -382,7 +382,7 @@ public class RchClient
     #endregion
 
     #region SendHub
-    async Task<string> SendHub(string url, string data = null, IReadOnlyList<HeadersModel> headers = null, bool useDefaultHeaders = true, bool returnHeaders = false, bool waiting = true, Action<ReadOnlySpan<char>> spanAction = null, Action<MemoryStream> msAction = null)
+    async public Task<string> SendHub(string url, string data = null, IReadOnlyList<HeadersModel> headers = null, bool useDefaultHeaders = true, bool returnHeaders = false, bool waiting = true, Action<ReadOnlySpan<char>> spanAction = null, Action<MemoryStream> msAction = null)
     {
         if (Nws == null)
             return null;
