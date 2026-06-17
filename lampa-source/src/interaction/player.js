@@ -372,8 +372,6 @@ function init(){
 
             if(e.item.callback) e.item.callback()
 
-            if(Torserver.ip() && e.item.url.indexOf(Torserver.ip()) > -1) Info.set('stat',e.item.url)
-
             Playlist.active()
 
             Panel.showNextEpisodeName({playlist: Playlist.get(), position: Playlist.position()})
@@ -1083,6 +1081,8 @@ function play(data){
 
                 Info.set('name',data.title)
 
+                stat(data.url)
+
                 if(!data.iptv){
                     if(data.card) Footer.appendAbout(data.card)
                     else{
@@ -1158,7 +1158,9 @@ function iptv(data){
  * @param {String} url 
  */
 function stat(url){
-    if(work || preloader.wait) Info.set('stat',url)
+    if(work || preloader.wait){
+        if(Torserver.ip() && url.indexOf(Torserver.ip()) > -1) Info.set('stat',url)
+    }
 }
 
 /**

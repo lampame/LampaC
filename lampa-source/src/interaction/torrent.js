@@ -437,8 +437,6 @@ function list(items, params){
 
                 Player.playlist(playlist)
 
-                Player.stat(element.url)
-
                 if(callback){
                     callback()
             

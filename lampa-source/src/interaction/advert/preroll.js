@@ -35,8 +35,10 @@ function video(preroll, num, started, ended){
     console.log('Ad', 'preroll launch')
 
     let advert = preroll.vast_api == 3 ? new Vast3(preroll) : new Vast2(preroll)
-    let next   = () => {
+    let next   = (mark) => {
         let any = getAnyPreroll()
+
+        mark && Manager.markCooling()
 
         any ? video(any, num + 1, started, ended) : ended()
     }
@@ -95,8 +97,6 @@ function launch(preroll, call){
                 Background.theme('reset')
 
                 Controller.toggle(enabled)
-
-                Manager.markCooling()
 
                 call()
             })
