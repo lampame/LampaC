@@ -13,6 +13,7 @@ import Personal from '../../core/personal'
 
 let running     = 0
 let player_data = {}
+let prerolls_played = []
 
 let Manager = new VastManager({
     api: 'preroll',
@@ -144,7 +145,14 @@ function getAnyPreroll(first_run = false){
     let manager = Manager.get(first_run)
     let plugin  = getVastPlugin(player_data)
 
-    return Manager.coolingReady() ? manager || plugin : false
+    let any = Manager.coolingReady() ? manager || plugin : false
+
+    if(any){
+        if(prerolls_played.indexOf(any.url) == -1) prerolls_played.push(any.url)
+        else any = false
+    } 
+
+    return any
 }
 
 /**
@@ -156,6 +164,8 @@ function getAnyPreroll(first_run = false){
 function show(data, call){
     player_data = data
 
+    prerolls_played = []
+
     // Пометить регион для таргетинга рекламы
     player_data.ad_region = VPN.code()
 
@@ -165,7 +175,7 @@ function show(data, call){
 
     Metric.counter('ad_preroll_start', VPN.code(), whoi, type.any ? 'skip' : 'show')
 
-    if(type.any && !player_data.vast_url){
+    if(type.any){
         console.log('Ad', 'preroll skipped, no vast api or iptv/torrent/youtube/continue', type)
 
         return call()
