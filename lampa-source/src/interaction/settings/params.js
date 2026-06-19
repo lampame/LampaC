@@ -169,6 +169,7 @@ function init(){
             'tvosSelect': '#{settings_param_player_outside}',
             'vlc': 'VLC',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'inner': '#{settings_param_player_inner}',
             'svplayer': 'SVPlayer'
@@ -181,6 +182,7 @@ function init(){
             'tvosSelect': '#{settings_param_player_outside}',
             'vlc': 'VLC',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'inner': '#{settings_param_player_inner}',
             'svplayer': 'SVPlayer'
@@ -191,6 +193,7 @@ function init(){
             'tvos': '#{settings_param_player_inner_tvos} tvOS Universal',
             'tvosSelect': '#{settings_param_player_outside}',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'vlc': 'VLC',
             'inner': '#{settings_param_player_inner}',
