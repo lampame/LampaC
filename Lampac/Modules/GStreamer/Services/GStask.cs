@@ -18,8 +18,15 @@ public class GStask
 
     public bool IsDead { get; private set; }
 
+    public bool IsFrozen { get; private set; }
+
+    public bool IsEos { get; private set; }
+
     public int lastSentSegment = -1;
     int audioIndex;
+
+    double positionSeconds = 0;
+    double positionSeekSeconds = 0;
 
     public readonly ulong id;
     public readonly string user_uid;
@@ -62,6 +69,9 @@ public class GStask
            {
                readySegment.seg = seg;
                readySegment.complete = true;
+
+               if (seg.startSeconds > 0)
+                   positionSeconds = seg.startSeconds + positionSeekSeconds;
            }
         );
     }
@@ -250,7 +260,7 @@ public class GStask
             name=out
             emit-signals=false
             sync=false
-            max-buffers=0
+            max-buffers={{(conf.tempfs ? 1 : 0)}}
             max-bytes={{sinkQueueBytes}}
             max-time={{queueNs}}
             {{(version >= 1.28 ? "leaky-type=none" : "drop=false")}}
@@ -331,7 +341,8 @@ public class GStask
 
         try
         {
-            task?.Wait();
+            if (task != null && System.Threading.Tasks.Task.CurrentId != task.Id)
+                task.Wait(TimeSpan.FromMilliseconds(100));
         }
         catch { }
 
@@ -342,20 +353,52 @@ public class GStask
     {
         while (!ct.IsCancellationRequested)
         {
-            using (var msg = bus.TimedPop(50_000_000UL))
+            try
             {
-                if (msg == null)
-                    continue;
-
-                uint type = BusReader.GetType(msg);
-
-                if (type == BusReader.Error || type == BusReader.Eos)
+                using (var msg = bus.TimedPop(50_000_000UL))
                 {
-                    IsDead = true;
-                    Dispose();
-                    return;
+                    if (msg == null)
+                        continue;
+
+                    uint type = BusReader.GetType(msg);
+
+                    if (type == BusReader.Error)
+                    {
+                        IsDead = true;
+                        Dispose();
+                        return;
+                    }
+                    else if (type == BusReader.Eos)
+                    {
+                        double duration = probe.DurationSeconds;
+                        if (duration <= 0)
+                        {
+                            // длительность неизвестна — EOS нельзя признать ошибочным
+                            IsEos = true;
+                            return;
+                        }
+
+                        double eosThreshold = duration -
+                            conf.pipeline_timeSeconds -
+                            conf.segment_seconds -
+                            120; // 120s
+
+                        if (Volatile.Read(ref positionSeconds) >= eosThreshold)
+                        {
+                            // выход в пределах допустимого отступления от конца
+                            IsEos = true;
+                            return;
+                        }
+                        else
+                        {
+                            IsDead = true;
+                            Dispose();
+                            return;
+                        }
+                    }
                 }
             }
+            catch { }
         }
     }
     #endregion
@@ -368,16 +411,19 @@ public class GStask
     #endregion
 
     #region Seek
-    public bool Seek(long seconds)
+    public bool Seek(double seconds)
     {
         if (IsDead || !statePlaying)
             return false;
 
-        StopBusWatch();
-        pipeline.SetState(State.Null);
-        pipeline.Dispose();
-        sink.Dispose();
-        bus.Dispose();
+        if (pipeline != null)
+        {
+            StopBusWatch();
+            pipeline.SetState(State.Null);
+            pipeline.Dispose();
+            sink.Dispose();
+            bus.Dispose();
+        }
 
         string pipelineArgs = CreatePipelineArgs(probe);
         pipeline = (Pipeline)Gst.Functions.ParseLaunch(pipelineArgs);
@@ -386,20 +432,49 @@ public class GStask
         bin = pipeline;
         sink = (GstApp.AppSink)bin.GetByName("out");
 
-        var ret = pipeline.SetState(State.Paused);
-        if (ret == StateChangeReturn.Failure)
-        {
-            IsDead = true;
-            Dispose();
-            return false;
-        }
+        StateChangeReturn ret;
 
-        if (ret == StateChangeReturn.Async)
+        if (seconds > 0)
         {
-            // ждём завершение команды в pipeline
-            using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+            ret = pipeline.SetState(State.Paused);
+            if (ret == StateChangeReturn.Failure)
             {
-                if (BusReader.GetType(msg) == BusReader.Error)
+                IsDead = true;
+                Dispose();
+                return false;
+            }
+
+            if (ret == StateChangeReturn.Async)
+            {
+                // ждём завершение команды в pipeline
+                using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+                {
+                    if (BusReader.GetType(msg) == BusReader.Error)
+                    {
+                        IsDead = true;
+                        Dispose();
+                        return false;
+                    }
+                }
+            }
+
+            bool ok = pipeline.SeekSimple(
+                Format.Time,
+                SeekFlags.Flush | SeekFlags.KeyUnit | SeekFlags.SnapAfter,
+                (long)Math.Round(seconds * 1_000_000_000d)
+            );
+
+            if (!ok)
+            {
+                IsDead = true;
+                Dispose();
+                return false;
+            }
+
+            // После flushing seek тоже лучше дождаться ASYNC_DONE.
+            using (var flushing = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+            {
+                if (BusReader.GetType(flushing) == BusReader.Error)
                 {
                     IsDead = true;
                     Dispose();
@@ -407,34 +482,6 @@ public class GStask
                 }
             }
         }
-
-        bool ok = pipeline.SeekSimple(
-            Format.Time,
-            SeekFlags.Flush | SeekFlags.KeyUnit | SeekFlags.SnapBefore,
-            seconds * 1_000_000_000L
-        );
-
-        if (!ok)
-        {
-            IsDead = true;
-            Dispose();
-            return false;
-        }
-
-        // После flushing seek тоже лучше дождаться ASYNC_DONE.
-        using (var flushing = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
-        {
-            if (BusReader.GetType(flushing) == BusReader.Error)
-            {
-                IsDead = true;
-                Dispose();
-                return false;
-            }
-        }
-
-        mp4Reader.ResetSegment();
-        mp4Reader.SeekReset();
-        readySegment = (-1, false, default);
 
         ret = pipeline.SetState(State.Playing);
         if (ret == StateChangeReturn.Failure)
@@ -457,6 +504,13 @@ public class GStask
             }
         }
 
+        mp4Reader.ResetSegment();
+        mp4Reader.SeekReset(seconds);
+        readySegment = (-1, false, default);
+
+        IsFrozen = false;
+        IsEos = false;
+        positionSeekSeconds = seconds;
         StartBusWatch();
         return true;
     }
@@ -505,6 +559,15 @@ public class GStask
 
             StartBusWatch();
         }
+        else if (IsFrozen)
+        {
+            if (!Seek(positionSeconds))
+            {
+                IsDead = true;
+                Dispose();
+                return default;
+            }
+        }
         #endregion
 
         if (readySegment.index == index && readySegment.complete)
@@ -528,9 +591,14 @@ public class GStask
                 {
                     var buffer = sample?.GetBuffer();
                     if (buffer == null)
-                        continue;
+                    {
+                        if (IsEos) // очередь appsink полностью вычитана
+                            return default;
 
-                    nuint? size = buffer?.GetSize();
+                        continue;
+                    }
+
+                    nuint? size = buffer.GetSize();
                     if (size == null || 0 >= size)
                         continue;
 
@@ -578,6 +646,27 @@ public class GStask
         semaphore.Dispose();
         semaphore = null;
         initMp4 = null;
+        bin = null;
+    }
+    #endregion
+
+    #region Frozen
+    public void Frozen()
+    {
+        if (pipeline == null)
+            return;
+
+        IsFrozen = true;
+        StopBusWatch();
+
+        pipeline.SetState(State.Null);
+        pipeline.Dispose();
+        pipeline = null;
+
+        sink.Dispose();
+        sink = null;
+        bus.Dispose();
+        bus = null;
         bin = null;
     }
     #endregion

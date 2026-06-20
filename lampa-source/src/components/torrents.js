@@ -795,9 +795,12 @@ function component(object){
             })
 
             let item = Template.get('torrent',element)
+            let need_remove_ffprobe = false
 
             if(!element.ffprobe){
                 element.ffprobe = []
+
+                need_remove_ffprobe = true
             }
 
             if(element.ffprobe){
@@ -876,6 +879,8 @@ function component(object){
                 })
     
                 if($('> div', ffprobe_elem).length) ffprobe_elem.removeClass('hide')
+
+                if(need_remove_ffprobe) delete element.ffprobe
             }
 
             if (!bitrate) item.find('.bitrate').remove()
