@@ -7698,6 +7698,16 @@ body.true--mobile .search .simple-keyboard input {
 .simple-keyboard-buttons__cancel {
   padding: 0.7em;
   font-size: 1.2em;
+  -webkit-border-radius: 0.3em;
+     -moz-border-radius: 0.3em;
+          border-radius: 0.3em;
+}
+.simple-keyboard-buttons__enter, .simple-keyboard-buttons__cancel {
+  cursor: pointer;
+}
+.simple-keyboard-buttons__enter:hover, .simple-keyboard-buttons__cancel:hover {
+  background-color: #fff;
+  color: #000;
 }
 .simple-keyboard-mic {
   width: 2.8em;
@@ -7749,6 +7759,12 @@ body.true--mobile .search .simple-keyboard input {
       -ms-flex-align: center;
           align-items: center;
   color: #fff;
+  position: relative;
+}
+.simple-keyboard--with-mic .simple-keyboard-buttons {
+  position: absolute;
+  top: 100%;
+  left: 3.4em;
 }
 .simple-keyboard--with-textarea {
   -webkit-box-align: start;
@@ -7769,14 +7785,6 @@ body.true--mobile .search .simple-keyboard input {
      -moz-border-radius: 0.3em;
           border-radius: 0.3em;
   padding: 0.2em 0.4em;
-}
-
-body.true--mobile .simple-keyboard--with-mic {
-  position: relative;
-}
-body.true--mobile .simple-keyboard--with-mic .simple-keyboard-buttons {
-  position: absolute;
-  top: 100%;
 }
 
 body.platform--apple_tv #orsay-keyboard.focus {
