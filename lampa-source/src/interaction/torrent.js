@@ -409,6 +409,9 @@ function list(items, params){
             title: element.title,
             subtitle: element.episode ? Lang.translate('torrent_serial_episode') + ': ' + element.episode : '',
             url: element.url,
+            season: element.season,
+            episode: element.episode,
+            path: element.path,
             timeline: element.timeline,
             thumbnail: element.thumbnail,
             subtitles: element.subtitles

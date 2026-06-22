@@ -482,6 +482,20 @@ function update(elem,elems,elems_html){
 
         listener.send('update_scroll_position')
     }
+
+    updateInfuseLaunchVisibility(elems_html)
+}
+
+function isInfusePlayerSelected(){
+    return ['player', 'player_iptv', 'player_torrent'].some((name)=>{
+        return Storage.field(name) === 'infuse'
+    })
+}
+
+function updateInfuseLaunchVisibility(elems_html){
+    if(!elems_html || !elems_html.length) return
+
+    elems_html.find('[data-infuse-launch]').toggleClass('hide', !isInfusePlayerSelected())
 }
 
 /**
@@ -606,6 +620,12 @@ select('player_timecode',{
     'continue': '#{settings_param_player_timecode_continue}',
     'ask': '#{settings_param_player_timecode_ask}',
 },'continue')
+
+select('infuse_launch_mode', {
+    'ask': '#{settings_infuse_launch_ask}',
+    'play': '#{settings_infuse_launch_play}',
+    'save_and_play': '#{settings_infuse_launch_save_and_play}',
+}, 'play')
 
 select('player_scale_method',{
     'transform': 'Transform',
