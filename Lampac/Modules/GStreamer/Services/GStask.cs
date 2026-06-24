@@ -72,7 +72,8 @@ public class GStask
 
                if (seg.startSeconds >= 0)
                    positionSeconds = seg.startSeconds + positionSeekSeconds;
-           }
+           },
+           segmentSeconds: conf.segment_seconds
         );
     }
     #endregion
@@ -85,11 +86,14 @@ public class GStask
         long queueNs = conf.pipeline_timeSeconds * 1_000_000_000L;
         int audioQueueBytes = conf.pipeline_audioQueue * 1024 * 1024;
         int maxQueueBytes = conf.pipeline_videoQueue * 1024 * 1024;
-        int sinkQueueBytes = conf.pipeline_sinkQueue * 1024 * 1024;
 
         double version = ModInit.conf.gst_version;
 
         #region souphttpsrc
+        string downloadLimit = conf.pipeline_downloadRate > 0
+            ? $"identity datarate={conf.pipeline_downloadRate * 1_000_000 / 8} sync=true silent=true !"
+            : string.Empty;
+
         string httpqueue = $$"""
         queue2
             use-buffering=false
@@ -128,6 +132,7 @@ public class GStask
             keep-alive=true
             timeout=60
             retries=5 {{(version >= 1.26 ? "retry-backoff-factor=0.5 retry-backoff-max=10" : string.Empty)}} !
+        {{downloadLimit}}
         {{httpqueue}}
         matroskademux name=d
         """);
@@ -245,7 +250,11 @@ public class GStask
         audioconvert !
         audioresample !
         audio/x-raw,rate=48000,channels=2 !
-        avenc_aac bitrate={{conf.aac_bitrate * 1000}} !
+        audiorate
+            skip-to-first=true
+            tolerance=40000000 !
+        avenc_aac 
+            bitrate={{conf.aac_bitrate * 1000}} !
         aacparse !
         audio/mpeg,mpegversion=4,stream-format=raw,rate=48000,channels=2 !
         mux.audio_0
@@ -254,15 +263,14 @@ public class GStask
         sb.AppendLine($$"""
         mp4mux
             name=mux
+            fragment-mode=dash-or-mss
             fragment-duration={{conf.segment_seconds * 1000}}
             streamable=true !
         appsink
             name=out
             emit-signals=false
             sync=false
-            max-buffers={{(conf.tempfs ? 1 : 0)}}
-            max-bytes={{(conf.tempfs ? 0 : sinkQueueBytes)}}
-            max-time={{(conf.tempfs ? 0 : queueNs)}}
+            max-buffers=1
             {{(version >= 1.28 ? "leaky-type=none" : "drop=false")}}
             wait-on-eos=false
         """);
@@ -579,13 +587,6 @@ public class GStask
 
         try
         {
-            // В _deferred уже может лежать полный следующий Segment
-            if (mp4Reader.TryProcessDeferred() && readySegment.complete)
-            {
-                readySegment.index = index;
-                return readySegment.seg;
-            }
-
             long start = Stopwatch.GetTimestamp();
             var timeout = TimeSpan.FromSeconds(10);
 
@@ -601,8 +602,26 @@ public class GStask
                     {
                         if (buffer == null)
                         {
-                            if (IsEos) // очередь appsink полностью вычитана
+                            if (IsEos)
+                            {
+                                // В _deferred может лежать полный Segment
+                                if (mp4Reader.TryProcessDeferred() && readySegment.complete)
+                                {
+                                    readySegment.index = index;
+                                    return readySegment.seg;
+                                }
+
+                                // Последний fragment может быть неполным:
+                                // только moof, только часть mdat либо fragment одной дорожки
+                                if (mp4Reader.TryBuildEndOfStreamRemainder() && readySegment.complete)
+                                {
+                                    readySegment.index = index;
+                                    return readySegment.seg;
+                                }
+
+                                // очередь appsink полностью вычитана
                                 return default;
+                            }
 
                             continue;
                         }
