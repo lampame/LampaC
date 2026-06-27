@@ -223,7 +223,10 @@ public class GStreamerController : BaseController
             try
             {
                 if (gstask.initMp4 == null)
+                {
                     gstask.GetSegment(-1, HttpContext.RequestAborted, audio);
+                    gstask.lastSentSegment = 0;
+                }
             }
             finally
             {
@@ -275,10 +278,10 @@ public class GStreamerController : BaseController
                     int diff = index - gstask.lastSentSegment;
 
                     int cutoff = gstask.conf.tempfs
-                        ? gstask.conf.pipeline_videoQueue * (gstask.conf.tempfs_ring + 2)
-                        : gstask.conf.pipeline_videoQueue;
+                        ? gstask.conf.tempfs_ring > 0 ? 90 + (gstask.conf.tempfs_ring * 25) : 90
+                        : 60;
 
-                    if (diff > 0 && Math.Max(60, cutoff) >= (diff * gstask.conf.segment_seconds))
+                    if (diff > 0 && cutoff >= (diff * gstask.conf.segment_seconds))
                     {
                         for (int i = 0; i < diff - 1; i++)
                         {

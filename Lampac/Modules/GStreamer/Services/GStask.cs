@@ -1,5 +1,6 @@
 ﻿using Gst;
 using GStreamer.Models;
+using Shared.Services.Pools;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -24,6 +25,7 @@ public class GStask
 
     public int lastSentSegment = -1;
     int audioIndex;
+    long? contentLength;
 
     double positionSeconds = 0;
     double positionSeekSeconds = 0;
@@ -49,13 +51,14 @@ public class GStask
     CancellationTokenSource busWatchCts;
     System.Threading.Tasks.Task busWatchTask;
 
-    public GStask(ProbeInfo probe, ModuleConf conf, string sourceUrl, ulong id, string user_uid, int audio)
+    public GStask(ProbeInfo probe, ModuleConf conf, string sourceUrl, ulong id, string user_uid, int audio, long? contentLength)
     {
         this.id = id;
         this.probe = probe;
         this.user_uid = user_uid;
         this.sourceUrl = sourceUrl;
         this.conf = conf;
+        this.contentLength = contentLength;
 
         if (probe.Tracks.FirstOrDefault(i => i.Type == "audio" && i.Index == audio) != null)
             audioIndex = audio;
@@ -81,7 +84,7 @@ public class GStask
     #region CreatePipelineArgs
     string CreatePipelineArgs(ProbeInfo probe)
     {
-        var sb = new StringBuilder();
+        var sb = StringBuilderPool.ThreadInstance;
 
         long queueNs = conf.pipeline_timeSeconds * 1_000_000_000L;
         int audioQueueBytes = conf.pipeline_audioQueue * 1024 * 1024;
@@ -98,14 +101,23 @@ public class GStask
         queue2
             use-buffering=false
             max-size-buffers=0
-            max-size-bytes={{maxQueueBytes}}
+            max-size-bytes={{16 * 1024 * 1024}}
             max-size-time={{queueNs}} !
         """;
 
         if (conf.tempfs)
         {
-            long ringBytes = maxQueueBytes * (conf.tempfs_ring + 2);
-            ringBytes += 1024 * 1024; // на смещения и всякую мелочь
+            const int targetSeconds = 30;
+            int maxBytes = 32 * 1024 * 1024;
+
+            if (contentLength.HasValue && contentLength.Value > 0 && probe.DurationSeconds > 0)
+            {
+                maxBytes = (int)Math.Ceiling(
+                    (double)contentLength.Value / probe.DurationSeconds * targetSeconds
+                );
+            }
+
+            long ringBytes = (long)maxBytes * (conf.tempfs_ring + 3);
 
             string tempTemplate = Path.Combine(
                 "cache",
@@ -118,8 +130,8 @@ public class GStask
                 use-buffering=false
                 temp-template="{{tempTemplate}}"
                 temp-remove=true
-                ring-buffer-max-size={{ringBytes}}
-                max-size-bytes={{maxQueueBytes}}
+                ring-buffer-max-size={{ringBytes + (1024 * 1024)}}
+                max-size-bytes={{maxBytes}}
                 max-size-buffers=0
                 max-size-time=0 !
             """;
@@ -155,7 +167,7 @@ public class GStask
                     max-size-bytes={{maxQueueBytes}}
                     max-size-time={{queueNs}}
                     leaky=0 !
-                h264parse config-interval=-1 !
+                h264parse config-interval=0 !
                 h264timestamper !
                 video/x-h264,stream-format=avc,alignment=au !
                 mux.video_0
@@ -179,7 +191,7 @@ public class GStask
                     max-size-bytes={{maxQueueBytes}}
                     max-size-time={{queueNs}}
                     leaky=0 !
-                h265parse config-interval=-1 !
+                h265parse config-interval=0 !
                 h265timestamper !
                 video/x-h265,stream-format=hvc1,alignment=au !
                 mux.video_0
@@ -247,16 +259,25 @@ public class GStask
             max-size-time={{queueNs}}
             leaky=0 !
         decodebin !
-        audioconvert !
-        audioresample !
-        audio/x-raw,rate=48000,channels=2 !
-        audiorate
-            skip-to-first=true
-            tolerance=40000000 !
-        avenc_aac 
+        audioconvert
+            dithering=none
+            noise-shaping=none !
+        audioresample
+            quality=2
+            sinc-filter-mode=full !
+        audio/x-raw,
+            format=F32LE,
+            layout=interleaved,
+            rate=48000,
+            channels=2 !
+        avenc_aac
             bitrate={{conf.aac_bitrate * 1000}} !
         aacparse !
-        audio/mpeg,mpegversion=4,stream-format=raw,rate=48000,channels=2 !
+        audio/mpeg,
+            mpegversion=4,
+            stream-format=raw,
+            rate=48000,
+            channels=2 !
         mux.audio_0
         """);
 
@@ -311,7 +332,7 @@ public class GStask
             bframes=0
             byte-stream=false !
         video/x-h264,profile=main,stream-format=avc,alignment=au !
-        h264parse config-interval=-1 !
+        h264parse config-interval=0 !
         h264timestamper !
         video/x-h264,profile=main,stream-format=avc,alignment=au !
         mux.video_0
@@ -455,9 +476,9 @@ public class GStask
             if (ret == StateChangeReturn.Async)
             {
                 // ждём завершение команды в pipeline
-                using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+                using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error | MessageType.Eos))
                 {
-                    if (BusReader.GetType(msg) == BusReader.Error)
+                    if (BusReader.GetType(msg) == BusReader.Error || BusReader.GetType(msg) == BusReader.Eos)
                     {
                         IsDead = true;
                         Dispose();
@@ -480,9 +501,9 @@ public class GStask
             }
 
             // После flushing seek тоже лучше дождаться ASYNC_DONE.
-            using (var flushing = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+            using (var flushing = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error | MessageType.Eos))
             {
-                if (BusReader.GetType(flushing) == BusReader.Error)
+                if (BusReader.GetType(flushing) == BusReader.Error || BusReader.GetType(flushing) == BusReader.Eos)
                 {
                     IsDead = true;
                     Dispose();
@@ -501,9 +522,9 @@ public class GStask
 
         if (ret == StateChangeReturn.Async)
         {
-            using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+            using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error | MessageType.Eos))
             {
-                if (BusReader.GetType(msg) == BusReader.Error)
+                if (BusReader.GetType(msg) == BusReader.Error || BusReader.GetType(msg) == BusReader.Eos)
                 {
                     IsDead = true;
                     Dispose();
@@ -555,9 +576,9 @@ public class GStask
 
             if (ret == StateChangeReturn.Async)
             {
-                using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error))
+                using (var msg = bus.TimedPopFiltered(5_000_000_000UL, MessageType.AsyncDone | MessageType.Error | MessageType.Eos))
                 {
-                    if (BusReader.GetType(msg) == BusReader.Error)
+                    if (BusReader.GetType(msg) == BusReader.Error || BusReader.GetType(msg) == BusReader.Eos)
                     {
                         IsDead = true;
                         Dispose();
