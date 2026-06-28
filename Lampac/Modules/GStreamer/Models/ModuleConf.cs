@@ -57,8 +57,4 @@ public class ModuleConf : ModuleBaseConf
     public int pipeline_downloadRate { get; set; }
 
     public int pipeline_timeSeconds { get; set; } = 18;
-
-    public int pipeline_audioQueue { get; set; } = 2;
-
-    public int pipeline_videoQueue { get; set; } = 24;
 }

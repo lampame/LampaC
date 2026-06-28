@@ -34,9 +34,7 @@ http://IP:9118/gst.js
 | `transcodeAV1` | `false` | Перекодировать AV1 в H.264. |
 | `transcodeVP9` | `false` | Перекодировать VP9 в H.264. |
 | `pipeline_downloadRate` | `0` без ограничений | Максимальная скорость загрузки в Мбит/c. |
-| `pipeline_timeSeconds` | `20` | Максимальный объём очередей по времени в секундах. |
-| `pipeline_audioQueue` | `4` | Максимальный размер очереди аудио в МБ. |
-| `pipeline_videoQueue` | `48` | Максимальный размер входной и видеоочереди в МБ. |
+| `pipeline_timeSeconds` | `18` | Максимальный объём очередей по времени в секундах. |
 
 Полный пример:
 
@@ -63,10 +61,7 @@ http://IP:9118/gst.js
   "transcodeAV1": true,
   "transcodeVP9": true,
 
-  "pipeline_timeSeconds": 20,
-  "pipeline_audioQueue": 4,
-  "pipeline_videoQueue": 32,
-  "pipeline_sinkQueue": 64
+  "pipeline_timeSeconds": 20
 }
 ```
 
@@ -93,10 +88,7 @@ http://IP:9118/gst.js
   "transcodeH265": true,
   "transcodeAV1": true,
   "transcodeVP9": true,
-  "pipeline_timeSeconds": 20,
-  "pipeline_audioQueue": 4,
-  "pipeline_videoQueue": 32,
-  "pipeline_sinkQueue": 64,
+  "pipeline_timeSeconds": 20
 
   "conf_uids": {
     "mobile-uid": {
@@ -109,10 +101,7 @@ http://IP:9118/gst.js
       "transcodeH265": true,
       "transcodeAV1": true,
       "transcodeVP9": true,
-      "pipeline_timeSeconds": 20,
-      "pipeline_audioQueue": 4,
-      "pipeline_videoQueue": 32,
-      "pipeline_sinkQueue": 64
+      "pipeline_timeSeconds": 20
     }
   }
 }
@@ -153,7 +142,11 @@ gst-discoverer-1.0 --version
 }
 ```
 
-## Windows
+## Windows portable (MinGW)
+
+Уже включена в модуль и не требует установки MinGW
+
+## Или Windows installer (MinGW)
 
 Скачайте и установите:
 

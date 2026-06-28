@@ -87,23 +87,64 @@ public class GStask
         var sb = StringBuilderPool.ThreadInstance;
 
         long queueNs = conf.pipeline_timeSeconds * 1_000_000_000L;
-        int audioQueueBytes = conf.pipeline_audioQueue * 1024 * 1024;
-        int maxQueueBytes = conf.pipeline_videoQueue * 1024 * 1024;
-
         double version = ModInit.conf.gst_version;
+
+        #region AppendTranscodeToH264
+        void AppendTranscodeToH264()
+        {
+            int segmentSeconds = Math.Max(1, conf.segment_seconds);
+            int frameRateNum = probe.Video?.FrameRateNum ?? 0;
+            int frameRateDen = probe.Video?.FrameRateDen ?? 0;
+
+            int keyIntMax = frameRateNum > 0 && frameRateDen > 0
+                ? Math.Max(
+                    1,
+                    (int)Math.Round(
+                        (double)frameRateNum * segmentSeconds / frameRateDen
+                    )
+                )
+                : 25 * segmentSeconds;
+
+            sb.AppendLine($$"""
+            mq.src_0 !
+            decodebin !
+            videoconvert !
+            video/x-raw,
+                format=I420 !
+            x264enc
+                tune=zerolatency
+                speed-preset=veryfast
+                bitrate={{conf.video_bitrate}}
+                key-int-max={{keyIntMax}}
+                bframes=0
+                byte-stream=false !
+            video/x-h264,
+                profile=main,
+                stream-format=avc,
+                alignment=au !
+            h264parse
+                config-interval=0 !
+            h264timestamper !
+            video/x-h264,
+                profile=main,
+                stream-format=avc,
+                alignment=au !
+            mux.video_0
+            """);
+        }
+        #endregion
 
         #region souphttpsrc
         string downloadLimit = conf.pipeline_downloadRate > 0
-            ? $"identity datarate={conf.pipeline_downloadRate * 1_000_000 / 8} sync=true silent=true !"
+            ? $$"""
+            identity
+                datarate={{conf.pipeline_downloadRate * 1_000_000 / 8}}
+                sync=true
+                silent=true !
+            """
             : string.Empty;
 
-        string httpqueue = $$"""
-        queue2
-            use-buffering=false
-            max-size-buffers=0
-            max-size-bytes={{16 * 1024 * 1024}}
-            max-size-time={{queueNs}} !
-        """;
+        string httpqueue = string.Empty;
 
         if (conf.tempfs)
         {
@@ -143,33 +184,47 @@ public class GStask
             is-live=false
             keep-alive=true
             timeout=60
-            retries=5 {{(version >= 1.26 ? "retry-backoff-factor=0.5 retry-backoff-max=10" : string.Empty)}} !
+            retries=5
+            {{(version >= 1.26 ? "retry-backoff-factor=0.5 retry-backoff-max=10" : string.Empty)}} !
         {{downloadLimit}}
         {{httpqueue}}
-        matroskademux name=d
         """);
         #endregion
 
+        sb.AppendLine($$"""
+        matroskademux
+            name=d
+        multiqueue
+            name=mq
+            use-buffering=false
+            max-size-buffers=0
+            max-size-bytes=0
+            max-size-time={{queueNs}}
+        """);
+
         #region d.video
+        sb.AppendLine("""
+        d.video_0 !
+        mq.sink_0
+        """);
+
         if (probe.IsH264)
         {
             #region H264
             if (conf.transcodeH264)
             {
-                TranscodeToH264(sb, maxQueueBytes, queueNs);
+                AppendTranscodeToH264();
             }
             else
             {
-                sb.AppendLine($$"""
-                d.video_0 !
-                queue
-                    max-size-buffers=0
-                    max-size-bytes={{maxQueueBytes}}
-                    max-size-time={{queueNs}}
-                    leaky=0 !
-                h264parse config-interval=0 !
+                sb.AppendLine("""
+                mq.src_0 !
+                h264parse
+                    config-interval=0 !
                 h264timestamper !
-                video/x-h264,stream-format=avc,alignment=au !
+                video/x-h264,
+                    stream-format=avc,
+                    alignment=au !
                 mux.video_0
                 """);
             }
@@ -180,20 +235,18 @@ public class GStask
             #region H265
             if (conf.transcodeH265)
             {
-                TranscodeToH264(sb, maxQueueBytes, queueNs);
+                AppendTranscodeToH264();
             }
             else
             {
-                sb.AppendLine($$"""
-                d.video_0 !
-                queue
-                    max-size-buffers=0
-                    max-size-bytes={{maxQueueBytes}}
-                    max-size-time={{queueNs}}
-                    leaky=0 !
-                h265parse config-interval=0 !
+                sb.AppendLine("""
+                mq.src_0 !
+                h265parse
+                    config-interval=0 !
                 h265timestamper !
-                video/x-h265,stream-format=hvc1,alignment=au !
+                video/x-h265,
+                    stream-format=hvc1,
+                    alignment=au !
                 mux.video_0
                 """);
             }
@@ -204,19 +257,16 @@ public class GStask
             #region AV1
             if (conf.transcodeAV1)
             {
-                TranscodeToH264(sb, maxQueueBytes, queueNs);
+                AppendTranscodeToH264();
             }
             else
             {
-                sb.AppendLine($$"""
-                d.video_0 !
-                queue
-                    max-size-buffers=0
-                    max-size-bytes={{maxQueueBytes}}
-                    max-size-time={{queueNs}}
-                    leaky=0 !
+                sb.AppendLine("""
+                mq.src_0 !
                 av1parse !
-                video/x-av1,stream-format=obu-stream,alignment=tu !
+                video/x-av1,
+                    stream-format=obu-stream,
+                    alignment=tu !
                 mux.video_0
                 """);
             }
@@ -227,19 +277,15 @@ public class GStask
             #region VP9
             if (conf.transcodeVP9)
             {
-                TranscodeToH264(sb, maxQueueBytes, queueNs);
+                AppendTranscodeToH264();
             }
             else
             {
-                sb.AppendLine($$"""
-                d.video_0 !
-                queue
-                    max-size-buffers=0
-                    max-size-bytes={{maxQueueBytes}}
-                    max-size-time={{queueNs}}
-                    leaky=0 !
+                sb.AppendLine("""
+                mq.src_0 !
                 vp9parse !
-                video/x-vp9,alignment=frame !
+                video/x-vp9,
+                    alignment=frame !
                 mux.video_0
                 """);
             }
@@ -251,13 +297,12 @@ public class GStask
         }
         #endregion
 
+        #region d.audio
         sb.AppendLine($$"""
         d.audio_{{audioIndex}} !
-        queue
-            max-size-buffers=0
-            max-size-bytes={{audioQueueBytes}}
-            max-size-time={{queueNs}}
-            leaky=0 !
+        mq.sink_1
+
+        mq.src_1 !
         decodebin !
         audioconvert
             dithering=none
@@ -280,6 +325,7 @@ public class GStask
             channels=2 !
         mux.audio_0
         """);
+        #endregion
 
         sb.AppendLine($$"""
         mp4mux
@@ -297,46 +343,6 @@ public class GStask
         """);
 
         return sb.ToString();
-    }
-
-    void TranscodeToH264(StringBuilder sb, int maxQueueBytes, long queueNs)
-    {
-        int segmentSeconds = Math.Max(1, conf.segment_seconds);
-        int frameRateNum = probe.Video?.FrameRateNum ?? 0;
-        int frameRateDen = probe.Video?.FrameRateDen ?? 0;
-
-        int keyIntMax = frameRateNum > 0 && frameRateDen > 0
-            ? Math.Max(
-                1,
-                (int)Math.Round(
-                    (double)frameRateNum * segmentSeconds / frameRateDen
-                )
-            )
-            : 25 * segmentSeconds;
-
-        sb.AppendLine($$"""
-        d.video_0 !
-        queue
-            max-size-buffers=0
-            max-size-bytes={{maxQueueBytes}}
-            max-size-time={{queueNs}}
-            leaky=0 !
-        decodebin !
-        videoconvert !
-        video/x-raw,format=I420 !
-        x264enc
-            tune=zerolatency
-            speed-preset=veryfast
-            bitrate={{conf.video_bitrate}}
-            key-int-max={{keyIntMax}}
-            bframes=0
-            byte-stream=false !
-        video/x-h264,profile=main,stream-format=avc,alignment=au !
-        h264parse config-interval=0 !
-        h264timestamper !
-        video/x-h264,profile=main,stream-format=avc,alignment=au !
-        mux.video_0
-        """);
     }
     #endregion
 
