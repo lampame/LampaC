@@ -1320,5 +1320,8 @@ export default {
     remote_configuration_waite_text: 'Вече можете да предадете този код на друго приложение, за да му предоставите достъп до настройките.',
     remote_configuration_open_button: 'Отвори достъп',
     remote_configuration_code_life: 'Кодът е валиден',
-    remote_configuration_notice_nocode: 'Неуспешно отваряне на достъп'
+    remote_configuration_notice_nocode: 'Неуспешно отваряне на достъп',
+
+    settings_server_gts: 'Прекодиране',
+    settings_server_gts_descr: 'Автоматично конвертиране на видеото в съвместим формат при необходимост.'
 }

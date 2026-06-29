@@ -1334,5 +1334,8 @@ export default {
     remote_configuration_waite_text: 'Цяпер вы можаце перадаць гэты код іншаму прыкладанню, каб даць доступ да налад.',
     remote_configuration_open_button: 'Адкрыць доступ',
     remote_configuration_code_life: 'Код сапраўдны',
-    remote_configuration_notice_nocode: 'Не ўдалося адкрыць доступ'
+    remote_configuration_notice_nocode: 'Не ўдалося адкрыць доступ',
+
+    settings_server_gts: 'Перакадаванне',
+    settings_server_gts_descr: 'Аўтаматычна канвертаваць відэа ў сумяшчальны фармат пры неабходнасці.'
 }

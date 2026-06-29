@@ -1269,5 +1269,8 @@ export default {
     remote_configuration_waite_text: '您现在可以将此代码传递给另一个应用程序，以授予对设置的访问权限。',
     remote_configuration_open_button: '开放访问',
     remote_configuration_code_life: '代码有效',
-    remote_configuration_notice_nocode: '无法开放访问'
+    remote_configuration_notice_nocode: '无法开放访问',
+
+    settings_server_gts: '转码',
+    settings_server_gts_descr: '必要时自动将视频转换为兼容格式。'
 }

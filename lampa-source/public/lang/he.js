@@ -1220,5 +1220,8 @@ export default {
     remote_configuration_waite_text: 'כעת תוכל להעביר קוד זה לאפליקציה אחרת כדי להעניק גישה להגדרות.',
     remote_configuration_open_button: 'פתח גישה',
     remote_configuration_code_life: 'הקוד בתוקף',
-    remote_configuration_notice_nocode: 'נכשל בפתיחת הגישה'
+    remote_configuration_notice_nocode: 'נכשל בפתיחת הגישה',
+
+    settings_server_gts: 'קידוד מחדש',
+    settings_server_gts_descr: 'המרה אוטומטית של וידאו לפורמט תואם בעת הצורך.'
 }

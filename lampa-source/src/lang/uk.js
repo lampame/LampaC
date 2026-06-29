@@ -1295,5 +1295,8 @@ export default {
     remote_configuration_waite_text: 'Тепер ви можете передати цей код іншому додатку, щоб надати доступ до налаштувань.',
     remote_configuration_open_button: 'Відкрити доступ',
     remote_configuration_code_life: 'Код дійсний',
-    remote_configuration_notice_nocode: 'Не вдалося відкрити доступ'
+    remote_configuration_notice_nocode: 'Не вдалося відкрити доступ',
+
+    settings_server_gts: 'Перекодування',
+    settings_server_gts_descr: 'Автоматично конвертувати відео у сумісний формат за потреби.'
 }

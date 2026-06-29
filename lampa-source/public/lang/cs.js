@@ -1329,5 +1329,8 @@ export default {
     remote_configuration_waite_text: 'Nyní můžete předat tento kód jiné aplikaci, abyste jí udělili přístup k nastavení.',
     remote_configuration_open_button: 'Otevřít přístup',
     remote_configuration_code_life: 'Kód je platný',
-    remote_configuration_notice_nocode: 'Nepodařilo se otevřít přístup'
+    remote_configuration_notice_nocode: 'Nepodařilo se otevřít přístup',
+
+    settings_server_gts: 'Překódování',
+    settings_server_gts_descr: 'Automaticky převést video do kompatibilního formátu v případě potřeby.'
 };

@@ -1319,5 +1319,8 @@ export default {
     remote_configuration_waite_text: 'You can now pass this code to another application to grant access to settings.',
     remote_configuration_open_button: 'Open Access',
     remote_configuration_code_life: 'Code is valid',
-    remote_configuration_notice_nocode: 'Failed to open access'
+    remote_configuration_notice_nocode: 'Failed to open access',
+
+    settings_server_gts: 'Transcoding',
+    settings_server_gts_descr: 'Automatically convert video to a compatible format when needed.'
 }

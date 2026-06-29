@@ -88,13 +88,15 @@ function pieces(cache){
 
 /**
  * Показываем статистику по торренту
- * @param {string} url 
+ * @param {object} player_data 
  */
-function stat(url){
+function stat(player_data){
     let wait = 0
 
-    elems.stat.text('- / - • - ' + Lang.translate('connected_seeds'))
-    elems.speed.text('--')
+    if(!Torserver.gstWork()){
+        elems.stat.text('- / - • - ' + Lang.translate('connected_seeds'))
+        elems.speed.text('--')
+    }
 
     let update = ()=>{
         // если панель скрыта, то зачем каждую секунду чекать? хватит и 5 сек
@@ -108,7 +110,14 @@ function stat(url){
 
         network.timeout(2000)
 
-        network.silent(url.replace('&preload', '&stat').replace('&play', '&stat'), function (data) {
+        let url = ''
+
+        if(Torserver.gstWork()) url = Torserver.url() + '/gst/' + player_data.torrent_hash + '/heartbeat'
+        else                    url = player_data.url.replace('&preload', '&stat').replace('&play', '&stat')
+
+        network.silent(url, function (data) {
+            if(Torserver.gstWork()) return
+
             elems.stat.text((data.active_peers || 0) + ' / ' + (data.total_peers || 0) + ' • ' + (data.connected_seeders || 0) + ' ' + Lang.translate('connected_seeds'))
             elems.speed.text(Utils.bytesToSize(data.download_speed ? data.download_speed * 8 : 0, true))
 
@@ -126,10 +135,12 @@ function stat(url){
             else{
                 listener.send('stat', {data: data})
             }
+        }, false, false, {
+            dataType: Torserver.gstWork() ? 'text' : 'json'
         })
     }
 
-    stat_timer = setInterval(update,2000)
+    stat_timer = setInterval(update, Torserver.gstWork() ? 10000 : 2000)
 
     update()
 }

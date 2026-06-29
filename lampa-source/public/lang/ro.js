@@ -1318,5 +1318,8 @@ export default {
     remote_configuration_waite_text: 'Acum puteți transmite acest cod unei alte aplicații pentru a acorda acces la setări.',
     remote_configuration_open_button: 'Deschide accesul',
     remote_configuration_code_life: 'Codul este valabil',
-    remote_configuration_notice_nocode: 'Nu s-a putut deschide accesul'
+    remote_configuration_notice_nocode: 'Nu s-a putut deschide accesul',
+
+    settings_server_gts: 'Transcodare',
+    settings_server_gts_descr: 'Convertiți automat videoclipul într-un format compatibil atunci când este necesar.'
 }

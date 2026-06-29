@@ -1326,5 +1326,8 @@ export default {
     remote_configuration_waite_text:  'Przekaż kod do innej aplikacji.',
     remote_configuration_open_button:  'Otwórz dostęp',
     remote_configuration_code_life:  'Kod ważny',
-    remote_configuration_notice_nocode:  'Nie udało się otworzyć dostępu'
+    remote_configuration_notice_nocode:  'Nie udało się otworzyć dostępu',
+
+    settings_server_gts: 'Transkodowanie',
+    settings_server_gts_descr: 'Automatycznie konwertuj filmy do zgodnego formatu, gdy jest to potrzebne.',
 }
