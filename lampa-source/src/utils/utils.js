@@ -859,6 +859,21 @@ function clearCard(card){
     return new_card
 }
 
+function resolutionToQuality(width, height, symbol){
+    let quality = 0
+
+    if(width >= 3830) quality = 2160
+    else if(width >= 2550) quality = 1440
+    else if(width >= 1910) quality = 1080
+    else if(width >= 1014) quality = 720
+    else if(width >= 710)  quality = 480
+    else if(width >= 630)  quality = 360
+
+    if(symbol) quality += symbol
+
+    return quality
+}
+
 function qualityToText(quality){
     let text = ''
 
@@ -1113,6 +1128,7 @@ export default {
     callWaiting,
     clearCard,
     qualityToText,
+    resolutionToQuality,
     createInstance,
     extendParams,
     extendItemsParams,

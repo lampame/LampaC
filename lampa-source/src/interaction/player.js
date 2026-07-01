@@ -1195,6 +1195,8 @@ function play(data){
 
     console.log('Player','url:',data.url)
 
+    if(data.torrent_hash && Torserver.gstWork()) data.hls_manifest_timeout = 60000
+
     if(data.quality){
         if(Arrays.getKeys(data.quality).length == 1) delete data.quality
         else{

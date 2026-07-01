@@ -226,7 +226,8 @@ namespace TelegramBot
         {
             new KeyboardButton[] { "📋 Подписки", "🔍 Проверить" },
             new KeyboardButton[] { "📖 Помощь", "🔓 Отвязать" }
-        }) { ResizeKeyboard = true };
+        })
+        { ResizeKeyboard = true };
 
         static async Task HandleMessage(Message msg)
         {
@@ -471,7 +472,7 @@ namespace TelegramBot
                     var (found, episodes) = await CheckViaTrakt(sub);
                     if (found)
                         return episodes; // Trakt нашёл шоу — верим только ему, даже если 0 новых серий
-                    
+
                     // Trakt не нашёл шоу — fallback на TMDB
                     Console.WriteLine($"[TelegramBot] Trakt: show {sub.tmdb_id} not found, using TMDB");
                     return await CheckViaTmdb(sub);
@@ -483,7 +484,7 @@ namespace TelegramBot
                     return new List<EpisodeInfo>();
                 }
             }
-            
+
             try { return await CheckViaTmdb(sub); }
             catch { return new List<EpisodeInfo>(); }
         }
@@ -496,10 +497,10 @@ namespace TelegramBot
             searchReq.Headers.Add("trakt-api-key", Config.trakt_client_id);
             searchReq.Headers.Add("trakt-api-version", "2");
             var searchResp = await http.SendAsync(searchReq);
-            
+
             Console.WriteLine($"[TelegramBot] Trakt search tmdb/{sub.tmdb_id}: status={searchResp.StatusCode}");
-            
-            if (!searchResp.IsSuccessStatusCode) 
+
+            if (!searchResp.IsSuccessStatusCode)
             {
                 Console.WriteLine($"[TelegramBot] Trakt search failed: {await searchResp.Content.ReadAsStringAsync()}");
                 return (false, result);
@@ -507,18 +508,18 @@ namespace TelegramBot
 
             var searchBody = await searchResp.Content.ReadAsStringAsync();
             var searchData = JArray.Parse(searchBody);
-            
+
             Console.WriteLine($"[TelegramBot] Trakt search results: {searchData.Count} items");
-            
+
             if (searchData.Count == 0) return (false, result);
 
             var showName = searchData[0]?["show"]?.Value<string>("title") ?? sub.title;
             var traktSlug = searchData[0]?["show"]?["ids"]?.Value<string>("slug");
             var traktId = searchData[0]?["show"]?["ids"]?.Value<string>("trakt");
             var showId = traktSlug ?? traktId;
-            
+
             Console.WriteLine($"[TelegramBot] Trakt found: {showName}, slug={traktSlug}, id={traktId}, using={showId}");
-            
+
             if (string.IsNullOrEmpty(showId)) return (false, result);
 
             // Шоу найдено — с этого момента верим только Trakt
@@ -557,7 +558,8 @@ namespace TelegramBot
                     result.Add(new EpisodeInfo
                     {
                         show_name = sub.title, // Русское название из подписки
-                        season = sNum, episode = eNum,
+                        season = sNum,
+                        episode = eNum,
                         title = !string.IsNullOrEmpty(tmdbTitle) ? tmdbTitle : (ep.Value<string>("title") ?? ""),
                         air_date = airDt.ToString("yyyy-MM-dd HH:mm UTC"),
                         overview = !string.IsNullOrEmpty(tmdbOverview) ? tmdbOverview : (ep.Value<string>("overview") ?? ""),
@@ -589,8 +591,11 @@ namespace TelegramBot
                 var still = ep.Value<string>("still_path");
                 result.Add(new EpisodeInfo
                 {
-                    show_name = showName, season = sNum, episode = eNum,
-                    title = ep.Value<string>("name") ?? "", air_date = airDate,
+                    show_name = showName,
+                    season = sNum,
+                    episode = eNum,
+                    title = ep.Value<string>("name") ?? "",
+                    air_date = airDate,
                     image_url = !string.IsNullOrEmpty(still) ? $"https://image.tmdb.org/t/p/w500{still}" : null
                 });
             }
@@ -1093,13 +1098,16 @@ namespace TelegramBot
 
             Subs[key].Add(new Subscription
             {
-                chat_id = user.chat_id, tmdb_id = tmdbId, title = title,
+                chat_id = user.chat_id,
+                tmdb_id = tmdbId,
+                title = title,
                 voice = voice ?? "",
                 voice_source = voiceSource ?? (string.IsNullOrEmpty(mirageOrid) ? "collaps" : "mirage"),
                 mirage_orid = mirageOrid ?? "",
                 mirage_voice_id = mirageVoiceId,
                 collaps_orid = collapsOrid ?? "",
-                last_season = season, last_episode = episode,
+                last_season = season,
+                last_episode = episode,
                 last_voice_episode = voiceEpisode,
                 subscribed_at = DateTime.UtcNow
             });
@@ -1141,7 +1149,8 @@ namespace TelegramBot
 
             return new
             {
-                success = true, linked = true,
+                success = true,
+                linked = true,
                 subscribed = userSubs.Count > 0,
                 voices = userSubs.Select(s => s.voice).ToArray()
             };
@@ -1164,15 +1173,15 @@ namespace TelegramBot
                 .OrderByDescending(s => s.subscribed_at)
                 .Select(s => new
                 {
-                    tmdb_id         = s.tmdb_id,
-                    title           = s.title,
-                    media_type      = s.media_type ?? "tv",
-                    last_season     = s.last_season,
-                    last_episode    = s.last_episode,
+                    tmdb_id = s.tmdb_id,
+                    title = s.title,
+                    media_type = s.media_type ?? "tv",
+                    last_season = s.last_season,
+                    last_episode = s.last_episode,
                     last_voice_episode = s.last_voice_episode,
-                    voice           = s.voice ?? "",
-                    voice_source    = s.voice_source ?? "",
-                    subscribed_at   = s.subscribed_at.ToString("o")
+                    voice = s.voice ?? "",
+                    voice_source = s.voice_source ?? "",
+                    subscribed_at = s.subscribed_at.ToString("o")
                 })
                 .ToArray();
 

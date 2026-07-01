@@ -49,7 +49,7 @@ function set(need, value){
         },10000)
     }
     else if(need == 'stat') stat(value)
-    else if(need == 'bitrate') elems.stat.html(value)
+    else if(need == 'bitrate' && !stat_timer) elems.stat.html(value)
 }
 
 function pieces(cache){
@@ -93,10 +93,8 @@ function pieces(cache){
 function stat(player_data){
     let wait = 0
 
-    if(!Torserver.gstWork()){
-        elems.stat.text('- / - • - ' + Lang.translate('connected_seeds'))
-        elems.speed.text('--')
-    }
+    elems.stat.text('- / - • - ' + Lang.translate('connected_seeds'))
+    elems.speed.text('--')
 
     let update = ()=>{
         // если панель скрыта, то зачем каждую секунду чекать? хватит и 5 сек
@@ -116,10 +114,12 @@ function stat(player_data){
         else                    url = player_data.url.replace('&preload', '&stat').replace('&play', '&stat')
 
         network.silent(url, function (data) {
-            if(Torserver.gstWork()) return
+            let torrent = data.Torrent || data
 
-            elems.stat.text((data.active_peers || 0) + ' / ' + (data.total_peers || 0) + ' • ' + (data.connected_seeders || 0) + ' ' + Lang.translate('connected_seeds'))
-            elems.speed.text(Utils.bytesToSize(data.download_speed ? data.download_speed * 8 : 0, true))
+            elems.stat.text((torrent.active_peers || 0) + ' / ' + (torrent.total_peers || 0) + ' • ' + (torrent.connected_seeders || 0) + ' ' + Lang.translate('connected_seeds'))
+            elems.speed.text(Utils.bytesToSize(torrent.download_speed ? torrent.download_speed * 8 : 0, true))
+
+            if(Torserver.gstWork()) return pieces(data)
 
             let hash = url.match(/link=(.*?)\&/)
 
@@ -135,12 +135,10 @@ function stat(player_data){
             else{
                 listener.send('stat', {data: data})
             }
-        }, false, false, {
-            dataType: Torserver.gstWork() ? 'text' : 'json'
         })
     }
 
-    stat_timer = setInterval(update, Torserver.gstWork() ? 10000 : 2000)
+    stat_timer = setInterval(update, 2000)
 
     update()
 }
