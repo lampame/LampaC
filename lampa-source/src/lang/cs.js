@@ -1332,5 +1332,13 @@ export default {
     remote_configuration_notice_nocode: 'Nepodařilo se otevřít přístup',
 
     settings_server_gts: 'Překódování',
-    settings_server_gts_descr: 'Automaticky převést video do kompatibilního formátu v případě potřeby.'
+    settings_server_gts_descr: 'Automaticky převést video do kompatibilního formátu v případě potřeby.',
+
+    title_metadata: 'Metadata',
+    title_moods: 'Nálady',
+    title_meta_violence: 'Násilí',
+    title_meta_fear: 'Strach',
+    title_meta_profanity: 'Výrazivo',
+    title_meta_sadness: 'Smutek',
+    title_meta_sex: 'Sexualita'
 };

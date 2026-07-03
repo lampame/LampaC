@@ -490,6 +490,14 @@ export default {
     title_comedy_of_2010: 'Юмор 2010-х',
     title_comedy_of_2015: 'Современные комедии',
 
+    title_metadata: 'Метаданные',
+    title_moods: 'Настроения',
+    title_meta_violence: 'Насилие',
+    title_meta_fear: 'Страх',
+    title_meta_profanity: 'Лексика',
+    title_meta_sadness: 'Грусть',
+    title_meta_sex: 'Сексуальность',
+
     reactions_none: 'Нет реакций',
     reactions_fire: 'Супер',
     reactions_nice: 'Неплохо',

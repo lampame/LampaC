@@ -1337,5 +1337,13 @@ export default {
     remote_configuration_notice_nocode: 'Не ўдалося адкрыць доступ',
 
     settings_server_gts: 'Перакадаванне',
-    settings_server_gts_descr: 'Аўтаматычна канвертаваць відэа ў сумяшчальны фармат пры неабходнасці.'
+    settings_server_gts_descr: 'Аўтаматычна канвертаваць відэа ў сумяшчальны фармат пры неабходнасці.',
+
+    title_metadata: 'Метаданыя',
+    title_moods: 'Настроі',
+    title_meta_violence: 'Гвалт',
+    title_meta_fear: 'Страх',
+    title_meta_profanity: 'Лексіка',
+    title_meta_sadness: 'Сум',
+    title_meta_sex: 'Сексуальнасць'
 }

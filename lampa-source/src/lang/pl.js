@@ -1330,4 +1330,12 @@ export default {
 
     settings_server_gts: 'Transkodowanie',
     settings_server_gts_descr: 'Automatycznie konwertuj filmy do zgodnego formatu, gdy jest to potrzebne.',
+
+    title_metadata: 'Metadane',
+    title_moods: 'Nastroje',
+    title_meta_violence: 'Przemoc',
+    title_meta_fear: 'Strach',
+    title_meta_profanity: 'Słownictwo',
+    title_meta_sadness: 'Smutek',
+    title_meta_sex: 'Seksualność',
 }

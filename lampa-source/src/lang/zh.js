@@ -1272,5 +1272,13 @@ export default {
     remote_configuration_notice_nocode: '无法开放访问',
 
     settings_server_gts: '转码',
-    settings_server_gts_descr: '必要时自动将视频转换为兼容格式。'
+    settings_server_gts_descr: '必要时自动将视频转换为兼容格式。',
+
+    title_metadata: '元数据',
+    title_moods: '情绪',
+    title_meta_violence: '暴力',
+    title_meta_fear: '恐惧',
+    title_meta_profanity: '粗口',
+    title_meta_sadness: '悲伤',
+    title_meta_sex: '性'
 }

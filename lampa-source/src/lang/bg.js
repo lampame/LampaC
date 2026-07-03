@@ -1323,5 +1323,13 @@ export default {
     remote_configuration_notice_nocode: 'Неуспешно отваряне на достъп',
 
     settings_server_gts: 'Прекодиране',
-    settings_server_gts_descr: 'Автоматично конвертиране на видеото в съвместим формат при необходимост.'
+    settings_server_gts_descr: 'Автоматично конвертиране на видеото в съвместим формат при необходимост.',
+
+    title_metadata: 'Метаданни',
+    title_moods: 'Настроения',
+    title_meta_violence: 'Насилие',
+    title_meta_fear: 'Страх',
+    title_meta_profanity: 'Лексика',
+    title_meta_sadness: 'Тъга',
+    title_meta_sex: 'Сексуалност'
 }

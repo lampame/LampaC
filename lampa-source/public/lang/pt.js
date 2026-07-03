@@ -1307,5 +1307,13 @@ export default {
     remote_configuration_notice_nocode: 'Falha ao abrir o acesso',
 
     settings_server_gts: 'Transcodificação',
-    settings_server_gts_descr: 'Converter automaticamente o vídeo para um formato compatível quando necessário.'
+    settings_server_gts_descr: 'Converter automaticamente o vídeo para um formato compatível quando necessário.',
+
+    title_metadata: 'Metadados',
+    title_moods: 'Humores',
+    title_meta_violence: 'Violência',
+    title_meta_fear: 'Medo',
+    title_meta_profanity: 'Linguagem',
+    title_meta_sadness: 'Tristeza',
+    title_meta_sex: 'Sexualidade'
 }

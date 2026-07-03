@@ -1322,5 +1322,13 @@ export default {
     remote_configuration_notice_nocode: "Impossible d'ouvrir l'accès",
 
     settings_server_gts: 'Transcodage',
-    settings_server_gts_descr: 'Convertir automatiquement la vidéo dans un format compatible si nécessaire.'
+    settings_server_gts_descr: 'Convertir automatiquement la vidéo dans un format compatible si nécessaire.',
+
+    title_metadata: 'Métadonnées',
+    title_moods: 'Ambiances',
+    title_meta_violence: 'Violence',
+    title_meta_fear: 'Peur',
+    title_meta_profanity: 'Langage',
+    title_meta_sadness: 'Tristesse',
+    title_meta_sex: 'Sexualité'
 }
