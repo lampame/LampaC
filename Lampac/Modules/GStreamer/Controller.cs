@@ -1,9 +1,10 @@
+using GStreamer.Models;
 using GStreamer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IO;
+using Microsoft.Win32.SafeHandles;
 using Shared;
 using Shared.Attributes;
 using Shared.Services;
@@ -12,7 +13,6 @@ using Shared.Services.Utilities;
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -94,17 +94,15 @@ public class GStreamerController : BaseController
             return StatusCode(403);
 
         var gstask = GService.Get(id);
-        if (gstask != null)
-        {
-            await gstask.semaphore.WaitAsync(TimeSpan.FromSeconds(10));
+        if (gstask == null)
+            return StatusCode(404);
 
-            if (GService.TryRemove(id))
-                return Json(new { success = true });
+        gstask.CancelSegmentPrefetch();
 
-            gstask.semaphore.Release();
-        }
+        if (GService.TryRemove(id))
+            return Json(new { success = true });
 
-        return StatusCode(404);
+        return StatusCode(503);
     }
     #endregion
 
@@ -160,69 +158,87 @@ public class GStreamerController : BaseController
         var probe = gstask.probe;
         var playlist = StringBuilderPool.Rent();
 
-        playlist.AppendLine("#EXTM3U");
-        playlist.AppendLine("#EXT-X-VERSION:7");
-        playlist.AppendLine();
-
-        bool hasSubs = false;
-
-        if (probe != null && gstask.conf.subtitles)
+        try
         {
-            foreach (var track in probe.Tracks)
+            playlist.AppendLine("#EXTM3U");
+            playlist.AppendLine("#EXT-X-VERSION:7");
+            playlist.AppendLine();
+
+            bool hasSubs = false;
+
+            if (probe != null && gstask.conf.subtitles)
             {
-                if (track.Type != "subtitle")
-                    continue;
-
-                switch (track.Codec)
+                foreach (var track in probe.Tracks)
                 {
-                    case "text":
-                    case "subrip":
-                    case "utf8":
-                    case "ass":
-                    case "ssa":
-                        break;
-
-                    default:
+                    if (track.Type != "subtitle")
                         continue;
+
+                    switch (track.Codec)
+                    {
+                        case "text":
+                        case "subrip":
+                        case "utf8":
+                        case "ass":
+                        case "ssa":
+                            break;
+
+                        default:
+                            continue;
+                    }
+
+                    hasSubs = true;
+
+                    string lang = string.IsNullOrWhiteSpace(track.Language)
+                        ? "und"
+                        : HlsQuoted(track.Language);
+
+                    string name = string.IsNullOrWhiteSpace(track.Title)
+                        ? $"Subtitle {track.Index}"
+                        : HlsQuoted(track.Title);
+
+                    playlist.AppendLine($"#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"{name}\",LANGUAGE=\"{lang}\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"/gst/{id}/subs/{track.Index}.m3u8\"");
                 }
 
-                hasSubs = true;
+                if (hasSubs)
+                    playlist.AppendLine();
+            }
 
-                string lang = string.IsNullOrWhiteSpace(track.Language)
-                    ? "und"
-                    : track.Language;
+            long bandwidth = gstask.GetHlsBandwidth(
+                out long? averageBandwidth
+            );
 
-                string name = string.IsNullOrWhiteSpace(track.Title)
-                    ? $"Subtitle {track.Index}"
-                    : track.Title;
+            playlist
+                .Append("#EXT-X-STREAM-INF:BANDWIDTH=")
+                .Append(bandwidth);
 
-                playlist.AppendLine($"#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"{name}\",LANGUAGE=\"{lang}\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"/gst/{id}/subs/{track.Index}.m3u8\"");
+            if (averageBandwidth.HasValue)
+            {
+                playlist
+                    .Append(",AVERAGE-BANDWIDTH=")
+                    .Append(averageBandwidth.Value);
+            }
+
+            if (probe != null)
+            {
+                if (probe.Video?.Width > 0 && probe.Video?.Height > 0)
+                    playlist.Append($",RESOLUTION={probe.Video.Width}x{probe.Video.Height}");
             }
 
             if (hasSubs)
-                playlist.AppendLine();
+                playlist.Append(",SUBTITLES=\"subs\"");
+
+            playlist.AppendLine();
+            playlist.AppendLine($"/gst/{id}/video.m3u8?audio={audio}");
+
+            return ContentTo(
+                playlist,
+                "application/vnd.apple.mpegurl; charset=utf-8"
+            );
         }
-
-        playlist.Append("#EXT-X-STREAM-INF:BANDWIDTH=4000000");
-
-        if (probe != null)
+        finally
         {
-            if (probe.Video?.Width > 0 && probe.Video?.Height > 0)
-                playlist.Append($",RESOLUTION={probe.Video.Width}x{probe.Video.Height}");
+            StringBuilderPool.Return(playlist);
         }
-
-        playlist.Append(",CODECS=\"avc1.640028,mp4a.40.2\"");
-
-        if (hasSubs)
-            playlist.Append(",SUBTITLES=\"subs\"");
-
-        playlist.AppendLine();
-        playlist.AppendLine($"/gst/{id}/video.m3u8?audio={audio}");
-
-        return ContentTo(
-            playlist,
-            "application/vnd.apple.mpegurl; charset=utf-8"
-        );
     }
     #endregion
 
@@ -300,31 +316,27 @@ public class GStreamerController : BaseController
 
         if (gstask.initMp4 == null)
         {
-            await gstask.semaphore.WaitAsync(HttpContext.RequestAborted);
-
             try
             {
+                await gstask.semaphore.WaitAsync().ConfigureAwait(false);
+
+                gstask.EnsureSegment(-1, default, audio);
+
                 if (gstask.initMp4 == null)
-                {
-                    gstask.GetSegment(-1, HttpContext.RequestAborted, audio);
-                    gstask.lastSentSegment = 0;
-                }
+                    return StatusCode(502);
             }
             finally
             {
-                gstask.semaphore?.Release();
+                gstask.semaphore.Release();
             }
         }
-
-        if (gstask.initMp4 == null)
-            return StatusCode(502);
 
         Response.Headers.ContentLength = gstask.initMp4.Length;
         return File(gstask.initMp4, "video/mp4", true);
     }
     #endregion
 
-    #region seg
+    #region seg.m4s
     [AllowAnonymous]
     [HttpGet("/gst/{id}/seg/{index:int}.m4s")]
     public async Task VideoSeg(ulong id, int index)
@@ -334,155 +346,97 @@ public class GStreamerController : BaseController
         var gstask = GService.Get(id);
         if (gstask == null)
         {
-            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
 
-        if (gstask.initMp4 == null)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
-            return;
-        }
-
-        await gstask.semaphore.WaitAsync(HttpContext.RequestAborted);
+        gstask.PinSegmentFile(index);
 
         try
         {
-            #region Seek
-            if (gstask.lastSentSegment == -1)
+            if (gstask.IsFrozen)
             {
-                gstask.lastSentSegment = index;
-            }
-            else if (gstask.lastSentSegment != index)
-            {
-                if (index != gstask.lastSentSegment + 1)
+                try
                 {
-                    int diff = index - gstask.lastSentSegment;
-
-                    int cutoff = gstask.conf.tempfs
-                        ? gstask.conf.tempfs_ring > 0 ? 90 + (gstask.conf.tempfs_ring * 25) : 90
-                        : 60;
-
-                    if (diff > 0 && cutoff >= (diff * gstask.conf.segment_seconds))
-                    {
-                        for (int i = 0; i < diff - 1; i++)
-                        {
-                            if (HttpContext.RequestAborted.IsCancellationRequested)
-                                return;
-
-                            if (gstask.lastSentSegment == index)
-                                break;
-
-                            gstask.lastSentSegment++;
-
-                            Segment skipped = gstask.GetSegment(gstask.lastSentSegment, HttpContext.RequestAborted);
-                            if (skipped.data == null)
-                            {
-                                HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
-                                return;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        gstask.lastSentSegment = index;
-                        bool seekok = gstask.Seek(index * gstask.conf.segment_seconds);
-                        if (!seekok)
-                        {
-                            HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
-                            return;
-                        }
-                    }
+                    await gstask.semaphore.WaitAsync().ConfigureAwait(false);
+                    gstask.Defrost();
                 }
-
-                gstask.lastSentSegment = index;
-            }
-            #endregion
-
-            Segment seg = gstask.GetSegment(index, HttpContext.RequestAborted);
-            if (seg.data == null)
-            {
-                HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
-                return;
+                finally
+                {
+                    gstask.semaphore.Release();
+                }
             }
 
-            HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+            gstask.SetClientSegmentIndex(index);
 
-            seg.data.Position = 0;
-
-            Response.ContentType = "video/mp4";
-            Response.Headers.AcceptRanges = "bytes";
-
-            var range = Request.GetTypedHeaders()?.Range;
-
-            if (range != null &&
-                range.Ranges.Count == 1 &&
-                string.Equals(range.Unit.Value, "bytes", StringComparison.OrdinalIgnoreCase))
+            if (gstask.TryOpenSegmentFile(index, out var cachedSegment))
             {
-                var item = range.Ranges.First();
+                gstask.QueueSegmentPrefetch(index);
 
-                long start;
-                long end;
-                long totalLength = seg.data.Length;
-
-                if (item.From.HasValue)
-                {
-                    start = item.From.Value;
-                    end = item.To ?? totalLength - 1;
-                }
-                else
-                {
-                    long suffixLength = item.To ?? 0;
-
-                    if (suffixLength <= 0)
-                    {
-                        Response.StatusCode = 416;
-                        Response.Headers.ContentRange = $"bytes */{totalLength}";
-                        return;
-                    }
-
-                    suffixLength = Math.Min(suffixLength, totalLength);
-
-                    start = totalLength - suffixLength;
-                    end = totalLength - 1;
-                }
-
-                if (start >= totalLength || end < start)
-                {
-                    Response.StatusCode = 416;
-                    Response.Headers.ContentRange = $"bytes */{totalLength}";
-                    return;
-                }
-
-                end = Math.Min(end, totalLength - 1);
-
-                Response.StatusCode = 206;
-                Response.Headers.ContentRange = $"bytes {start}-{end}/{totalLength}";
-
-                Response.ContentLength = end - start + 1;
-
-                await CopyRange(
-                    seg.data,
-                    Response.Body,
-                    start,
-                    Response.ContentLength.Value,
+                await SendSegmentFile(
+                    cachedSegment,
                     HttpContext.RequestAborted
                 );
             }
             else
             {
-                Response.StatusCode = StatusCodes.Status200OK;
-                Response.ContentLength = seg.data.Length;
+                gstask.CancelSegmentPrefetch();
 
-                await seg.data.CopyToAsync(
-                    Response.Body,
+                try
+                {
+                    await gstask.semaphore.WaitAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    Response.StatusCode = StatusCodes.Status410Gone;
+                    return;
+                }
+
+                CachedSegmentFile segmentFile = default;
+
+                try
+                {
+                    if (!gstask.TryOpenSegmentFile(index, out segmentFile))
+                    {
+                        if (!gstask.EnsureClientSegment(index, HttpContext.RequestAborted))
+                        {
+                            if (HttpContext.RequestAborted.IsCancellationRequested)
+                                return;
+
+                            Response.StatusCode = StatusCodes.Status502BadGateway;
+                            return;
+                        }
+
+                        if (!gstask.TryOpenSegmentFile(index, out segmentFile))
+                        {
+                            if (HttpContext.RequestAborted.IsCancellationRequested)
+                                return;
+
+                            Response.StatusCode = StatusCodes.Status502BadGateway;
+                            return;
+                        }
+                    }
+                }
+                finally
+                {
+                    gstask.semaphore.Release();
+                }
+
+                gstask.QueueSegmentPrefetch(index);
+
+                await SendSegmentFile(
+                    segmentFile,
                     HttpContext.RequestAborted
                 );
             }
         }
         finally
         {
-            gstask.semaphore?.Release();
+            gstask.UnpinSegmentFile(index);
         }
     }
     #endregion
@@ -493,6 +447,8 @@ public class GStreamerController : BaseController
     [HttpGet("/gst/{id}/subs/{index}.m3u8")]
     public ActionResult SubsPlaylist(ulong id, int index)
     {
+        SetHeadersNoCache();
+
         var gstask = GService.Get(id);
         if (gstask == null)
             return NotFound();
@@ -514,7 +470,7 @@ public class GStreamerController : BaseController
             playlist.Append("#EXT-X-TARGETDURATION:")
                     .Append(segmentSeconds)
                     .Append('\n');
-            playlist.AppendLine("#EXT-X-MEDIA-SEQUENCE:0"); ;
+            playlist.AppendLine("#EXT-X-MEDIA-SEQUENCE:0");
 
             for (int i = 0; i < count; i++)
             {
@@ -558,53 +514,165 @@ public class GStreamerController : BaseController
         if (!gstask.conf.subtitles)
             return Ok();
 
-        await gstask.semaphore.WaitAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+        var sb = StringBuilderPool.Rent();
 
         try
         {
-            StringBuilder vtt = gstask.GetSubtitleVtt(StringBuilderPool.ThreadInstance, index, seg);
+            if (!gstask.GetSubtitleVtt(sb, index, seg))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+
+                sb.Clear();
+                gstask.GetSubtitleVtt(sb, index, seg);
+            }
 
             return ContentTo(
-                vtt,
+                sb,
                 "text/vtt; charset=utf-8"
             );
         }
         finally
         {
-            gstask.semaphore.Release();
+            StringBuilderPool.Return(sb);
         }
     }
     #endregion
 
     #region Helpers
-    static async Task CopyRange(RecyclableMemoryStream data, Stream body, long offset, long count, CancellationToken cancellationToken)
+    async Task SendSegmentFile(CachedSegmentFile file, CancellationToken cancellationToken)
     {
-        using (var nbuf = new BufferPool())
+        try
         {
-            data.Position = offset;
-
-            while (count > 0)
+            using (file)
             {
-                int length = (int)Math.Min(
-                    nbuf.Memory.Length,
-                    count
-                );
+                if (!file.IsValid)
+                {
+                    Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
 
-                int read = data.Read(
-                    nbuf.Span.Slice(0, length)
-                );
+                HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
-                if (read == 0)
-                    break;
+                Response.ContentType = "video/mp4";
+                Response.Headers.AcceptRanges = "bytes";
 
-                await body.WriteAsync(
-                    nbuf.Memory.Slice(0, read),
-                    cancellationToken
-                );
+                long totalLength = file.Length;
 
-                count -= read;
+                var range = Request.GetTypedHeaders()?.Range;
+
+                if (range != null &&
+                    range.Ranges.Count == 1 &&
+                    string.Equals(range.Unit.Value, "bytes", StringComparison.OrdinalIgnoreCase))
+                {
+                    var item = range.Ranges.First();
+
+                    long start;
+                    long end;
+
+                    if (item.From.HasValue)
+                    {
+                        start = item.From.Value;
+                        end = item.To ?? totalLength - 1;
+                    }
+                    else
+                    {
+                        long suffixLength = item.To ?? 0;
+
+                        if (suffixLength <= 0)
+                        {
+                            Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+                            Response.Headers.ContentRange = $"bytes */{totalLength}";
+                            return;
+                        }
+
+                        suffixLength = Math.Min(suffixLength, totalLength);
+
+                        start = totalLength - suffixLength;
+                        end = totalLength - 1;
+                    }
+
+                    if (start >= totalLength || end < start)
+                    {
+                        Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+                        Response.Headers.ContentRange = $"bytes */{totalLength}";
+                    }
+                    else
+                    {
+                        end = Math.Min(end, totalLength - 1);
+
+                        Response.StatusCode = StatusCodes.Status206PartialContent;
+                        Response.Headers.ContentRange = $"bytes {start}-{end}/{totalLength}";
+                        Response.ContentLength = end - start + 1;
+
+                        await CopyFileRange(
+                            file.Handle,
+                            Response.Body,
+                            start,
+                            Response.ContentLength.Value,
+                            cancellationToken
+                        );
+                    }
+                }
+                else
+                {
+                    Response.StatusCode = StatusCodes.Status200OK;
+                    Response.ContentLength = totalLength;
+
+                    await CopyFileRange(
+                        file.Handle,
+                        Response.Body,
+                        0,
+                        totalLength,
+                        cancellationToken
+                    );
+                }
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    static async Task CopyFileRange(
+        SafeFileHandle handle,
+        Stream body,
+        long offset,
+        long count,
+        CancellationToken cancellationToken
+    )
+    {
+        using var buffer = new BufferPool();
+
+        while (count > 0)
+        {
+            int length = (int)Math.Min(buffer.Memory.Length, count);
+
+            int read = await RandomAccess.ReadAsync(
+                handle,
+                buffer.Memory.Slice(0, length),
+                offset,
+                cancellationToken
+            );
+
+            if (read <= 0)
+                break;
+
+            await body.WriteAsync(
+                buffer.Memory.Slice(0, read),
+                cancellationToken
+            );
+
+            offset += read;
+            count -= read;
+        }
+    }
+
+    static string HlsQuoted(string value)
+    {
+        return value
+            .Replace('"', '\'')
+            .Replace('\r', ' ')
+            .Replace('\n', ' ');
     }
     #endregion
 }

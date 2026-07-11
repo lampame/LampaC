@@ -7,6 +7,8 @@ public class ModuleConf : ModuleBaseConf
 {
     public bool enable { get; set; }
 
+    public string debugType { get; set; }
+
     public int inactiveMinutes { get; set; }
 
 
@@ -20,14 +22,27 @@ public class ModuleConf : ModuleBaseConf
 
 
     /// <summary>
-    /// файловый буфер http потока
+    /// задний кеш m4s
     /// </summary>
-    public bool tempfs { get; set; } = true;
+    public int segment_past { get; set; } = 1;
 
     /// <summary>
-    /// количество буферных блоков videoQueue
+    /// количество буферных m4s
     /// </summary>
-    public int tempfs_ring { get; set; }
+    public int segment_buffer { get; set; } = 10;
+
+    /// <summary>
+    /// без transcode видео - примерная длительность сегмента
+    /// для transcode видео - точная длительность сегмента
+    /// </summary>
+    public int segment_seconds { get; set; } = 9;
+
+    /// <summary>
+    /// граница выравнивания
+    /// </summary>
+    public int segment_diff { get; set; } = 10;
+
+    public bool subtitles { get; set; } = true;
 
 
     /// <summary>
@@ -46,13 +61,14 @@ public class ModuleConf : ModuleBaseConf
     public int aac_channels { get; set; }
 
 
-    public int segment_seconds { get; set; } = 6;
-
-    public bool subtitles { get; set; } = true;
-
-
+    /// <summary>
+    /// если нужна нарезка m4s сегментов срого по segment_seconds
+    /// </summary>
     public bool transcodeH264 { get; set; }
 
+    /// <summary>
+    /// конвертировать видео в h.265 > h.264
+    /// </summary>
     public bool transcodeH265 { get; set; }
 
     public bool transcodeAV1 { get; set; }
@@ -60,15 +76,7 @@ public class ModuleConf : ModuleBaseConf
     public bool transcodeVP9 { get; set; }
 
     /// <summary>
-    /// 10 Мбит/c
+    /// 14 Мбит/c
     /// </summary>
-    public int video_bitrate { get; set; } = 10_000;
-
-
-    /// <summary>
-    /// Мбит/c
-    /// </summary>
-    public int pipeline_downloadRate { get; set; }
-
-    public int pipeline_appsinkBuffers { get; set; } = 1000;
+    public int video_bitrate { get; set; } = 14_000;
 }

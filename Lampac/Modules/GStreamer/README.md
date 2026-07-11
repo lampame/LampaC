@@ -21,21 +21,21 @@ http://IP:9118/gst.js
 | `enable` | `false` | Включает модуль. |
 | `allowed_uids` | не задано | Список разрешённых UID или токенов. Если не задан, модуль доступен всем пользователям. |
 | `conf_uids` | не задано | Индивидуальные настройки pipeline для конкретных UID. |
-| `inactiveMinutes` | `10` | Через сколько минут без активности остановить задачу транскодинга. |
+| `inactiveMinutes` | `10` | Через сколько минут без активности заморозить задачу транскодинга. |
 | `gst_version` | `1.28` | Версия установленного GStreamer. Для версии ниже 1.28 укажите фактическое значение, например `1.26`. |
 | `PATH` | `C:\Program Files\gstreamer\1.0\mingw_x86_64` | Корневой каталог GStreamer в Windows. |
-| `tempfs` | `true` | Использовать дисковый кольцевой буфер для входного HTTP-потока в `cache/gstranscoding`. |
-| `tempfs_ring` | `0` | Каждая единица ~30s буфера (10 = ~300s). |
-| `segment_seconds` | `6` | Целевая длительность HLS/fMP4-сегмента в секундах. |
-| `aac_bitrate` | `256` | Битрейт AAC в кбит/с. |
+| `segment_past` | `1` | Задний кеш fMP4. |
+| `segment_buffer` | `10` | Количество буферных fMP4 |
+| `segment_seconds` | `9` | Целевая длительность HLS/fMP4-сегмента в секундах. |
+| `segment_diff` | `10` | Граница выравнивания HLS/fMP4-сегмента в секундах. |
+| `aac_bitrate` | `256` | Битрейт AAC в кбит/с, для channels >2 умножается на 2. |
 | `aac_samplerate` | авто | Частота дискретизации AAC в Гц. По умолчанию берётся из исходной дорожки. |
 | `aac_channels` | авто | Количество каналов AAC. По умолчанию берётся из исходной дорожки (до 7.1 / 8 каналов). |
-| `video_bitrate` | `10000` | Битрейт H.264 в кбит/с при перекодировании видео. |
+| `video_bitrate` | `14000` | Битрейт H.264 в кбит/с при перекодировании видео. |
 | `transcodeH264` | `false` | Перекодировать входной H.264 в H.264. |
 | `transcodeH265` | `false` | Перекодировать H.265 в H.264. |
 | `transcodeAV1` | `false` | Перекодировать AV1 в H.264. |
 | `transcodeVP9` | `false` | Перекодировать VP9 в H.264. |
-| `pipeline_downloadRate` | `0` без ограничений | Максимальная скорость загрузки в Мбит/c. |
 
 Полный пример:
 
@@ -46,21 +46,21 @@ http://IP:9118/gst.js
     "device-uid-1",
     "device-uid-2"
   ],
-  "inactiveMinutes": 5,
+  "inactiveMinutes": 10,
   "gst_version": 1.28,
   "PATH": "C:\\Program Files\\gstreamer\\1.0\\mingw_x86_64",
 
-  "tempfs": true,
-  "tempfs_ring": 1,
+  "segment_past": 1,
+  "segment_buffer": 10,
+  "segment_seconds": 9,
 
-  "segment_seconds": 6,
   "aac_bitrate": 256,
-  "video_bitrate": 5000,
+  "video_bitrate": 14000,
 
   "transcodeH264": false,
-  "transcodeH265": true,
-  "transcodeAV1": true,
-  "transcodeVP9": true
+  "transcodeH265": false,
+  "transcodeAV1": false,
+  "transcodeVP9": false
 }
 ```
 
@@ -77,28 +77,11 @@ http://IP:9118/gst.js
     "tv-uid",
     "mobile-uid"
   ],
-
-  "tempfs": true,
-  "tempfs_ring": 1,
-  "segment_seconds": 6,
-  "aac_bitrate": 256,
-  "video_bitrate": 5000,
-  "transcodeH264": false,
-  "transcodeH265": true,
-  "transcodeAV1": true,
-  "transcodeVP9": true
-
   "conf_uids": {
     "mobile-uid": {
-      "tempfs": true,
-      "tempfs_ring": 1,
       "segment_seconds": 4,
       "aac_bitrate": 192,
-      "video_bitrate": 3000,
-      "transcodeH264": true,
-      "transcodeH265": true,
-      "transcodeAV1": true,
-      "transcodeVP9": true
+      "video_bitrate": 3000
     }
   }
 }

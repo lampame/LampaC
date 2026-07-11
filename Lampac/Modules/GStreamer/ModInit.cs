@@ -25,16 +25,17 @@ public class ModInit : IModuleLoaded
         modpath = initspace.path;
 
         string cachePath = Path.Combine("cache", "gstranscoding");
-        Directory.CreateDirectory(cachePath);
 
-        foreach (string file in Directory.GetFiles(cachePath))
+        if (Directory.Exists(cachePath))
         {
             try
             {
-                File.Delete(file);
+                Directory.Delete(cachePath, true);
             }
             catch { }
         }
+
+        Directory.CreateDirectory(cachePath);
 
         updateConf();
         EventListener.UpdateInitFile += updateConf;

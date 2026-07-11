@@ -9,7 +9,8 @@ namespace GStreamer;
 
 public readonly record struct Segment(
     RecyclableMemoryStream data,
-    double startSeconds
+    ulong startNs,
+    ulong endNs
 );
 
 /// <summary>
@@ -64,9 +65,12 @@ public sealed class Mp4BoxReader : IDisposable
     const uint TrunSampleFlagsPresent = 0x000400;
     const uint TrunCompositionOffsetPresent = 0x000800;
 
+    const ulong GstSecond = 1_000_000_000UL;
+
     readonly Action<byte[]> _onInit;
     readonly Action<Segment> _onSegment;
-    readonly double _segmentSeconds;
+    readonly int _segmentSeconds;
+    readonly int _segmentDiff;
 
     readonly MemoryStream _init = new();
     readonly MemoryStream _sourceMoof = new(16 * 1024);
@@ -99,8 +103,11 @@ public sealed class Mp4BoxReader : IDisposable
     TrackInfo _videoTrack;
     TrackInfo _audioTrack;
 
-    double _tfdtOffsetSeconds;
+    ulong _tfdtOffsetNs;
     uint _sequence = 1;
+
+    ulong _lastVideoEndTime;
+    int _completedVideoSegmentsCount;
 
     enum Target
     {
@@ -186,13 +193,14 @@ public sealed class Mp4BoxReader : IDisposable
     public Mp4BoxReader(
         Action<byte[]> onInit,
         Action<Segment> onSegment,
-        double segmentSeconds
+        int segmentSeconds,
+        int segmentDiff
     )
     {
         _onInit = onInit ?? throw new ArgumentNullException(nameof(onInit));
         _onSegment = onSegment ?? throw new ArgumentNullException(nameof(onSegment));
 
-        if (!double.IsFinite(segmentSeconds) || segmentSeconds <= 0)
+        if (segmentSeconds <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(segmentSeconds),
@@ -202,6 +210,7 @@ public sealed class Mp4BoxReader : IDisposable
         }
 
         _segmentSeconds = segmentSeconds;
+        _segmentDiff = segmentDiff;
     }
 
     public void ResetSegment()
@@ -210,15 +219,23 @@ public sealed class Mp4BoxReader : IDisposable
         _segment = null;
     }
 
-    public void SeekReset(double seconds = 0)
+    public void SeekReset()
+    {
+        SeekReset(0UL);
+    }
+
+    public void SeekReset(ulong offsetNs)
     {
         _initDone = false;
         _moovDone = false;
         _videoTrack = default;
         _audioTrack = default;
-        _tfdtOffsetSeconds = double.IsFinite(seconds) && seconds > 0 ? seconds : 0;
+        _tfdtOffsetNs = offsetNs == ulong.MaxValue ? 0 : offsetNs;
         _sequence = 1;
         _styp = null;
+
+        _lastVideoEndTime = 0;
+        _completedVideoSegmentsCount = 0;
 
         Reset(_init);
         Reset(_sourceMoof);
@@ -231,6 +248,13 @@ public sealed class Mp4BoxReader : IDisposable
         ResetPrefix();
         ResetBox();
         ResetSegment();
+    }
+
+    public void SetTimelineOffsetNs(ulong offsetNs)
+    {
+        _tfdtOffsetNs = offsetNs == ulong.MaxValue
+            ? 0
+            : offsetNs;
     }
 
     public void Push(Gst.Buffer buffer, int size)
@@ -723,6 +747,8 @@ public sealed class Mp4BoxReader : IDisposable
         return true;
     }
 
+    double _debugLastDiff;
+
     int SelectVideoCount()
     {
         if (_video.Count == 0)
@@ -737,14 +763,83 @@ public sealed class Mp4BoxReader : IDisposable
         }
 
         ulong target = ToUnits(_segmentSeconds, _videoTrack.Timescale);
-        ulong duration = 0;
+        bool takeFirstSyncBoundary = false;
 
-        // Нужен один fragment look-ahead: следующий segment должен начинаться с sync sample.
+        if (_completedVideoSegmentsCount > 0 && _segmentDiff > 0)
+        {
+            // ожидаемая позиция видео сегмента браузером
+            ulong expectedEnd = checked(
+                (ulong)_completedVideoSegmentsCount *
+                (ulong)_segmentSeconds *
+                _videoTrack.Timescale
+            );
+
+            // на сколько реальная позиция видео сегмента должна быть выше expectedEnd
+            ulong diff = checked(
+                (ulong)(_segmentSeconds + _segmentDiff) *
+                _videoTrack.Timescale
+            );
+
+            // реальная позиция видео сегмента выше expectedEnd
+            if (_lastVideoEndTime > expectedEnd)
+            {
+                ulong ahead = _lastVideoEndTime - expectedEnd;
+
+                if (ahead >= diff)
+                {
+                    takeFirstSyncBoundary = true;
+
+                    if (ModInit.conf.debugType == "mp4box-diff")
+                    {
+                        double lastDiff = (double)(ahead - diff) / _videoTrack.Timescale;
+
+                        if (lastDiff != _debugLastDiff)
+                        {
+                            _debugLastDiff = lastDiff;
+                            Console.WriteLine($"diff: {lastDiff:F3}s");
+                        }
+                    }
+                }
+            }
+        }
+
+        ulong duration = 0;
+        int selectedCount = 0;
+
+        // Нужен один fragment look-ahead:
+        // следующий сегмент должен начинаться с sync sample
         for (int i = 0; i + 1 < _video.Count; i++)
         {
             duration = checked(duration + _video[i].Duration);
 
-            if (duration >= target && _video[i + 1].StartsWithSync)
+            if (!takeFirstSyncBoundary)
+            {
+                if (duration >= target && _video[i + 1].StartsWithSync)
+                    return i + 1;
+
+                continue;
+            }
+
+            if (duration <= target)
+            {
+                if (_video[i + 1].StartsWithSync)
+                {
+                    selectedCount = i + 1;
+
+                    if (duration == target)
+                        return selectedCount;
+                }
+
+                continue;
+            }
+
+            // Есть допустимая граница <= target
+            if (selectedCount > 0)
+                return selectedCount;
+
+            // До target sync-границ не было:
+            // ждём первую допустимую границу выше target
+            if (_video[i + 1].StartsWithSync)
                 return i + 1;
         }
 
@@ -1130,21 +1225,27 @@ public sealed class Mp4BoxReader : IDisposable
             ? _video[0]
             : _audio[0];
 
-        double startSeconds =
-            (double)first.DecodeTime /
-            first.Timescale;
+        Fragment last = hasVideo
+            ? _video[videoCount - 1]
+            : _audio[audioCount - 1];
 
         _segment.Position = 0;
 
-        _onSegment(
-            new Segment(
-                _segment,
-                startSeconds
-            )
-        );
+        var output = _segment;
+        _segment = null;
+
+        _onSegment(new Segment(
+            output,
+            AddClockTime(_tfdtOffsetNs, ToNanoseconds(first.DecodeTime, first.Timescale)),
+            AddClockTime(_tfdtOffsetNs, ToNanoseconds(last.EndTime, last.Timescale))
+        ));
 
         if (hasVideo)
+        {
+            _lastVideoEndTime = last.EndTime;
+            _completedVideoSegmentsCount++;
             Remove(_video, videoCount);
+        }
 
         if (hasAudio)
             Remove(_audio, audioCount);
@@ -1229,9 +1330,10 @@ public sealed class Mp4BoxReader : IDisposable
 
         WriteHeader(output, (uint)size64, BoxTraf);
         output.Write(first.Tfhd);
+
         WriteTfdt(
             output,
-            AddTfdtOffset(first.DecodeTime, first.Timescale, _tfdtOffsetSeconds)
+            AddTfdtOffset(first.DecodeTime, first.Timescale, _tfdtOffsetNs)
         );
 
         for (int i = 0; i < count; i++)
@@ -2239,14 +2341,15 @@ public sealed class Mp4BoxReader : IDisposable
         return true;
     }
 
-    static ulong ToUnits(double seconds, uint timescale)
+    static ulong ToUnits(int seconds, uint timescale)
     {
-        double value = seconds * timescale;
+        if (seconds <= 0)
+            throw new InvalidDataException("Invalid segment duration.");
 
-        if (!double.IsFinite(value) || value < 0 || value > ulong.MaxValue)
-            throw new InvalidDataException("Invalid timeline value.");
+        if (timescale == 0)
+            throw new InvalidDataException("Invalid timescale.");
 
-        return (ulong)Math.Ceiling(value);
+        return checked((ulong)seconds * timescale);
     }
 
     static ulong ConvertTimeCeiling(
@@ -2267,17 +2370,20 @@ public sealed class Mp4BoxReader : IDisposable
         return (ulong)result;
     }
 
-    static ulong AddTfdtOffset(ulong value, uint timescale, double seconds)
+    static ulong AddTfdtOffset(ulong value, uint timescale, ulong offsetNs)
     {
-        if (seconds <= 0)
+        if (offsetNs == 0)
             return value;
 
-        double units = seconds * timescale;
+        if (timescale == 0)
+            throw new InvalidDataException("Invalid timescale.");
 
-        if (!double.IsFinite(units) || units < 0 || units > ulong.MaxValue)
+        UInt128 units = ((UInt128)offsetNs * timescale + GstSecond / 2) / GstSecond;
+
+        if (units > ulong.MaxValue)
             throw new InvalidDataException("Invalid tfdt offset.");
 
-        return checked(value + (ulong)Math.Round(units));
+        return checked(value + (ulong)units);
     }
 
     static void WriteTfdt(Stream output, ulong decodeTime)
@@ -2480,5 +2586,25 @@ public sealed class Mp4BoxReader : IDisposable
         _sourceMoof.Dispose();
         _sourceStyp.Dispose();
         _init.Dispose();
+    }
+
+    static ulong ToNanoseconds(ulong value, uint timescale)
+    {
+        if (timescale == 0)
+            throw new InvalidDataException("Invalid timescale.");
+
+        UInt128 result = ((UInt128)value * GstSecond + timescale / 2) / timescale;
+
+        if (result > ulong.MaxValue)
+            throw new InvalidDataException("Timeline value is too large.");
+
+        return (ulong)result;
+    }
+
+    static ulong AddClockTime(ulong left, ulong right)
+    {
+        return ulong.MaxValue - left < right
+            ? ulong.MaxValue
+            : left + right;
     }
 }
