@@ -47,6 +47,10 @@ public sealed class Mp4BoxReader : IDisposable
     const uint BoxHdlr = 0x68646C72;
     const uint BoxMvex = 0x6D766578;
     const uint BoxTrex = 0x74726578;
+    const uint BoxMfra = 0x6D667261;
+
+    bool _sourceMfraDone;
+    bool _sourceFinalMoovDone;
 
     const uint HandlerVideo = 0x76696465; // vide
     const uint HandlerAudio = 0x736F756E; // soun
@@ -228,6 +232,8 @@ public sealed class Mp4BoxReader : IDisposable
     {
         _initDone = false;
         _moovDone = false;
+        _sourceMfraDone = false;
+        _sourceFinalMoovDone = false;
         _videoTrack = default;
         _audioTrack = default;
         _tfdtOffsetNs = offsetNs == ulong.MaxValue ? 0 : offsetNs;
@@ -365,9 +371,7 @@ public sealed class Mp4BoxReader : IDisposable
         if (videoCount > 0 && audioCount > 0)
         {
             ulong videoEnd = _video[videoCount - 1].EndTime;
-
-            if (TryPrepareAudioForVideoEnd(videoEnd, out int selectedAudioCount))
-                audioCount = selectedAudioCount;
+            TryPrepareAudioForVideoEnd(videoEnd, out audioCount);
         }
 
         BuildSegment(
@@ -489,84 +493,192 @@ public sealed class Mp4BoxReader : IDisposable
         _boxRemaining = size - (ulong)headerSize;
         _target = Target.None;
 
-        // mp4mux writes init first and starts media with styp or moof.
         if (!_initDone && (_boxType == BoxStyp || _boxType == BoxMoof))
             CompleteInit();
 
         if (!_initDone)
         {
             if (_boxType == BoxMdat)
-                throw new InvalidDataException("mdat appeared before init was completed.");
+            {
+                throw new InvalidDataException(
+                    "mdat appeared before init was completed."
+                );
+            }
+
+            if (_boxType == BoxMfra)
+            {
+                throw new InvalidDataException(
+                    "mfra appeared before init was completed."
+                );
+            }
 
             _target = Target.Init;
             Write(_boxHeader.AsSpan(0, headerSize));
             return;
         }
 
+        // После rewritten terminal moov никаких новых MP4 boxes
+        // в append-only представлении appsink уже быть не должно
+        if (_sourceFinalMoovDone)
+        {
+            throw new InvalidDataException(
+                $"Unexpected top-level MP4 box after terminal moov: " +
+                $"{FourCC(_boxType)}."
+            );
+        }
+
+        if (_sourceMfraDone && _boxType != BoxMoov)
+        {
+            throw new InvalidDataException(
+                $"Only the rewritten terminal moov is allowed after mfra; " +
+                $"got {FourCC(_boxType)}."
+            );
+        }
+
         switch (_boxType)
         {
             case BoxMoof:
-                if (_pending != null)
-                    throw new InvalidDataException("A new moof appeared before the previous mdat.");
-
-                Reset(_sourceMoof);
-                _sourcePayloadFromMoof = 0;
-                _target = Target.Moof;
-                Write(_boxHeader.AsSpan(0, headerSize));
-                return;
-
-            case BoxMdat:
-                if (_pending == null)
-                    throw new InvalidDataException("mdat does not follow a supported moof.");
-
-                _sourcePayload?.Dispose();
-                _sourcePayload = PoolInvk.msm.GetStream();
-                _sourcePayloadFromMoof = checked(
-                    _sourcePayloadFromMoof + headerSize
-                );
-                _target = Target.Payload;
-                return;
-
-            case BoxSidx:
-                // Source sidx offsets become invalid after fragment merging.
-                if (_pending != null)
-                    _sourcePayloadFromMoof = checked(
-                        _sourcePayloadFromMoof + (long)size
-                    );
-                return;
-
-            case BoxStyp:
-                if (_pending != null)
                 {
-                    throw new InvalidDataException(
-                        "styp cannot appear between moof and mdat."
-                    );
+                    if (_pending != null)
+                    {
+                        throw new InvalidDataException(
+                            "A new moof appeared before the previous mdat."
+                        );
+                    }
+
+                    Reset(_sourceMoof);
+                    _sourcePayloadFromMoof = 0;
+
+                    _target = Target.Moof;
+                    Write(_boxHeader.AsSpan(0, headerSize));
+                    return;
                 }
 
-                Reset(_sourceStyp);
-                _target = Target.Styp;
-                Write(_boxHeader.AsSpan(0, headerSize));
-                return;
+            case BoxMdat:
+                {
+                    if (_pending == null)
+                    {
+                        throw new InvalidDataException(
+                            "mdat does not follow a supported moof."
+                        );
+                    }
+
+                    _sourcePayload?.Dispose();
+                    _sourcePayload = PoolInvk.msm.GetStream();
+
+                    _sourcePayloadFromMoof = checked(
+                        _sourcePayloadFromMoof + headerSize
+                    );
+
+                    _target = Target.Payload;
+                    return;
+                }
+
+            case BoxSidx:
+                {
+                    // Source sidx offsets become invalid after fragment merging
+                    // Не сохраняем box, но учитываем его размер, если он почему-то расположен между moof и mdat
+                    if (_pending != null)
+                    {
+                        _sourcePayloadFromMoof = checked(
+                            _sourcePayloadFromMoof + (long)size
+                        );
+                    }
+
+                    return;
+                }
+
+            case BoxStyp:
+                {
+                    if (_pending != null)
+                    {
+                        throw new InvalidDataException(
+                            "styp cannot appear between moof and mdat."
+                        );
+                    }
+
+                    Reset(_sourceStyp);
+
+                    _target = Target.Styp;
+                    Write(_boxHeader.AsSpan(0, headerSize));
+                    return;
+                }
 
             case BoxEmsg:
             case BoxFree:
             case BoxPrft:
-                if (_pending != null)
                 {
-                    _sourcePayloadFromMoof = checked(
-                        _sourcePayloadFromMoof + (long)size
-                    );
+                    if (_pending != null)
+                    {
+                        _sourcePayloadFromMoof = checked(
+                            _sourcePayloadFromMoof + (long)size
+                        );
+                    }
+
+                    EnsurePrefix();
+
+                    _target = Target.Prefix;
+                    Write(_boxHeader.AsSpan(0, headerSize));
+                    return;
                 }
 
-                EnsurePrefix();
-                _target = Target.Prefix;
-                Write(_boxHeader.AsSpan(0, headerSize));
-                return;
+            case BoxMfra:
+                {
+                    if (_pending != null)
+                    {
+                        throw new InvalidDataException(
+                            "mfra cannot appear between moof and mdat."
+                        );
+                    }
+
+                    if (_sourceMfraDone)
+                        throw new InvalidDataException("Duplicate terminal mfra.");
+
+                    // mfra содержит file-level index с абсолютными offsets исходного GStreamer MP4-потока
+                    // После объединения и пересегментации offsets недействительны
+                    //
+                    // Target.None: тело box будет полностью прочитано и отброшено
+                    return;
+                }
+
+            case BoxMoov:
+                {
+                    if (!_sourceMfraDone)
+                    {
+                        throw new InvalidDataException(
+                            "Unexpected moov after init."
+                        );
+                    }
+
+                    if (_sourceFinalMoovDone)
+                    {
+                        throw new InvalidDataException(
+                            "Duplicate terminal moov."
+                        );
+                    }
+
+                    if (_pending != null)
+                    {
+                        throw new InvalidDataException(
+                            "Final moov cannot appear between moof and mdat."
+                        );
+                    }
+
+                    // Это rewritten moov от non-streamable mp4mux
+                    // Исходный init segment уже передан через _onInit
+                    // Повторный moov для HLS segments не нужен
+                    //
+                    // Target.None: полностью прочитать и отбросить
+                    return;
+                }
 
             default:
-                throw new InvalidDataException(
-                    $"Unsupported top-level MP4 box after init: {FourCC(_boxType)}."
-                );
+                {
+                    throw new InvalidDataException(
+                        $"Unsupported top-level MP4 box after init: " +
+                        $"{FourCC(_boxType)}."
+                    );
+                }
         }
     }
 
@@ -606,9 +718,19 @@ public sealed class Mp4BoxReader : IDisposable
                 Reset(_sourceStyp);
                 return false;
 
+            case BoxMfra:
+                _sourceMfraDone = true;
+                return false;
+
             case BoxMoov:
                 if (_initDone)
-                    throw new InvalidDataException("Unexpected moov after init.");
+                {
+                    if (!_sourceMfraDone || _sourceFinalMoovDone)
+                        throw new InvalidDataException("Unexpected moov after init.");
+
+                    _sourceFinalMoovDone = true;
+                    return false;
+                }
 
                 _moovDone = true;
                 return false;
@@ -1592,6 +1714,14 @@ public sealed class Mp4BoxReader : IDisposable
             ? sampleDescriptionIndex
             : trex.DescriptionIndex;
 
+        if (effectiveSampleDescriptionIndex == 0)
+        {
+            error =
+                $"sample_description_index is zero for track_ID={trackId}";
+
+            return false;
+        }
+
         if (defaultDuration == 0)
             defaultDuration = trex.Duration;
 
@@ -1601,11 +1731,15 @@ public sealed class Mp4BoxReader : IDisposable
         if (!hasDefaultFlags)
             defaultFlags = trex.Flags;
 
+        uint sampleDescriptionIndexOverride =
+            hasSampleDescriptionIndex &&
+            sampleDescriptionIndex != trex.DescriptionIndex
+                ? sampleDescriptionIndex
+                : 0;
+
         byte[] tfhd = BuildCanonicalTfhd(
             trackId,
-            hasSampleDescriptionIndex && sampleDescriptionIndex != trex.DescriptionIndex
-                ? sampleDescriptionIndex
-                : 0
+            sampleDescriptionIndexOverride
         );
 
         var result = new Fragment
@@ -1651,6 +1785,7 @@ public sealed class Mp4BoxReader : IDisposable
 
         if (result.Runs.Count == 0 || duration == 0)
         {
+            result.Dispose();
             error = "trun/duration was not found";
             return false;
         }
@@ -2086,16 +2221,36 @@ public sealed class Mp4BoxReader : IDisposable
             return false;
         }
 
+        if (!TryFindTrex(
+            trex,
+            videoId,
+            out Trex videoTrex,
+            out error
+        ))
+        {
+            return false;
+        }
+
+        if (!TryFindTrex(
+            trex,
+            audioId,
+            out Trex audioTrex,
+            out error
+        ))
+        {
+            return false;
+        }
+
         video = new TrackInfo(
             videoId,
             videoTimescale,
-            FindTrex(trex, videoId)
+            videoTrex
         );
 
         audio = new TrackInfo(
             audioId,
             audioTimescale,
-            FindTrex(trex, audioId)
+            audioTrex
         );
 
         return true;
@@ -2204,39 +2359,97 @@ public sealed class Mp4BoxReader : IDisposable
     {
         entry = default;
 
-        // FullBox(4), track_ID, description index, duration, size, flags.
-        if (box.Length < header + 24)
+        // FullBox(4), track_ID, description index, duration, size, flags
+        if (box.Length != header + 24)
+            return false;
+
+        uint versionFlags = BinaryPrimitives.ReadUInt32BigEndian(
+            box.Slice(header, 4)
+        );
+
+        // trex version 0, flags 0.
+        if (versionFlags != 0)
             return false;
 
         uint trackId = BinaryPrimitives.ReadUInt32BigEndian(
             box.Slice(header + 4, 4)
         );
 
-        if (trackId == 0)
+        uint descriptionIndex = BinaryPrimitives.ReadUInt32BigEndian(
+            box.Slice(header + 8, 4)
+        );
+
+        uint duration = BinaryPrimitives.ReadUInt32BigEndian(
+            box.Slice(header + 12, 4)
+        );
+
+        uint size = BinaryPrimitives.ReadUInt32BigEndian(
+            box.Slice(header + 16, 4)
+        );
+
+        uint flags = BinaryPrimitives.ReadUInt32BigEndian(
+            box.Slice(header + 20, 4)
+        );
+
+        if (trackId == 0 || descriptionIndex == 0)
             return false;
 
         entry = new TrexEntry(
             trackId,
             new Trex(
-                BinaryPrimitives.ReadUInt32BigEndian(box.Slice(header + 8, 4)),
-                BinaryPrimitives.ReadUInt32BigEndian(box.Slice(header + 12, 4)),
-                BinaryPrimitives.ReadUInt32BigEndian(box.Slice(header + 16, 4)),
-                BinaryPrimitives.ReadUInt32BigEndian(box.Slice(header + 20, 4))
+                descriptionIndex,
+                duration,
+                size,
+                flags
             )
         );
 
         return true;
     }
 
-    static Trex FindTrex(List<TrexEntry> entries, uint trackId)
+    static bool TryFindTrex(
+        List<TrexEntry> entries,
+        uint trackId,
+        out Trex value,
+        out string error
+    )
     {
+        value = default;
+        error = null;
+
+        bool found = false;
+
         foreach (TrexEntry entry in entries)
         {
-            if (entry.TrackId == trackId)
-                return entry.Value;
+            if (entry.TrackId != trackId)
+                continue;
+
+            if (found)
+            {
+                error = $"duplicate trex for track_ID={trackId}";
+                return false;
+            }
+
+            value = entry.Value;
+            found = true;
         }
 
-        return default;
+        if (!found)
+        {
+            error = $"trex was not found for track_ID={trackId}";
+            return false;
+        }
+
+        if (value.DescriptionIndex == 0)
+        {
+            error =
+                $"trex.default_sample_description_index is zero " +
+                $"for track_ID={trackId}";
+
+            return false;
+        }
+
+        return true;
     }
 
     static bool FindBox(

@@ -114,15 +114,25 @@ public static class GService
                 if (!probe.Tracks.Exists(i => i.Type == "audio"))
                     return (null, "audio track not found");
 
-                if (!probe.IsMatroskaOrWebM)
-                    return (null, $"not matroska/webm: {probe.ContainerCapsName ?? probe.ContainerName ?? "unknown"}");
-
-                if (!probe.IsH264 && !probe.IsH265 && !probe.IsAV1 && !probe.IsVP9)
-                    return (null, "not mp4");
-
                 var conf = ModInit.conf;
                 if (ModInit.conf.conf_uids != null && ModInit.conf.conf_uids.TryGetValue(uid, out var uidconf))
                     conf = uidconf;
+
+                bool transcodeAVI = probe.IsAVI && conf.transcodeAVI;
+
+                if (!probe.IsMatroskaOrWebM && !transcodeAVI)
+                    return (null, $"not matroska/webm: {probe.ContainerCapsName ?? probe.ContainerName ?? "unknown"}");
+
+                bool supportedVideo =
+                    probe.IsH264 ||
+                    probe.IsH265 ||
+                    probe.IsAV1 ||
+                    probe.IsVP9 ||
+                    probe.IsVP8 && conf.transcodeVP8 ||
+                    transcodeAVI && probe.Video != null;
+
+                if (!supportedVideo)
+                    return (null, "not mp4");
 
                 foreach (var tk in tasks)
                 {

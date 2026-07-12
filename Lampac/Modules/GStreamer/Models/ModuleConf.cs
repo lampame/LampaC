@@ -75,6 +75,10 @@ public class ModuleConf : ModuleBaseConf
 
     public bool transcodeVP9 { get; set; }
 
+    public bool transcodeVP8 { get; set; }
+
+    public bool transcodeAVI { get; set; }
+
     /// <summary>
     /// 14 Мбит/c
     /// </summary>

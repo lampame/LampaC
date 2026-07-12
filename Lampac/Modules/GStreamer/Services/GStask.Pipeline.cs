@@ -14,7 +14,7 @@ public partial class GStask
         double gstVersion = ModInit.conf.gst_version;
 
         AppendSource(sb, gstVersion);
-        AppendDemuxer(sb);
+        AppendDemuxer(sb, probe);
 
         AppendVideo(sb, probe);
         AppendAudio(sb, probe);
@@ -43,15 +43,19 @@ public partial class GStask
         """);
     }
 
-    static void AppendDemuxer(StringBuilder sb)
+    static void AppendDemuxer(StringBuilder sb, ProbeInfo probe)
     {
-        sb.AppendLine("""
-        matroskademux
+        string demuxer = probe.IsAVI ? "avidemux" : "matroskademux";
+
+        sb.AppendLine($$"""
+        {{demuxer}}
             name=d
         multiqueue
             name=mq
             use-buffering=false
             max-size-buffers=5
+            max-size-bytes=0
+            max-size-time=0
         """);
     }
 
@@ -66,7 +70,9 @@ public partial class GStask
             probe.IsH264 && conf.transcodeH264 ||
             probe.IsH265 && conf.transcodeH265 ||
             probe.IsAV1 && conf.transcodeAV1 ||
-            probe.IsVP9 && conf.transcodeVP9;
+            probe.IsVP9 && conf.transcodeVP9 ||
+            probe.IsVP8 && conf.transcodeVP8 ||
+            probe.IsAVI && conf.transcodeAVI;
 
         if (transcode)
         {

@@ -1,6 +1,7 @@
 ﻿using Gst;
 using GStreamer.Models;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 
@@ -33,6 +34,9 @@ public partial class GStask
 
     ulong positionSeconds = 0;
     ulong positionSeekSeconds = 0;
+
+    readonly ConcurrentDictionary<int, ulong> segmentStartNsByIndex = new();
+    int lastClientSegmentIndex = -1;
 
     public readonly ulong id;
     public readonly string user_uid;
@@ -105,6 +109,7 @@ public partial class GStask
             }
             else
             {
+                segmentStartNsByIndex[index] = segment.startNs;
                 Volatile.Write(ref readerSegmentIndex, index);
             }
         }
@@ -255,9 +260,7 @@ public partial class GStask
                             }
 
                             ulong durationNs = SecondsToClockTime(duration);
-                            ulong eosBackoffNs = SecondsToClockTime(
-                                conf.segment_seconds + 120
-                            );
+                            ulong eosBackoffNs = SecondsToClockTime(120);
 
                             ulong eosThreshold = durationNs > eosBackoffNs
                                 ? durationNs - eosBackoffNs
@@ -327,7 +330,9 @@ public partial class GStask
             probe.IsH264 && conf.transcodeH264 ||
             probe.IsH265 && conf.transcodeH265 ||
             probe.IsAV1 && conf.transcodeAV1 ||
-            probe.IsVP9 && conf.transcodeVP9;
+            probe.IsVP9 && conf.transcodeVP9 ||
+            probe.IsVP8 && conf.transcodeVP8 ||
+            probe.IsAVI && conf.transcodeAVI;
 
         var audio = probe.Tracks.FirstOrDefault(track =>
             track.Type == "audio" &&
@@ -397,13 +402,17 @@ public partial class GStask
     {
         if (IsFrozen)
         {
+            ulong seekNs = segmentStartNsByIndex.TryGetValue(lastClientSegmentIndex, out ulong startNs)
+                ? startNs
+                : positionSeconds;
+
             InitSegmentCache();
-            if (!SeekClockTime(positionSeconds))
+            if (!SeekClockTime(seekNs))
             {
                 LogTaskError(
                     "Defrost",
                     "SeekClockTime failed while defrosting task.",
-                    seekNs: positionSeconds
+                    seekNs: seekNs
                 );
 
                 Dispose();
@@ -420,6 +429,7 @@ public partial class GStask
 
         DisposePipeline();
         ClearSegmentCache();
+        segmentStartNsByIndex.Clear();
         mp4Reader?.Dispose();
         mp4Reader = null;
         initMp4 = null;

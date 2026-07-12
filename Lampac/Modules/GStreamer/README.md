@@ -36,6 +36,8 @@ http://IP:9118/gst.js
 | `transcodeH265` | `false` | Перекодировать H.265 в H.264. |
 | `transcodeAV1` | `false` | Перекодировать AV1 в H.264. |
 | `transcodeVP9` | `false` | Перекодировать VP9 в H.264. |
+| `transcodeVP8` | `false` | Разрешить VP8 и перекодировать его в H.264. |
+| `transcodeAVI` | `false` | Разрешить контейнер AVI и перекодировать его видео в H.264. |
 
 Полный пример:
 
@@ -60,11 +62,13 @@ http://IP:9118/gst.js
   "transcodeH264": false,
   "transcodeH265": false,
   "transcodeAV1": false,
-  "transcodeVP9": false
+  "transcodeVP9": false,
+  "transcodeVP8": false,
+  "transcodeAVI": false
 }
 ```
 
-В этом примере H.264 передаётся без перекодирования, а H.265, AV1 и VP9 преобразуются в H.264. Доступ разрешён только двум указанным UID.
+В этом примере H.264, H.265, AV1 и VP9 передаётся без перекодирования. Доступ разрешён только двум указанным UID.
 
 ### Настройки для отдельных UID
 

@@ -116,7 +116,11 @@ public static class GSProbe
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = OperatingSystem.IsWindows()
-                    ? Path.Combine(ModInit.conf.PATH, "bin", "gst-discoverer-1.0.exe")
+                    ? Path.Combine(
+                        ModInit.gstRootPath ?? ModInit.conf.PATH,
+                        "bin",
+                        "gst-discoverer-1.0.exe"
+                    )
                     : "gst-discoverer-1.0",
 
                 UseShellExecute = false,

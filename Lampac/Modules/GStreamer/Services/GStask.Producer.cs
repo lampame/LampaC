@@ -36,6 +36,8 @@ public partial class GStask
         if (seekNs > long.MaxValue)
             return false;
 
+        segmentStartNsByIndex.Clear();
+
         try
         {
             bool reusePipeline = pipeline != null;
@@ -166,7 +168,7 @@ public partial class GStask
                     Format.Time,
                     SeekFlags.Flush |
                     SeekFlags.KeyUnit |
-                    SeekFlags.SnapNearest,
+                    SeekFlags.SnapAfter,
                     (long)seekNs
                 );
 
@@ -540,6 +542,8 @@ public partial class GStask
     {
         if (index < 0 || IsDead)
             return false;
+
+        Volatile.Write(ref lastClientSegmentIndex, index);
 
         if (SegmentFileReady(index))
             return true;
