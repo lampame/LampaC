@@ -395,7 +395,7 @@
 					Lampa.Controller.toggle('content');
 					
                     if (a.action == 'stop' || a.action == 'start' || a.action == 'pause') {
-                      network["native"](account(window.lampac_dlna_adres + '/tracker/'+a.action+'?infohash=' + encodeURIComponent(download)), false, false, false, {
+                      network["native"](account(window.lampac_dlna_adres + '/tracker/'+a.action+'?infohash=' + encodeURIComponent(download)), false, false, {}, {
                         dataType: 'text'
                       });
                     }
@@ -418,7 +418,7 @@
 								  return 'indexs=' + s.index;
 								}).join('&');
 								
-								network["native"](account(window.lampac_dlna_adres + '/tracker/changefilepriority?infohash=' + encodeURIComponent(download) + '&' + select), false, false, false, {
+								network["native"](account(window.lampac_dlna_adres + '/tracker/changefilepriority?infohash=' + encodeURIComponent(download) + '&' + select), false, false, {}, {
 									dataType: 'text'
 								});
 								
@@ -432,7 +432,7 @@
                       var files = body.find('.card');
                       last = files.eq(files.index(card) - 1)[0];
                       card.remove();
-                      network["native"](account(window.lampac_dlna_adres + '/delete?path=' + encodeURIComponent(element.path)), false, false, false, {
+                      network["native"](account(window.lampac_dlna_adres + '/delete?path=' + encodeURIComponent(element.path)), false, false, {}, {
                         dataType: 'text'
                       });
                     }
@@ -600,7 +600,7 @@
 							  }, function () {
 								//down();
 								Lampa.Bell.push({text:'Ошибка при добавление в загрузку'});
-							  },false,{timeout:timeout});
+							  },{},{timeout:timeout});
 						}
 						else if(a.action == 'latest'){
 							var files = []
@@ -627,7 +627,7 @@
 									  }, function () {
 										//down();
 										Lampa.Bell.push({text:'Ошибка при добавление в загрузку'});
-									  },false,{timeout:timeout});
+									  },{},{timeout:timeout});
 								},
 								onBack: function onBack() {
 									Lampa.Controller.toggle(enabled);
@@ -680,7 +680,7 @@
 									  }, function () {
 										//down();
 										Lampa.Bell.push({text:'Ошибка при добавление в загрузку'});
-									  });
+									  }, {});
 									}
 									Lampa.Controller.toggle(enabled);
 								  },

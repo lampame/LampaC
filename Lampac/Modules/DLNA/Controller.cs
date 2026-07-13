@@ -30,6 +30,14 @@ public class DLNAController : BaseController
     #region DLNAController
     static string dlna_path => ModInit.conf.path;
 
+    bool HasDlnaAccess()
+        => CoreInit.conf.accsdb.enable
+            || requestInfo.IsLocalIp
+            || ModInit.conf.allowRemoteWithoutAuth;
+
+    JsonResult DlnaAccessDenied()
+        => new(new { error = "authorizationOrLocalIPRequired" }) { StatusCode = 403 };
+
     static string defTrackers = "tr=http://retracker.local/announce&tr=http%3A%2F%2Fbt4.t-ru.org%2Fann%3Fmagnet&tr=http://retracker.mgts.by:80/announce&tr=http://tracker.city9x.com:2710/announce&tr=http://tracker.electro-torrent.pl:80/announce&tr=http://tracker.internetwarriors.net:1337/announce&tr=http://tracker2.itzmx.com:6961/announce&tr=udp://opentor.org:2710&tr=udp://public.popcorn-tracker.org:6969/announce&tr=udp://tracker.opentrackr.org:1337/announce&tr=http://bt.svao-ix.ru/announce&tr=udp://explodie.org:6969/announce&tr=wss://tracker.btorrent.xyz&tr=wss://tracker.openwebtorrent.com";
 
     static ClientEngine torrentEngine;
@@ -486,12 +494,11 @@ public class DLNAController : BaseController
     [Route("dlna")]
     public ActionResult Index(string path)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
-        if (SafePath(path) == null)
+        string full = SafePath(path);
+        if (full == null || !Directory.Exists(full))
         {
             return ContentTo("[]");
         }
@@ -543,7 +550,7 @@ public class DLNAController : BaseController
         var playlist = new List<DlnaModel>();
 
         #region folders
-        foreach (string folder in Directory.GetDirectories($"{dlna_path}/" + path))
+        foreach (string folder in Directory.GetDirectories(full))
         {
             if (folder.Contains("thumbs") || folder.Contains("tmdb") || folder.Contains("temp"))
                 continue;
@@ -551,14 +558,16 @@ public class DLNAController : BaseController
             int length = countFiles(folder);
             if (length > 0 || Directory.GetDirectories(folder).Length > 0)
             {
+                string relativeFolder = RelativeDlnaPath(folder);
+
                 playlist.Add(new DlnaModel()
                 {
                     type = "folder",
                     name = Path.GetFileName(folder),
-                    uri = $"{host}/dlna?path={HttpUtility.UrlEncode(folder.Replace($"{dlna_path}/", ""))}",
+                    uri = $"{host}/dlna?path={HttpUtility.UrlEncode(relativeFolder)}",
                     img = getImage(CrypTo.md5(Path.GetFileName(folder))),
                     preview = getPreview(CrypTo.md5(Path.GetFileName(folder))),
-                    path = folder.Replace($"{dlna_path}/", ""),
+                    path = relativeFolder,
                     length = countFiles(folder),
                     creationTime = Directory.GetCreationTime(folder),
                     tmdb = getTmdb(Path.GetFileName(folder))
@@ -569,14 +578,15 @@ public class DLNAController : BaseController
 
         #region files
         var filesTmdb = getTmdb(path);
-        var subtitles = Directory.GetFiles($"{dlna_path}/" + path, "*.srt");
+        var subtitles = Directory.GetFiles(full, "*.srt");
 
-        foreach (string file in Directory.GetFiles($"{dlna_path}/" + path))
+        foreach (string file in Directory.GetFiles(full))
         {
             if (!Regex.IsMatch(Path.GetExtension(file), ModInit.conf.mediaPattern))
                 continue;
 
             string name = Path.GetFileName(file);
+            string relativeFile = RelativeDlnaPath(file);
             var fileinfo = new FileInfo(file);
             if (fileinfo.Length == 0)
                 continue;
@@ -610,11 +620,11 @@ public class DLNAController : BaseController
             {
                 type = "file",
                 name = name,
-                uri = $"{host}/dlna/stream?path={HttpUtility.UrlEncode(file.Replace($"{dlna_path}/", ""))}",
+                uri = $"{host}/dlna/stream?path={HttpUtility.UrlEncode(relativeFile)}",
                 img = img,
                 preview = getPreview(CrypTo.md5(name)),
                 subtitles = new List<Subtitle>(),
-                path = file.Replace($"{dlna_path}/", ""),
+                path = relativeFile,
                 length = fileinfo.Length,
                 creationTime = fileinfo.CreationTime,
                 s = getSeason(name),
@@ -631,7 +641,7 @@ public class DLNAController : BaseController
                     dlnaModel.subtitles.Add(new Subtitle()
                     {
                         label = "Sub #1",
-                        url = $"{host}/dlna/stream?path={HttpUtility.UrlEncode($"{path}/{Path.GetFileName(subfile)}")}"
+                        url = $"{host}/dlna/stream?path={HttpUtility.UrlEncode(RelativeDlnaPath(subfile))}"
                     });
                 }
             }
@@ -687,10 +697,8 @@ public class DLNAController : BaseController
     [Route("dlna/stream")]
     public ActionResult Stream(string path)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         string full = SafePath(path);
         if (full == null || !IO.File.Exists(full))
@@ -708,14 +716,12 @@ public class DLNAController : BaseController
     #endregion
 
     #region Delete
-    [HttpGet]
+    [HttpPost, HttpDelete]
     [Route("dlna/delete")]
     public ActionResult Delete(string path)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         string full = SafePath(path);
 
@@ -752,10 +758,8 @@ public class DLNAController : BaseController
     [Route("dlna/tracker/managers")]
     public ActionResult Managers()
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         if (torrentEngine?.Torrents == null)
             return Content("[]");
@@ -794,10 +798,8 @@ public class DLNAController : BaseController
     [Route("dlna/tracker/show")]
     async public Task<JsonResult> Show(string path)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         try
         {
@@ -890,14 +892,12 @@ public class DLNAController : BaseController
     #endregion
 
     #region Download
-    [HttpGet]
+    [HttpPost]
     [Route("dlna/tracker/download")]
     async public Task<JsonResult> Download(string path, int[] indexs, string thumb, long id, bool serial, int lastCount = -1)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         try
         {
@@ -1167,15 +1167,13 @@ public class DLNAController : BaseController
 
 
     #region Delete
-    [HttpGet]
+    [HttpPost, HttpDelete]
     [Route("dlna/tracker/stop")]
     [Route("dlna/tracker/delete")]
     async public Task<JsonResult> TorrentDelete(string infohash)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         if (torrentEngine == null)
             return Json(new { });
@@ -1210,14 +1208,12 @@ public class DLNAController : BaseController
     #endregion
 
     #region Pause
-    [HttpGet]
+    [HttpPost]
     [Route("dlna/tracker/pause")]
     async public Task<JsonResult> TorrentPause(string infohash)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         if (torrentEngine == null)
             return Json(new { });
@@ -1231,14 +1227,12 @@ public class DLNAController : BaseController
     #endregion
 
     #region Start
-    [HttpGet]
+    [HttpPost]
     [Route("dlna/tracker/start")]
     async public Task<JsonResult> TorrentStart(string infohash)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         if (torrentEngine == null)
             return Json(new { });
@@ -1252,14 +1246,12 @@ public class DLNAController : BaseController
     #endregion
 
     #region ChangeFilePriority
-    [HttpGet]
+    [HttpPost]
     [Route("dlna/tracker/changefilepriority")]
     async public Task<JsonResult> ChangeFilePriority(string infohash, int[] indexs)
     {
-        if (ModInit.conf.onlyLocalIP && !requestInfo.IsLocalIp)
-        {
-            return Json(new { error = "onlyLocalIP" });
-        }
+        if (!HasDlnaAccess())
+            return DlnaAccessDenied();
 
         if (torrentEngine == null)
             return Json(new { });
@@ -1332,25 +1324,52 @@ public class DLNAController : BaseController
         }
     }
 
+    static string RelativeDlnaPath(string fullPath)
+    {
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dlna_path));
+        return Path.GetRelativePath(root, fullPath).Replace('\\', '/');
+    }
+
     static string SafePath(string path)
     {
         try
         {
-            string root = Path.GetFullPath(dlna_path);
+            string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dlna_path));
             string full = Path.GetFullPath(Path.Combine(root, path ?? string.Empty));
+            StringComparison comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
 
-            if (full == root)
+            if (string.Equals(full, root, comparison))
             {
                 return full;
             }
 
-            if (full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                || full.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            if (!full.StartsWith(root + Path.DirectorySeparatorChar, comparison)
+                && !full.StartsWith(root + Path.AltDirectorySeparatorChar, comparison))
             {
-                return full;
+                return null;
             }
 
-            return null;
+            // GetFullPath only performs lexical normalization. Reject links and
+            // junctions so an in-root path cannot resolve outside the DLNA root.
+            string relative = Path.GetRelativePath(root, full);
+            string current = root;
+
+            foreach (string segment in relative.Split(
+                new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = Path.Combine(current, segment);
+
+                if (!IO.File.Exists(current) && !Directory.Exists(current))
+                    break;
+
+                if ((IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    return null;
+            }
+
+            return full;
         }
         catch
         {

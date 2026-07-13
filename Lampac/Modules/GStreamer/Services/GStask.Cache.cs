@@ -1,8 +1,7 @@
 ﻿using GStreamer.Models;
-using Microsoft.IO;
 using Microsoft.Win32.SafeHandles;
+using Shared.Services.Pools;
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -42,13 +41,16 @@ public partial class GStask
     }
 
     #region SetClientSegmentIndex
-    public void SetClientSegmentIndex(int index)
+    public void SetClientSegmentIndex(int index, bool cacheHit)
     {
         if (index < 0)
             return;
 
         lock (segmentCacheLock)
         {
+            if (cacheHit && clientSegmentIndex >= 0 && index < clientSegmentIndex)
+                return;
+
             clientSegmentIndex = index;
 
             if (readySegmentFiles.Count == 0)
@@ -164,7 +166,7 @@ public partial class GStask
     #region Helpers
     bool StoreSegmentFile(int index, Segment segment)
     {
-        if (index < 0 || segment.data == null || segment.data.Length <= 0)
+        if (index < 0 || segment.length <= 0)
             return false;
 
         lock (segmentCacheLock)
@@ -177,11 +179,11 @@ public partial class GStask
 
         try
         {
-            if (!WriteStreamToFile(segment.data, path))
+            if (!WriteSegmentToFile(segment, path))
             {
                 System.Threading.Thread.Sleep(200);
 
-                if (!WriteStreamToFile(segment.data, path))
+                if (!WriteSegmentToFile(segment, path))
                     return false;
             }
 
@@ -266,67 +268,35 @@ public partial class GStask
         return remove.ToArray();
     }
 
-    static bool WriteStreamToFile(RecyclableMemoryStream stream, string path)
+    static bool WriteSegmentToFile(Segment segment, string path)
     {
-        if (stream == null || stream.Length <= 0)
+        if (segment.length <= 0)
             return false;
 
-        long position = stream.Position;
-        stream.Position = 0;
-
         try
         {
-            return TryWriteFile(
+            using var output = new FileStream(
                 path,
-                stream.Length,
-                handle => WriteStreamSequence(handle, stream)
-            );
-        }
-        finally
-        {
-            stream.Position = position;
-        }
-    }
-
-    static void WriteStreamSequence(SafeFileHandle handle, RecyclableMemoryStream stream)
-    {
-        ReadOnlySequence<byte> sequence = stream.GetReadOnlySequence();
-
-        if (sequence.IsSingleSegment)
-        {
-            RandomAccess.Write(handle, sequence.First.Span, fileOffset: 0);
-            return;
-        }
-
-        long offset = 0;
-
-        foreach (ReadOnlyMemory<byte> segment in sequence)
-        {
-            if (segment.IsEmpty)
-                continue;
-
-            RandomAccess.Write(handle, segment.Span, fileOffset: offset);
-            offset += segment.Length;
-        }
-
-        if (offset != stream.Length)
-            throw new EndOfStreamException("Segment stream length changed during file write.");
-    }
-
-    static bool TryWriteFile(string path, long preallocationSize, Action<SafeFileHandle> write)
-    {
-        try
-        {
-            using var handle = File.OpenHandle(
-                path,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                FileOptions.SequentialScan,
-                preallocationSize: preallocationSize
+                new FileStreamOptions
+                {
+                    Mode = FileMode.Create,
+                    Access = FileAccess.Write,
+                    Share = FileShare.None,
+                    Options = FileOptions.SequentialScan,
+                    BufferSize = PoolInvk.msmBlockSize,
+                    PreallocationSize = segment.length
+                }
             );
 
-            write(handle);
+            segment.WriteTo(output);
+
+            if (output.Position != segment.length)
+            {
+                throw new EndOfStreamException(
+                    $"Segment writer produced {output.Position} of {segment.length} bytes."
+                );
+            }
+
             return true;
         }
         catch (IOException ex)
@@ -340,6 +310,11 @@ public partial class GStask
             Serilog.Log.Warning(ex, "Failed to write file '{Path}'", path);
             TryDeleteFile(path);
             return false;
+        }
+        catch
+        {
+            TryDeleteFile(path);
+            throw;
         }
     }
 

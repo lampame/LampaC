@@ -57,6 +57,7 @@ public partial class GStask
     readonly ManualResetEventSlim pipelineDisposeIdle = new(true);
 
     public byte[] initMp4 { get; private set; }
+    public HlsVariantInfo hlsVariantInfo { get; private set; }
 
     Mp4BoxReader mp4Reader;
 
@@ -83,10 +84,10 @@ public partial class GStask
             audioIndex = audio;
 
         mp4Reader = new Mp4BoxReader(
-           onInit: data => initMp4 = data,
+           onInit: OnInitMp4,
            onSegment: OnSegmentReady,
            segmentSeconds: conf.segment_seconds,
-           segmentDiff: conf.segment_diff
+           segmentDiff: IsVideoTranscoded ? 0 : conf.segment_diff
         );
     }
     #endregion
@@ -94,29 +95,55 @@ public partial class GStask
     #region OnSegmentReady
     void OnSegmentReady(Segment segment)
     {
-        try
+        if (segment.startNs > 0)
+            Volatile.Write(ref positionSeconds, segment.startNs);
+
+        int index = activeSegmentIndex;
+        if (index < 0)
+            return;
+
+        if (!StoreSegmentFile(index, segment))
         {
-            if (segment.startNs > 0)
-                Volatile.Write(ref positionSeconds, segment.startNs);
+            activeSegmentStoreFailed = true;
+        }
+        else
+        {
+            segmentStartNsByIndex[index] = segment.startNs;
+            Volatile.Write(ref readerSegmentIndex, index);
+        }
+    }
+    #endregion
 
-            int index = activeSegmentIndex;
-            if (index < 0)
-                return;
+    #region OnInitMp4
+    void OnInitMp4(byte[] data)
+    {
+        if (data == null || data.Length == 0 || initMp4 != null)
+            return;
 
-            if (!StoreSegmentFile(index, segment))
+        HlsVariantInfo parsed = Mp4InitInfoReader.Read(data);
+        if (parsed != null)
+        {
+            parsed.FrameRate = probe.Video?.FrameRate ?? 0;
+            if (parsed.Width <= 0)
+                parsed.Width = probe.Video?.Width ?? 0;
+            if (parsed.Height <= 0)
+                parsed.Height = probe.Video?.Height ?? 0;
+            if (conf.hdr_to_sdr && probe.Video?.IsHdr == true)
+                parsed.VideoRange = "SDR";
+            else if (parsed.VideoRange == null && !IsVideoTranscoded)
             {
-                activeSegmentStoreFailed = true;
-            }
-            else
-            {
-                segmentStartNsByIndex[index] = segment.startNs;
-                Volatile.Write(ref readerSegmentIndex, index);
+                parsed.VideoRange = probe.Video?.VideoTransfer switch
+                {
+                    VideoTransfer.Pq => "PQ",
+                    VideoTransfer.Hlg => "HLG",
+                    VideoTransfer.Sdr => "SDR",
+                    _ => null
+                };
             }
         }
-        finally
-        {
-            segment.data?.Dispose();
-        }
+
+        hlsVariantInfo = parsed;
+        initMp4 = data;
     }
     #endregion
 
@@ -326,14 +353,6 @@ public partial class GStask
     #region GetHlsBandwidth
     public long GetHlsBandwidth(out long? averageBandwidth)
     {
-        bool transcodeVideo =
-            probe.IsH264 && conf.transcodeH264 ||
-            probe.IsH265 && conf.transcodeH265 ||
-            probe.IsAV1 && conf.transcodeAV1 ||
-            probe.IsVP9 && conf.transcodeVP9 ||
-            probe.IsVP8 && conf.transcodeVP8 ||
-            probe.IsAVI && conf.transcodeAVI;
-
         var audio = probe.Tracks.FirstOrDefault(track =>
             track.Type == "audio" &&
             track.Index == audioIndex
@@ -348,7 +367,7 @@ public partial class GStask
         if (channels > 2)
             audioBitrate *= 2;
 
-        if (transcodeVideo)
+        if (IsVideoTranscoded)
         {
             averageBandwidth =
                 Math.Max(1, conf.video_bitrate) * 1000L +
@@ -433,6 +452,7 @@ public partial class GStask
         mp4Reader?.Dispose();
         mp4Reader = null;
         initMp4 = null;
+        hlsVariantInfo = null;
     }
     #endregion
 
@@ -557,6 +577,15 @@ public partial class GStask
             ? ulong.MaxValue
             : left + right;
     }
+
+    bool IsVideoTranscoded
+        => conf.hdr_to_sdr && probe.Video?.IsHdr == true ||
+           probe.IsH264 && conf.transcodeH264 ||
+           probe.IsH265 && conf.transcodeH265 ||
+           probe.IsAV1 && conf.transcodeAV1 ||
+           probe.IsVP9 && conf.transcodeVP9 ||
+           probe.IsVP8 && conf.transcodeVP8 ||
+           probe.IsAVI && conf.transcodeAVI;
 
     void LogTaskError(
         string stage,

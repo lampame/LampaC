@@ -12,8 +12,13 @@ namespace GStreamer.Services;
 
 public static class GService
 {
+    public readonly record struct TaskResult(GStask task, string error);
+
+    public readonly record struct ProbeResult(ProbeInfo probe, string error);
+
     static ConcurrentDictionary<ulong, GStask> tasks = new();
     static readonly ConcurrentDictionary<ulong, TaskCompletionSource<bool>> waiters = new();
+    static readonly ConcurrentDictionary<string, Lazy<Task<ProbeResult>>> probeWaiters = new(StringComparer.Ordinal);
 
     static int cleanupRunning;
     static readonly Timer cleanupTimer = new(
@@ -23,10 +28,11 @@ public static class GService
         TimeSpan.FromMinutes(1)
     );
 
-    public static async Task<(GStask task, string error)> GetOrAdd(string sourceUrl, string uid, int audio = 0)
+    #region GetOrAdd
+    public static async Task<TaskResult> GetOrAdd(string sourceUrl, string uid, int audio = 0)
     {
         if (string.IsNullOrEmpty(sourceUrl) || string.IsNullOrEmpty(uid))
-            return (null, "uid");
+            return new(null, "uid");
 
         var hash = Fnv1a.Hash(sourceUrl);
         Fnv1a.Append(ref hash, uid);
@@ -37,7 +43,7 @@ public static class GService
         if (tasks.TryGetValue(id, out var task) && !task.IsDead)
         {
             task.UpdateLastActive();
-            return (task, null);
+            return new(task, null);
         }
 
         var ownWaiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -50,10 +56,10 @@ public static class GService
                 !task.IsDead)
             {
                 task.UpdateLastActive();
-                return (task, null);
+                return new(task, null);
             }
 
-            return (null, "probe");
+            return new(null, "probe");
         }
         else
         {
@@ -62,7 +68,7 @@ public static class GService
                 if (tasks.TryGetValue(id, out task) && !task.IsDead)
                 {
                     task.UpdateLastActive();
-                    return (task, null);
+                    return new(task, null);
                 }
 
                 sourceUrl = Regex.Replace(sourceUrl, "/stream/[^\\?]+", "/stream");
@@ -71,17 +77,19 @@ public static class GService
                     (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
                     string.IsNullOrEmpty(uri.Host))
                 {
-                    return (null, "Uri");
+                    return new(null, "Uri");
                 }
+
+                string probeKey = $"ProbeInfo:{uri.AbsoluteUri}";
 
                 var httpHeaders = await Http.ResponseHeaders(sourceUrl, timeoutSeconds: 45);
                 if (httpHeaders == null)
-                    return (null, "ResponseHeaders");
+                    return new(null, "ResponseHeaders");
 
                 #region sourceUrl
                 Uri requestUri = httpHeaders.RequestMessage?.RequestUri;
                 if (requestUri == null)
-                    return (null, "RequestUri");
+                    return new(null, "RequestUri");
 
                 bool redirect =
                     (int)httpHeaders.StatusCode == 301 ||
@@ -95,33 +103,38 @@ public static class GService
                     sourceUrl = requestUri.AbsoluteUri;
 
                 if (string.IsNullOrEmpty(sourceUrl))
-                    return (null, "sourceUrl");
+                    return new(null, "sourceUrl");
                 #endregion
 
-                var hybridCache = HybridCache.Get();
+                var probeResult = await GetProbeInfo(probeKey, sourceUrl).ConfigureAwait(false);
+                if (probeResult.probe == null)
+                    return new(null, probeResult.error);
 
-                string probeKey = $"ProbeInfo:{sourceUrl}";
-                if (!hybridCache.TryGetValue(probeKey, out ProbeInfo probe))
-                {
-                    probe = await GSProbe.Get(sourceUrl);
-                    //Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(probe, Newtonsoft.Json.Formatting.Indented));
-                    if (probe == null)
-                        return (null, "probe");
-
-                    hybridCache.Set(probeKey, probe, TimeSpan.FromDays(1));
-                }
+                var probe = probeResult.probe;
 
                 if (!probe.Tracks.Exists(i => i.Type == "audio"))
-                    return (null, "audio track not found");
+                    return new(null, "audio track not found");
 
                 var conf = ModInit.conf;
                 if (ModInit.conf.conf_uids != null && ModInit.conf.conf_uids.TryGetValue(uid, out var uidconf))
                     conf = uidconf;
 
+                if (conf.hdr_to_sdr && probe.Video?.IsHdr == true)
+                {
+                    if (probe.Video.VideoTransfer != VideoTransfer.Pq &&
+                        probe.Video.VideoTransfer != VideoTransfer.Hlg)
+                    {
+                        return new(null, "HDR tone mapping requires a PQ or HLG base layer");
+                    }
+
+                    if (!HdrToneMappingBackend.IsAvailable)
+                        return new(null, HdrToneMappingBackend.UnavailableError);
+                }
+
                 bool transcodeAVI = probe.IsAVI && conf.transcodeAVI;
 
                 if (!probe.IsMatroskaOrWebM && !transcodeAVI)
-                    return (null, $"not matroska/webm: {probe.ContainerCapsName ?? probe.ContainerName ?? "unknown"}");
+                    return new(null, $"not matroska/webm: {probe.ContainerCapsName ?? probe.ContainerName ?? "unknown"}");
 
                 bool supportedVideo =
                     probe.IsH264 ||
@@ -132,7 +145,7 @@ public static class GService
                     transcodeAVI && probe.Video != null;
 
                 if (!supportedVideo)
-                    return (null, "not mp4");
+                    return new(null, "not mp4");
 
                 foreach (var tk in tasks)
                 {
@@ -146,7 +159,7 @@ public static class GService
                 task = new GStask(probe, conf, sourceUrl, id, uid, audio, httpHeaders.Content.Headers.ContentLength);
                 tasks[id] = task;
 
-                return (task, null);
+                return new(task, null);
             }
             finally
             {
@@ -157,7 +170,9 @@ public static class GService
             }
         }
     }
+    #endregion
 
+    #region Get
     public static GStask Get(ulong id)
     {
         if (tasks.TryGetValue(id, out var task) && !task.IsDead)
@@ -168,7 +183,9 @@ public static class GService
 
         return null;
     }
+    #endregion
 
+    #region TryRemove
     public static bool TryRemove(ulong id)
     {
         if (tasks.TryRemove(id, out var task))
@@ -179,7 +196,74 @@ public static class GService
 
         return false;
     }
+    #endregion
 
+
+    #region GetProbe
+    public static async Task<ProbeResult> GetProbe(string sourceUrl)
+    {
+        if (string.IsNullOrEmpty(sourceUrl))
+            return new(null, "Uri");
+
+        sourceUrl = Regex.Replace(sourceUrl, "/stream/[^\\?]+", "/stream");
+
+        if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrEmpty(uri.Host))
+        {
+            return new(null, "Uri");
+        }
+
+        sourceUrl = uri.AbsoluteUri;
+        string probeKey = $"ProbeInfo:{sourceUrl}";
+
+        return await GetProbeInfo(probeKey, sourceUrl).ConfigureAwait(false);
+    }
+
+    static async Task<ProbeResult> GetProbeCore(string sourceUrl, string probeKey)
+    {
+        var hybridCache = HybridCache.Get();
+        if (hybridCache.TryGetValue(probeKey, out ProbeInfo cachedProbe))
+            return new(cachedProbe, null);
+
+        var probe = await GSProbe.Get(sourceUrl);
+        if (probe == null)
+            return new(null, "probe");
+
+        hybridCache.Set(probeKey, probe, TimeSpan.FromDays(1));
+
+        return new(probe, null);
+    }
+    #endregion
+
+    #region GetProbeInfo
+    static async Task<ProbeResult> GetProbeInfo(string probeKey, string sourceUrl)
+    {
+        var hybridCache = HybridCache.Get();
+        if (hybridCache.TryGetValue(probeKey, out ProbeInfo cachedProbe))
+            return new(cachedProbe, null);
+
+        var ownWaiter = new Lazy<Task<ProbeResult>>(
+            () => GetProbeCore(sourceUrl, probeKey),
+            LazyThreadSafetyMode.ExecutionAndPublication
+        );
+
+        var waiter = probeWaiters.GetOrAdd(probeKey, ownWaiter);
+
+        try
+        {
+            return await waiter.Value.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ReferenceEquals(waiter, ownWaiter))
+                probeWaiters.TryRemove(probeKey, out _);
+        }
+    }
+    #endregion
+
+
+    #region Cleanup/Dispose
     static void CleanupInactive()
     {
         if (Interlocked.Exchange(ref cleanupRunning, 1) == 1)
@@ -218,4 +302,5 @@ public static class GService
         foreach (var item in tasks)
             item.Value.Dispose();
     }
+    #endregion
 }

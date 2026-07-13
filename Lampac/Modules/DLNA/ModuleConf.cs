@@ -24,5 +24,5 @@ public class ModuleConf : ModuleBaseConf
 
     public int maximumDiskWriteRate { get; set; }
 
-    public bool onlyLocalIP { get; set; }
+    public bool allowRemoteWithoutAuth { get; set; } = false;
 }

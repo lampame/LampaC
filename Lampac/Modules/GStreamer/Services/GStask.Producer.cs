@@ -15,6 +15,7 @@ public partial class GStask
     bool activeSegmentStoreFailed;
 
     int prefetchRunning;
+    int prefetchRequested;
     int prefetchGeneration;
     CancellationTokenSource prefetchCts;
 
@@ -137,13 +138,20 @@ public partial class GStask
 
                 if (reusePipeline)
                 {
-                    // appsink снимает backpressure до сброса timeline mp4mux.
+                    // appsink снимает backpressure до сброса timeline mp4mux
                     using var mux = bin?.GetByName("mux");
+                    using var videoEncoder = IsVideoTranscoded
+                        ? bin?.GetByName("video_encoder")
+                        : null;
+
                     if (mux == null ||
+                        (IsVideoTranscoded && videoEncoder == null) ||
                         sink.SetState(State.Ready) == StateChangeReturn.Failure ||
                         mux.SetState(State.Ready) == StateChangeReturn.Failure ||
-                        sink.SetState(State.Paused) == StateChangeReturn.Failure ||
-                        mux.SetState(State.Paused) == StateChangeReturn.Failure)
+                        (videoEncoder != null && videoEncoder.SetState(State.Ready) == StateChangeReturn.Failure) ||
+                        (videoEncoder != null && videoEncoder.SetState(State.Paused) == StateChangeReturn.Failure) ||
+                        mux.SetState(State.Paused) == StateChangeReturn.Failure ||
+                        sink.SetState(State.Paused) == StateChangeReturn.Failure)
                     {
                         LogTaskError(
                             "SeekClockTime",
@@ -401,14 +409,12 @@ public partial class GStask
                 readGeneration = Volatile.Read(ref pipelineGeneration);
             }
 
-            mp4Reader.ResetSegment();
-
             activeSegmentIndex = segmentIndex;
             activeSegmentStoreFailed = false;
             segmentReadStarted = true;
 
             long start = Stopwatch.GetTimestamp();
-            var timeout = TimeSpan.FromSeconds(index == -1 ? 30 : 10);
+            var timeout = TimeSpan.FromSeconds(45);
 
             while (Stopwatch.GetElapsedTime(start) < timeout)
             {
@@ -537,6 +543,37 @@ public partial class GStask
     }
     #endregion
 
+    #region EnsureInitAsync
+    public async System.Threading.Tasks.Task<bool> EnsureInitAsync(int audio, CancellationToken cancellationToken)
+    {
+        if (initMp4 != null)
+            return true;
+
+        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (initMp4 != null)
+                return true;
+
+            EnsureSegment(-1, cancellationToken, audio);
+            return initMp4 != null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return initMp4 != null;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    #endregion
+
     #region EnsureClientSegment
     public bool EnsureClientSegment(int index, CancellationToken ct)
     {
@@ -604,7 +641,10 @@ public partial class GStask
             return;
 
         if (Interlocked.CompareExchange(ref prefetchRunning, 1, 0) != 0)
+        {
+            Volatile.Write(ref prefetchRequested, 1);
             return;
+        }
 
         var cts = new CancellationTokenSource();
 
@@ -652,14 +692,16 @@ public partial class GStask
                 cts.Dispose();
 
                 Volatile.Write(ref prefetchRunning, 0);
+                bool restartRequested = Interlocked.Exchange(ref prefetchRequested, 0) != 0;
 
                 int latestClientIndex = ClientSegmentIndex();
+                bool sameGeneration = Volatile.Read(ref prefetchGeneration) == generation;
 
-                if (!canceled &&
-                    latestClientIndex > startedFrom &&
+                if ((restartRequested ||
+                     !canceled && latestClientIndex > startedFrom && sameGeneration) &&
                     !IsDead &&
                     !IsEos &&
-                    Volatile.Read(ref prefetchGeneration) == generation &&
+                    !IsFrozen &&
                     NeedsSegmentPrefetch(latestClientIndex))
                 {
                     QueueSegmentPrefetch(latestClientIndex);
@@ -673,6 +715,7 @@ public partial class GStask
     public void CancelSegmentPrefetch()
     {
         Interlocked.Increment(ref prefetchGeneration);
+        Volatile.Write(ref prefetchRequested, 0);
 
         try
         {

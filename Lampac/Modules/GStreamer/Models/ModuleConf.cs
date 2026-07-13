@@ -79,6 +79,18 @@ public class ModuleConf : ModuleBaseConf
 
     public bool transcodeAVI { get; set; }
 
+    /// <summary>Convert detected HDR video to SDR. Requires a real HDR tone-mapping backend.</summary>
+    public bool hdr_to_sdr { get; set; }
+
+    /// <summary>Use a hardware H.264 backend after a successful startup probe.</summary>
+    public bool hardwareAcceleration { get; set; } = true;
+
+    /// <summary>Enable GPU backends added by this module. GStreamer decodebin remains automatic.</summary>
+    public bool useGpu { get; set; } = true;
+
+    /// <summary>Use the x264 ultrafast preset instead of veryfast for software encoding.</summary>
+    public bool x264Ultrafast { get; set; }
+
     /// <summary>
     /// 14 Мбит/c
     /// </summary>

@@ -59,6 +59,8 @@ public class GStreamerController : BaseController
     [HttpGet("/gst/add")]
     public async Task<ActionResult> Add(string link, string linkencode, string uid, string token)
     {
+        SetHeadersNoCache();
+
         if (!ModInit.conf.enable)
             return StatusCode(403);
 
@@ -90,6 +92,8 @@ public class GStreamerController : BaseController
     [HttpGet("/gst/remove")]
     public async Task<ActionResult> Remove(ulong id)
     {
+        SetHeadersNoCache();
+
         if (!ModInit.conf.enable)
             return StatusCode(403);
 
@@ -106,11 +110,13 @@ public class GStreamerController : BaseController
     }
     #endregion
 
-    #region Heartbeat
+    #region heartbeat
     [AllowAnonymous]
     [HttpGet("/gst/{id}/heartbeat")]
     public ActionResult Heartbeat(ulong id)
     {
+        SetHeadersNoCache();
+
         if (!ModInit.conf.enable)
             return StatusCode(403);
 
@@ -118,6 +124,34 @@ public class GStreamerController : BaseController
             return Ok();
 
         return StatusCode(404);
+    }
+    #endregion
+
+    #region probe
+    [HttpGet("/gst/probe")]
+    public async Task<ActionResult> Probe(string link, string linkencode, string uid, string token)
+    {
+        SetHeadersNoCache();
+
+        if (!ModInit.conf.enable)
+            return StatusCode(403);
+
+        string user_id = uid ?? token;
+        if (ModInit.conf.allowed_uids != null && !ModInit.conf.allowed_uids.Contains(user_id))
+            return StatusCode(401);
+
+        string sourceUrl = link;
+        if (string.IsNullOrEmpty(sourceUrl) && !string.IsNullOrEmpty(linkencode))
+            sourceUrl = CrypTo.DecodeBase64(linkencode);
+
+        var result = await GService.GetProbe(sourceUrl).ConfigureAwait(false);
+        if (result.probe == null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status502BadGateway;
+            return Content(result.error);
+        }
+
+        return Json(result.probe);
     }
     #endregion
 
@@ -147,7 +181,7 @@ public class GStreamerController : BaseController
     #region master.m3u8
     [AllowAnonymous]
     [HttpGet("/gst/{id}/master.m3u8")]
-    public ActionResult MasterPlaylist(ulong id, int audio)
+    public async Task<ActionResult> MasterPlaylist(ulong id, int audio)
     {
         SetHeadersNoCache();
 
@@ -155,7 +189,11 @@ public class GStreamerController : BaseController
         if (gstask == null)
             return NotFound();
 
+        if (!await gstask.EnsureInitAsync(audio, HttpContext.RequestAborted).ConfigureAwait(false))
+            return StatusCode(StatusCodes.Status502BadGateway);
+
         var probe = gstask.probe;
+        HlsVariantInfo variant = gstask.hlsVariantInfo;
         var playlist = StringBuilderPool.Rent();
 
         try
@@ -218,11 +256,16 @@ public class GStreamerController : BaseController
                     .Append(averageBandwidth.Value);
             }
 
-            if (probe != null)
-            {
-                if (probe.Video?.Width > 0 && probe.Video?.Height > 0)
-                    playlist.Append($",RESOLUTION={probe.Video.Width}x{probe.Video.Height}");
-            }
+            int width = variant?.Width > 0 ? variant.Width : probe?.Video?.Width ?? 0;
+            int height = variant?.Height > 0 ? variant.Height : probe?.Video?.Height ?? 0;
+            if (width > 0 && height > 0)
+                playlist.Append($",RESOLUTION={width}x{height}");
+            if (variant?.FrameRate > 0)
+                playlist.Append(",FRAME-RATE=").Append(variant.FrameRate.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            if (!string.IsNullOrEmpty(variant?.Codecs))
+                playlist.Append($",CODECS=\"{variant.Codecs}\"");
+            if (variant?.VideoRange == "SDR" || variant?.VideoRange == "PQ" || variant?.VideoRange == "HLG")
+                playlist.Append($",VIDEO-RANGE={variant.VideoRange}");
 
             if (hasSubs)
                 playlist.Append(",SUBTITLES=\"subs\"");
@@ -254,12 +297,20 @@ public class GStreamerController : BaseController
         if (gstask == null)
             return NotFound();
 
-        int duration = gstask.probe.DurationSeconds;
-        if (0 >= duration)
-            duration = 200 * 60; // 200 min
+        const long secondNs = 1_000_000_000L;
 
-        int segmentSeconds = gstask.conf.segment_seconds;
-        int count = duration / segmentSeconds;
+        long durationNs = gstask.probe.DurationNs;
+        if (durationNs <= 0)
+            durationNs = 200L * 60L * secondNs; // 200 min
+
+        int segmentSeconds = Math.Max(1, gstask.conf.segment_seconds);
+        long segmentNs = checked((long)segmentSeconds * secondNs);
+        long count64 = durationNs / segmentNs;
+
+        if (durationNs % segmentNs != 0)
+            count64++;
+
+        int count = checked((int)count64);
 
         var playlist = StringBuilderPool.Rent();
 
@@ -278,10 +329,19 @@ public class GStreamerController : BaseController
 
             for (int i = 0; i < count; i++)
             {
+                long itemDurationNs = i + 1 == count
+                    ? durationNs - (long)i * segmentNs
+                    : segmentNs;
+
                 playlist
                     .Append("#EXTINF:")
-                    .Append(segmentSeconds)
-                    .AppendLine(".00,");
+                    .Append(
+                        ((double)itemDurationNs / secondNs).ToString(
+                            "0.###",
+                            System.Globalization.CultureInfo.InvariantCulture
+                        )
+                    )
+                    .AppendLine(",");
 
                 playlist
                     .Append("seg/")
@@ -314,22 +374,8 @@ public class GStreamerController : BaseController
         if (gstask == null)
             return NotFound();
 
-        if (gstask.initMp4 == null)
-        {
-            try
-            {
-                await gstask.semaphore.WaitAsync().ConfigureAwait(false);
-
-                gstask.EnsureSegment(-1, default, audio);
-
-                if (gstask.initMp4 == null)
-                    return StatusCode(502);
-            }
-            finally
-            {
-                gstask.semaphore.Release();
-            }
-        }
+        if (!await gstask.EnsureInitAsync(audio, HttpContext.RequestAborted).ConfigureAwait(false))
+            return StatusCode(StatusCodes.Status502BadGateway);
 
         Response.Headers.ContentLength = gstask.initMp4.Length;
         return File(gstask.initMp4, "video/mp4", true);
@@ -367,10 +413,9 @@ public class GStreamerController : BaseController
                 }
             }
 
-            gstask.SetClientSegmentIndex(index);
-
             if (gstask.TryOpenSegmentFile(index, out var cachedSegment))
             {
+                gstask.SetClientSegmentIndex(index, cacheHit: true);
                 gstask.QueueSegmentPrefetch(index);
 
                 await SendSegmentFile(
@@ -380,6 +425,7 @@ public class GStreamerController : BaseController
             }
             else
             {
+                gstask.SetClientSegmentIndex(index, cacheHit: false);
                 gstask.CancelSegmentPrefetch();
 
                 try
@@ -453,12 +499,20 @@ public class GStreamerController : BaseController
         if (gstask == null)
             return NotFound();
 
-        int duration = gstask.probe.DurationSeconds;
-        if (0 >= duration)
-            duration = 200 * 60; // 200 min
+        const long secondNs = 1_000_000_000L;
 
-        int segmentSeconds = gstask.conf.segment_seconds;
-        int count = duration / segmentSeconds;
+        long durationNs = gstask.probe.DurationNs;
+        if (durationNs <= 0)
+            durationNs = 200L * 60L * secondNs; // 200 min
+
+        int segmentSeconds = Math.Max(1, gstask.conf.segment_seconds);
+        long segmentNs = checked((long)segmentSeconds * secondNs);
+        long count64 = durationNs / segmentNs;
+
+        if (durationNs % segmentNs != 0)
+            count64++;
+
+        int count = checked((int)count64);
 
         var playlist = StringBuilderPool.Rent();
 
@@ -474,10 +528,19 @@ public class GStreamerController : BaseController
 
             for (int i = 0; i < count; i++)
             {
+                long itemDurationNs = i + 1 == count
+                    ? durationNs - (long)i * segmentNs
+                    : segmentNs;
+
                 playlist
                     .Append("#EXTINF:")
-                    .Append(segmentSeconds)
-                    .AppendLine(".00,");
+                    .Append(
+                        ((double)itemDurationNs / secondNs).ToString(
+                            "0.###",
+                            System.Globalization.CultureInfo.InvariantCulture
+                        )
+                    )
+                    .AppendLine(",");
 
                 playlist
                     .Append(index)

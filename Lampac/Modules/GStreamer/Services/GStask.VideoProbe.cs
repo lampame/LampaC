@@ -68,8 +68,9 @@ public partial class GStask
     {
         RemoveVideoSegmentClipProbe();
 
-        bool passthroughH264 = probe.IsH264 && !conf.transcodeH264;
-        bool passthroughH265 = probe.IsH265 && !conf.transcodeH265;
+        bool passthroughVideo = !IsVideoTranscoded;
+        bool passthroughH264 = passthroughVideo && probe.IsH264;
+        bool passthroughH265 = passthroughVideo && probe.IsH265;
 
         if (!passthroughH264 && !passthroughH265)
             return;
