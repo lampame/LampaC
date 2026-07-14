@@ -12,6 +12,7 @@ using Shared.Models.Base;
 using Shared.Services;
 using Shared.Services.Utilities;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -38,10 +39,28 @@ public class DLNAController : BaseController
     JsonResult DlnaAccessDenied()
         => new(new { error = "authorizationOrLocalIPRequired" }) { StatusCode = 403 };
 
-    static string defTrackers = "tr=http://retracker.local/announce&tr=http%3A%2F%2Fbt4.t-ru.org%2Fann%3Fmagnet&tr=http://retracker.mgts.by:80/announce&tr=http://tracker.city9x.com:2710/announce&tr=http://tracker.electro-torrent.pl:80/announce&tr=http://tracker.internetwarriors.net:1337/announce&tr=http://tracker2.itzmx.com:6961/announce&tr=udp://opentor.org:2710&tr=udp://public.popcorn-tracker.org:6969/announce&tr=udp://tracker.opentrackr.org:1337/announce&tr=http://bt.svao-ix.ru/announce&tr=udp://explodie.org:6969/announce&tr=wss://tracker.btorrent.xyz&tr=wss://tracker.openwebtorrent.com";
+    // https://github.com/YouROK/TorrServer/blob/master/server/torr/utils/torrent.go
+    static string defTrackers = "tr=" + string.Join("&tr=", new string[]
+    {
+        "http://retracker.local/announce",
+        "http://bt4.t-ru.org/ann?magnet",
+        "http://retracker.mgts.by:80/announce",
+        "http://tracker.city9x.com:2710/announce",
+        "http://tracker.electro-torrent.pl:80/announce",
+        "http://tracker.internetwarriors.net:1337/announce",
+        "http://tracker2.itzmx.com:6961/announce",
+        "udp://opentor.org:2710",
+        "udp://public.popcorn-tracker.org:6969/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "http://bt.svao-ix.ru/announce",
+        "udp://explodie.org:6969/announce"
+    }.Select(t => HttpUtility.UrlEncode(t)));
 
     static ClientEngine torrentEngine;
-    static DateTime lastBullderClientEngineCall = DateTime.MinValue;
+    static readonly SemaphoreSlim torrentEngineLock = new(1, 1);
+    static readonly ConcurrentDictionary<string, byte> torrentRemovals = new(StringComparer.OrdinalIgnoreCase);
+    static CancellationTokenSource torrentCleanupCts;
+    static Task torrentCleanupTask = Task.CompletedTask;
 
     public static void Initialization()
     {
@@ -50,59 +69,16 @@ public class DLNAController : BaseController
         Directory.CreateDirectory($"{dlna_path}/thumbs/");
         Directory.CreateDirectory($"{dlna_path}/tmdb/");
 
-        ThreadPool.QueueUserWorkItem(async _ =>
+        try
         {
-            string trackers_best_ip = await Http.Get("https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best_ip.txt", timeoutSeconds: 20);
-            if (trackers_best_ip != null)
-            {
-                foreach (string line in trackers_best_ip.Split("\n"))
-                {
-                    string tr = line.Replace("\n", "").Replace("\r", "").Trim();
-                    if (!string.IsNullOrWhiteSpace(tr))
-                        defTrackers += $"&tr={tr}";
-                }
-            }
-        });
-
-        ThreadPool.QueueUserWorkItem(async _ =>
+            bullderClientEngine().GetAwaiter().GetResult();
+        }
+        catch (System.Exception ex)
         {
-            while (true)
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(5));
-                    await removeClientEngine();
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Error(ex, "CatchId={CatchId}", "id_2ui4dhce");
-                }
-            }
-        });
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_engine_init");
+        }
 
-        ThreadPool.QueueUserWorkItem(async _ =>
-        {
-            while (true)
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromMinutes(1));
-
-                    if (torrentEngine == null)
-                        continue;
-
-                    if (lastBullderClientEngineCall == DateTime.MinValue || DateTime.UtcNow - lastBullderClientEngineCall < TimeSpan.FromMinutes(10))
-                        continue;
-
-                    if (!HasActiveTorrentTasks())
-                        await removeClientEngine();
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Error(ex, "CatchId={CatchId}", "id_aq7izano");
-                }
-            }
-        });
+        StartTorrentCleanup();
 
         if (!Directory.Exists("cache/metadata"))
             return;
@@ -112,7 +88,7 @@ public class DLNAController : BaseController
         if (_files.Length == 0)
             return;
 
-        bullderClientEngine();
+        bullderClientEngine().GetAwaiter().GetResult();
 
         foreach (string path in _files)
         {
@@ -195,7 +171,7 @@ public class DLNAController : BaseController
                             }
                         }
 
-                        await removeClientEngine(e.TorrentManager.InfoHashes.V1.ToHex().ToLower());
+                        await removeTorrentManager(e.TorrentManager.InfoHashes.V1.ToHex());
                     }
                 }
                 catch (System.Exception ex)
@@ -224,14 +200,36 @@ public class DLNAController : BaseController
     #endregion
 
     #region bullderClientEngine
-    static Task bullderClientEngine(int connectionTimeout = 10)
+    static async Task bullderClientEngine(int connectionTimeout = 10)
     {
-        lastBullderClientEngineCall = DateTime.UtcNow;
+        await torrentEngineLock.WaitAsync().ConfigureAwait(false);
 
-        if (torrentEngine != null)
-            return Task.CompletedTask;
+        try
+        {
+            if (torrentEngine != null)
+                return;
 
-        EngineSettingsBuilder engineSettingsBuilder = new EngineSettingsBuilder()
+            var engine = new ClientEngine(BuildEngineSettings(connectionTimeout));
+
+            try
+            {
+                await engine.StartAllAsync().ConfigureAwait(false);
+                torrentEngine = engine;
+            }
+            catch
+            {
+                engine.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            torrentEngineLock.Release();
+        }
+    }
+
+    static EngineSettings BuildEngineSettings(int connectionTimeout = 10)
+        => new EngineSettingsBuilder()
         {
             MaximumHalfOpenConnections = 20,
             ConnectionTimeout = TimeSpan.FromSeconds(connectionTimeout),
@@ -239,125 +237,212 @@ public class DLNAController : BaseController
             MaximumUploadRate = ModInit.conf.uploadSpeed,
             MaximumDiskReadRate = ModInit.conf.maximumDiskReadRate,
             MaximumDiskWriteRate = ModInit.conf.maximumDiskWriteRate
-        };
+        }.ToSettings();
 
-        torrentEngine = new ClientEngine(engineSettingsBuilder.ToSettings());
-        return torrentEngine.StartAllAsync();
-    }
-    #endregion
-
-    #region HasActiveTorrentTasks
-    static bool HasActiveTorrentTasks()
+    public static void UpdateEngineSettings()
     {
+        var engine = torrentEngine;
+        if (engine == null)
+            return;
+
         try
         {
-            if (torrentEngine?.Torrents == null)
-                return false;
-
-            foreach (var torrent in torrentEngine.Torrents)
-            {
-                if (torrent.State == TorrentState.Metadata || torrent.State == TorrentState.Downloading || torrent.State == TorrentState.Starting || torrent.State == TorrentState.Hashing)
-                    return true;
-            }
+            engine.UpdateSettingsAsync(BuildEngineSettings()).GetAwaiter().GetResult();
         }
         catch (System.Exception ex)
         {
-            Log.Error(ex, "CatchId={CatchId}", "id_c8dw12ad");
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_engine_settings");
         }
-
-        return false;
     }
     #endregion
 
-    #region removeClientEngine
-    async static Task removeClientEngine(string hash = null)
+    #region Torrent cleanup
+    static void StartTorrentCleanup()
+    {
+        if (torrentCleanupCts != null)
+            return;
+
+        torrentCleanupCts = new CancellationTokenSource();
+        torrentCleanupTask = TorrentCleanupLoop(torrentCleanupCts.Token);
+    }
+
+    static async Task TorrentCleanupLoop(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
+                await removeFinishedTorrentManagers().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error(ex, "CatchId={CatchId}", "id_2ui4dhce");
+            }
+        }
+    }
+
+    static async Task removeFinishedTorrentManagers()
+    {
+        var engine = torrentEngine;
+        if (engine?.Torrents == null)
+            return;
+
+        TorrentManager[] managers;
+
+        try
+        {
+            managers = engine.Torrents
+                .Where(i =>
+                    i.State == TorrentState.Seeding ||
+                    i.State == TorrentState.Stopped ||
+                    i.State == TorrentState.Stopping)
+                .ToArray();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_manager_snapshot");
+            return;
+        }
+
+        foreach (var manager in managers)
+            await removeTorrentManager(
+                manager.InfoHashes.V1.ToHex(),
+                120
+            ).ConfigureAwait(false);
+    }
+
+    static async Task removeTorrentManager(
+        string hash,
+        int stopTimeoutSeconds = 20)
+    {
+        if (string.IsNullOrWhiteSpace(hash))
+            return;
+
+        if (!torrentRemovals.TryAdd(hash, 0))
+            return;
+
+        try
+        {
+            var engine = torrentEngine;
+            if (engine?.Torrents == null)
+                return;
+
+            TorrentManager manager;
+
+            try
+            {
+                manager = engine.Torrents.FirstOrDefault(i =>
+                    string.Equals(
+                        i.InfoHashes.V1.ToHex(),
+                        hash,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error(ex, "CatchId={CatchId}", "id_dlna_manager_lookup");
+                return;
+            }
+
+            if (manager != null)
+            {
+                await removeTorrentManager(
+                    engine,
+                    manager,
+                    stopTimeoutSeconds
+                ).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            torrentRemovals.TryRemove(hash, out _);
+        }
+    }
+
+    static async Task removeTorrentManager(
+        ClientEngine engine,
+        TorrentManager manager,
+        int stopTimeoutSeconds)
     {
         try
         {
-            if (torrentEngine?.Torrents != null)
-            {
-                var tdl = new List<TorrentManager>();
-
-                foreach (var i in torrentEngine.Torrents)
-                {
-                    if (hash != null)
-                    {
-                        if (i.InfoHashes.V1.ToHex().ToLower() == hash)
-                        {
-                            try
-                            {
-                                await i.StopAsync(TimeSpan.FromSeconds(20));
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error(ex, "CatchId={CatchId}", "id_vo4qvlko");
-                            }
-
-                            tdl.Add(i);
-                        }
-                    }
-                    else
-                    {
-                        if (i.State == TorrentState.Seeding || i.State == TorrentState.Stopped || i.State == TorrentState.Stopping)
-                        {
-                            try
-                            {
-                                await i.StopAsync(TimeSpan.FromSeconds(120));
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error(ex, "CatchId={CatchId}", "id_f74nfczr");
-                            }
-
-                            tdl.Add(i);
-                        }
-                    }
-                }
-
-                if (tdl.Count > 0)
-                {
-                    foreach (var item in tdl)
-                    {
-                        try
-                        {
-                            torrentEngine.Torrents.Remove(item);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error(ex, "CatchId={CatchId}", "id_ozpje9tt");
-                        }
-
-                        try
-                        {
-                            await torrentEngine.RemoveAsync(item);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error(ex, "CatchId={CatchId}", "id_opm05p7t");
-                        }
-                    }
-
-                }
-
-                if (torrentEngine.Torrents.Count == 0)
-                {
-                    try
-                    {
-                        await torrentEngine.StopAllAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "CatchId={CatchId}", "id_sb61hmlz");
-                    }
-
-                    torrentEngine.Dispose();
-                    torrentEngine = null;
-                }
-            }
+            await manager.StopAsync(
+                TimeSpan.FromSeconds(stopTimeoutSeconds)
+            ).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
-            Log.Error(ex, "CatchId={CatchId}", "id_9abldvu9");
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_manager_stop");
+        }
+
+        try
+        {
+            await engine.RemoveAsync(manager).ConfigureAwait(false);
+        }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_manager_remove");
+        }
+    }
+
+    public static void Shutdown()
+    {
+        var cleanupCts = Interlocked.Exchange(ref torrentCleanupCts, null);
+        cleanupCts?.Cancel();
+
+        var cleanupTask = torrentCleanupTask;
+        torrentCleanupTask = Task.CompletedTask;
+
+        try
+        {
+            cleanupTask.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (cleanupCts?.IsCancellationRequested == true)
+        {
+        }
+        finally
+        {
+            cleanupCts?.Dispose();
+        }
+
+        ClientEngine engine;
+
+        torrentEngineLock.Wait();
+        try
+        {
+            engine = torrentEngine;
+            torrentEngine = null;
+        }
+        finally
+        {
+            torrentEngineLock.Release();
+        }
+
+        if (engine == null)
+            return;
+
+        try
+        {
+            engine.StopAllAsync(TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_engine_stop");
+        }
+
+        try
+        {
+            engine.Dispose();
+        }
+        catch (System.Exception ex)
+        {
+            Log.Error(ex, "CatchId={CatchId}", "id_dlna_engine_dispose");
         }
     }
     #endregion
@@ -814,8 +899,7 @@ public class DLNAController : BaseController
             if (IO.File.Exists($"cache/torrent/{hash}"))
                 return Json(Torrent.Load(IO.File.ReadAllBytes($"cache/torrent/{hash}")).Files.Select(i => new { i.Path }));
 
-            var s_cts = new CancellationTokenSource();
-            s_cts.CancelAfter(1000 * 60 * 3);
+            using var s_cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
 
             string magnet = tparse.magnet;
             magnet += (magnet.Contains("?") ? "&" : "?") + defTrackers;
@@ -852,36 +936,13 @@ public class DLNAController : BaseController
                 return Json(files.Select(i => new { i.Path }));
             }
 
-            try
-            {
-                var data = await torrentEngine.DownloadMetadataAsync(MagnetLink.Parse(magnet), s_cts.Token);
-                if (data.IsEmpty)
-                    return Json(new { error = "DownloadMetadata" });
+            var data = await torrentEngine.DownloadMetadataAsync(MagnetLink.Parse(magnet), s_cts.Token);
+            if (data.IsEmpty)
+                return Json(new { error = "DownloadMetadata" });
 
-                IO.File.WriteAllBytes($"cache/torrent/{hash}", data.Span);
+            IO.File.WriteAllBytes($"cache/torrent/{hash}", data.Span);
 
-                return Json(Torrent.Load(data.Span).Files.Select(i => new { i.Path }));
-            }
-            finally
-            {
-                // Always release the manager after the metadata fetch — Show()
-                // only needs the file list, and the streaming session in
-                // Download() re-loads metadata from the on-disk cache
-                // (cache/torrent/{hash}) and creates its own manager. Keeping
-                // this one around triggers the duplicate-register bug on the
-                // next Show() for the same torrent ("A manager for this torrent
-                // has already been registered" from MonoTorrent.ClientEngine).
-                //
-                // An earlier revision of this PR also added a defensive
-                // removeClientEngine(hash) BEFORE DownloadMetadataAsync, but
-                // that broke cold-start: removeClientEngine disposes the entire
-                // engine when Torrents.Count == 0 (its end-of-method GC path),
-                // so on a freshly built engine it nuked torrentEngine and the
-                // very next line crashed with NullReferenceException. Removed
-                // — this finally is sufficient because it runs on every exit
-                // path (success, exception, cancellation).
-                try { await removeClientEngine(hash); } catch { }
-            }
+            return Json(Torrent.Load(data.Span).Files.Select(i => new { i.Path }));
         }
         catch (Exception ex)
         {
@@ -961,23 +1022,18 @@ public class DLNAController : BaseController
                         #region AddTrackerAsync
                         if (IO.File.Exists("cache/trackers.txt") && ModInit.conf.addTrackersToMagnet)
                         {
-                            foreach (string line in IO.File.ReadLines("cache/trackers.txt").OrderBy(x => Random.Shared.Next()))
+                            foreach (string host in IO.File.ReadLines("cache/trackers.txt").OrderBy(x => Random.Shared.Next()))
                             {
-                                if (string.IsNullOrWhiteSpace(line))
+                                if (string.IsNullOrWhiteSpace(host))
                                     continue;
 
-                                string host = line.Replace("\r", "").Replace("\n", "").Replace("\t", "").Trim();
-
-                                if (host.StartsWith("http") || host.StartsWith("udp:"))
+                                try
                                 {
-                                    try
-                                    {
-                                        await manager.TrackerManager.AddTrackerAsync(new Uri(host));
-                                    }
-                                    catch (System.Exception ex)
-                                    {
-                                        Log.Error(ex, "CatchId={CatchId}", "id_z79t5hpv");
-                                    }
+                                    await manager.TrackerManager.AddTrackerAsync(new Uri(host));
+                                }
+                                catch (System.Exception ex)
+                                {
+                                    Log.Error(ex, "CatchId={CatchId}", "id_z79t5hpv");
                                 }
                             }
                         }
@@ -1047,7 +1103,7 @@ public class DLNAController : BaseController
                                     }
                                 }
 
-                                await removeClientEngine(e.TorrentManager.InfoHashes.V1.ToHex().ToLower());
+                                await removeTorrentManager(e.TorrentManager.InfoHashes.V1.ToHex());
                             }
                         }
                         catch (System.Exception ex)
@@ -1191,16 +1247,7 @@ public class DLNAController : BaseController
                 Log.Error(ex, "CatchId={CatchId}", "id_ehvvti8b");
             }
 
-            try
-            {
-                await manager.StopAsync();
-            }
-            catch (System.Exception ex)
-            {
-                Log.Error(ex, "CatchId={CatchId}", "id_al6kruxg");
-            }
-
-            await removeClientEngine(manager.InfoHashes.V1.ToHex().ToLower());
+            await removeTorrentManager(manager.InfoHashes.V1.ToHex());
         }
 
         return Json(new { status = true });

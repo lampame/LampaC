@@ -11,10 +11,20 @@ public class ModuleConf : ModuleBaseConf
 
     public int inactiveMinutes { get; set; }
 
+    /// <summary>
+    /// Максимальное количество одновременно хранимых задач. 0 = без ограничения.
+    /// </summary>
+    public int maxTasks { get; set; }
+
 
     public double gst_version { get; set; }
 
     public string PATH { get; set; }
+
+    /// <summary>
+    /// Максимальная скорость чтения souphttpsrc в MB/s. 0 = без ограничения.
+    /// </summary>
+    public int souphttpsrc_max_mb { get; set; }
 
     public Dictionary<string, ModuleConf> conf_uids { get; set; }
 
@@ -27,9 +37,19 @@ public class ModuleConf : ModuleBaseConf
     public int segment_past { get; set; } = 1;
 
     /// <summary>
+    /// максимальный размер заднего кеша в MB. 0 = без ограничения.
+    /// </summary>
+    public int segment_past_mb { get; set; }
+
+    /// <summary>
     /// количество буферных m4s
     /// </summary>
-    public int segment_buffer { get; set; } = 10;
+    public int segment_buffer { get; set; } = 7;
+
+    /// <summary>
+    /// максимальный размер буферных m4s в MB. 0 = без ограничения.
+    /// </summary>
+    public int segment_buffer_mb { get; set; }
 
     /// <summary>
     /// без transcode видео - примерная длительность сегмента
@@ -40,7 +60,7 @@ public class ModuleConf : ModuleBaseConf
     /// <summary>
     /// граница выравнивания
     /// </summary>
-    public int segment_diff { get; set; } = 10;
+    public int segment_diff { get; set; } = 20;
 
     public bool subtitles { get; set; } = true;
 

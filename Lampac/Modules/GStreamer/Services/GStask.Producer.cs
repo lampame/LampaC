@@ -84,6 +84,8 @@ public partial class GStask
                     return false;
                 }
 
+                InstallSourceThrottleProbe();
+
                 subsSinks.Clear();
 
                 foreach (var track in subtitleTracks)
@@ -338,6 +340,8 @@ public partial class GStask
                     disposeTask = true;
                     return false;
                 }
+
+                InstallSourceThrottleProbe();
 
                 subsSinks.Clear();
 
@@ -777,6 +781,9 @@ public partial class GStask
 
                 clientIndex = ClientSegmentIndex();
                 if (clientIndex < 0)
+                    return;
+
+                if (!NeedsSegmentPrefetch(clientIndex))
                     return;
 
                 targetIndex = clientIndex + SegmentBuffer();

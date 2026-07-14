@@ -32,13 +32,19 @@ public partial class GStask
             ? "retry-backoff-factor=0.5 retry-backoff-max=10"
             : string.Empty;
 
+        string blockSizeOption = conf.souphttpsrc_max_mb > 0
+            ? $"blocksize={SourceThrottleBlockSize}"
+            : string.Empty;
+
         sb.AppendLine($$"""
         souphttpsrc
+            name={{SourceElementName}}
             location="{{sourceUrl}}"
             is-live=false
             keep-alive=true
             timeout=90
             retries=5
+            {{blockSizeOption}}
             {{retryOptions}} !
         """);
     }

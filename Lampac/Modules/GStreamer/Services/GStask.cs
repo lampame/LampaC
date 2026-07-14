@@ -506,6 +506,7 @@ public partial class GStask
 
                 RemoveVideoStartProbe();
                 RemoveVideoSegmentClipProbe();
+                RemoveSourceThrottleProbe();
 
                 try
                 {

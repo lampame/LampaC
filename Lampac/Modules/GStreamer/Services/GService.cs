@@ -4,6 +4,7 @@ using Shared.Services.Hybrid;
 using Shared.Services.Utilities;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ public static class GService
     static ConcurrentDictionary<ulong, GStask> tasks = new();
     static readonly ConcurrentDictionary<ulong, TaskCompletionSource<bool>> waiters = new();
     static readonly ConcurrentDictionary<string, Lazy<Task<ProbeResult>>> probeWaiters = new(StringComparer.Ordinal);
+    static readonly object taskAddLock = new();
 
     static int cleanupRunning;
     static readonly Timer cleanupTimer = new(
@@ -147,17 +149,52 @@ public static class GService
                 if (!supportedVideo)
                     return new(null, "not mp4");
 
-                foreach (var tk in tasks)
+                task = new GStask(probe, conf, sourceUrl, id, uid, audio, httpHeaders.Content.Headers.ContentLength);
+
+                var removedTasks = new List<GStask>();
+
+                lock (taskAddLock)
                 {
-                    if (tk.Value.user_uid == uid && tk.Key != id)
+                    foreach (var tk in tasks)
                     {
-                        if (tasks.TryRemove(tk.Key, out var removed))
-                            removed.Dispose();
+                        if (tk.Value.user_uid == uid && tk.Key != id)
+                        {
+                            if (tasks.TryRemove(tk.Key, out var removed))
+                                removedTasks.Add(removed);
+                        }
                     }
+
+                    int maxTasks = ModInit.conf.maxTasks;
+
+                    while (maxTasks > 0 && tasks.Count >= maxTasks)
+                    {
+                        ulong oldestId = 0;
+                        GStask oldestTask = null;
+                        DateTime oldestLastActive = DateTime.MaxValue;
+
+                        foreach (var item in tasks)
+                        {
+                            DateTime lastActive = item.Value.lastActive;
+                            if (oldestTask == null || lastActive < oldestLastActive)
+                            {
+                                oldestId = item.Key;
+                                oldestTask = item.Value;
+                                oldestLastActive = lastActive;
+                            }
+                        }
+
+                        if (oldestTask == null)
+                            break;
+
+                        if (tasks.TryRemove(oldestId, out var removed))
+                            removedTasks.Add(removed);
+                    }
+
+                    tasks[id] = task;
                 }
 
-                task = new GStask(probe, conf, sourceUrl, id, uid, audio, httpHeaders.Content.Headers.ContentLength);
-                tasks[id] = task;
+                foreach (var removed in removedTasks)
+                    removed.Dispose();
 
                 return new(task, null);
             }

@@ -11,10 +11,11 @@ namespace GStreamer.Services;
 public partial class GStask
 {
     readonly object segmentCacheLock = new();
-    readonly HashSet<int> readySegmentFiles = new();
+    readonly Dictionary<int, long> readySegmentFiles = new();
     readonly Dictionary<int, int> pinnedSegmentFiles = new();
 
     int clientSegmentIndex = -1;
+    bool segmentCacheTrimPending;
     string segmentCacheDir;
 
     int SegmentPast()
@@ -22,6 +23,16 @@ public partial class GStask
 
     int SegmentBuffer()
         => Math.Max(2, conf.segment_buffer);
+
+    long SegmentPastMaxBytes()
+        => conf.segment_past_mb > 0
+            ? (long)conf.segment_past_mb * 1024 * 1024
+            : 0;
+
+    long SegmentBufferMaxBytes()
+        => conf.segment_buffer_mb > 0
+            ? (long)conf.segment_buffer_mb * 1024 * 1024
+            : 0;
 
     void InitSegmentCache()
     {
@@ -56,14 +67,7 @@ public partial class GStask
             if (readySegmentFiles.Count == 0)
                 return;
 
-            int min = Math.Max(0, clientSegmentIndex - SegmentPast());
-            int max = clientSegmentIndex + SegmentBuffer();
-
-            int[] remove = TakeAndRemoveOutsideWindow(
-                readySegmentFiles,
-                min,
-                max
-            );
+            int[] remove = TakeAndRemoveOutsideCacheLimits();
 
             foreach (int removeIndex in remove)
                 TryDeleteFile(SegmentFilePath(removeIndex));
@@ -81,7 +85,7 @@ public partial class GStask
 
         lock (segmentCacheLock)
         {
-            if (!readySegmentFiles.Contains(index))
+            if (!readySegmentFiles.ContainsKey(index))
                 return false;
         }
 
@@ -158,7 +162,15 @@ public partial class GStask
             if (count > 1)
                 pinnedSegmentFiles[index] = count - 1;
             else
+            {
                 pinnedSegmentFiles.Remove(index);
+
+                if (segmentCacheTrimPending)
+                {
+                    foreach (int removeIndex in TakeAndRemoveOutsideCacheLimits())
+                        TryDeleteFile(SegmentFilePath(removeIndex));
+                }
+            }
         }
     }
     #endregion
@@ -171,7 +183,7 @@ public partial class GStask
 
         lock (segmentCacheLock)
         {
-            if (readySegmentFiles.Contains(index))
+            if (readySegmentFiles.ContainsKey(index))
                 return true;
         }
 
@@ -188,7 +200,7 @@ public partial class GStask
             }
 
             lock (segmentCacheLock)
-                readySegmentFiles.Add(index);
+                readySegmentFiles[index] = segment.length;
 
             return true;
         }
@@ -240,32 +252,99 @@ public partial class GStask
         );
     }
 
-    int[] TakeAndRemoveOutsideWindow(HashSet<int> set, int min, int max)
+    int[] TakeAndRemoveOutsideCacheLimits()
     {
+        var set = readySegmentFiles;
+        segmentCacheTrimPending = false;
+
+        if (clientSegmentIndex < 0)
+            return Array.Empty<int>();
+
         if (set.Count == 0)
             return Array.Empty<int>();
 
+        int currentIndex = clientSegmentIndex;
+        int min = Math.Max(0, currentIndex - SegmentPast());
+        int max = currentIndex + SegmentBuffer();
+
         List<int> remove = null;
 
-        foreach (int index in set)
+        foreach (var item in set)
         {
+            int index = item.Key;
+
             if (index >= min && index <= max)
                 continue;
 
             if (pinnedSegmentFiles.ContainsKey(index))
+            {
+                segmentCacheTrimPending = true;
                 continue;
+            }
 
             remove ??= new List<int>();
             remove.Add(index);
         }
 
-        if (remove == null)
-            return Array.Empty<int>();
+        if (remove != null)
+        {
+            foreach (int index in remove)
+                set.Remove(index);
+        }
 
-        foreach (int index in remove)
-            set.Remove(index);
+        long maxPastBytes = SegmentPastMaxBytes();
+        if (maxPastBytes > 0)
+        {
+            long pastBytes = 0;
 
-        return remove.ToArray();
+            foreach (var item in set)
+            {
+                if (item.Key < min || item.Key >= currentIndex)
+                {
+                    continue;
+                }
+
+                if (pinnedSegmentFiles.ContainsKey(item.Key))
+                {
+                    segmentCacheTrimPending = true;
+                    continue;
+                }
+
+                pastBytes = item.Value >= long.MaxValue - pastBytes
+                    ? long.MaxValue
+                    : pastBytes + item.Value;
+            }
+
+            while (pastBytes > maxPastBytes)
+            {
+                int oldestIndex = int.MaxValue;
+                long oldestLength = 0;
+
+                foreach (var item in set)
+                {
+                    if (item.Key < min ||
+                        item.Key >= currentIndex ||
+                        item.Key >= oldestIndex ||
+                        pinnedSegmentFiles.ContainsKey(item.Key))
+                    {
+                        continue;
+                    }
+
+                    oldestIndex = item.Key;
+                    oldestLength = item.Value;
+                }
+
+                if (oldestIndex == int.MaxValue)
+                    break;
+
+                set.Remove(oldestIndex);
+                remove ??= new List<int>();
+                remove.Add(oldestIndex);
+                pastBytes = Math.Max(0, pastBytes - oldestLength);
+            }
+        }
+
+        return remove?.ToArray() ?? Array.Empty<int>();
     }
 
     static bool WriteSegmentToFile(Segment segment, string path)
@@ -333,7 +412,7 @@ public partial class GStask
             return false;
 
         lock (segmentCacheLock)
-            return readySegmentFiles.Contains(index);
+            return readySegmentFiles.ContainsKey(index);
     }
 
     bool NeedsSegmentPrefetch(int currentIndex)
@@ -345,9 +424,27 @@ public partial class GStask
 
         lock (segmentCacheLock)
         {
+            long maxBufferBytes = SegmentBufferMaxBytes();
+            if (maxBufferBytes > 0)
+            {
+                long bufferBytes = 0;
+                int maxIndex = currentIndex + buffer;
+
+                foreach (var item in readySegmentFiles)
+                {
+                    if (item.Key <= currentIndex || item.Key > maxIndex)
+                        continue;
+
+                    if (item.Value >= maxBufferBytes - bufferBytes)
+                        return false;
+
+                    bufferBytes += item.Value;
+                }
+            }
+
             for (int index = currentIndex + 1; index <= currentIndex + buffer; index++)
             {
-                if (!readySegmentFiles.Contains(index))
+                if (!readySegmentFiles.ContainsKey(index))
                     return true;
             }
         }
