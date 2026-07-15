@@ -317,11 +317,15 @@ public partial class GStask
 
     void AppendMux(StringBuilder sb)
     {
+        ulong fragmentDurationMs = cueTimeline != null
+            ? 1UL
+            : checked((ulong)Math.Max(1, conf.segment_seconds) * 1000UL);
+
         sb.AppendLine($$"""
         mp4mux
             name=mux
             fragment-mode=dash-or-mss
-            fragment-duration={{conf.segment_seconds * 1000}}
+            fragment-duration={{fragmentDurationMs}}
             streamable=true !
         """);
     }

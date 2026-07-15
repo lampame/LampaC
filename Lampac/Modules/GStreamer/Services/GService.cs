@@ -149,7 +149,37 @@ public static class GService
                 if (!supportedVideo)
                     return new(null, "not mp4");
 
-                task = new GStask(probe, conf, sourceUrl, id, uid, audio, httpHeaders.Content.Headers.ContentLength);
+                long? contentLength = httpHeaders.Content.Headers.ContentLength;
+                bool videoTranscoded =
+                    conf.hdr_to_sdr && probe.Video?.IsHdr == true ||
+                    probe.IsH264 && conf.transcodeH264 ||
+                    probe.IsH265 && conf.transcodeH265 ||
+                    probe.IsAV1 && conf.transcodeAV1 ||
+                    probe.IsVP9 && conf.transcodeVP9 ||
+                    probe.IsVP8 && conf.transcodeVP8 ||
+                    probe.IsAVI && conf.transcodeAVI;
+
+                CueTimeline cueTimeline = null;
+
+                if (probe.IsMatroskaOrWebM && !videoTranscoded)
+                {
+                    cueTimeline = await MatroskaCueReader.Read(
+                        sourceUrl,
+                        contentLength,
+                        probe.DurationNs
+                    ).ConfigureAwait(false);
+                }
+
+                task = new GStask(
+                    probe,
+                    conf,
+                    sourceUrl,
+                    id,
+                    uid,
+                    audio,
+                    contentLength,
+                    cueTimeline
+                );
 
                 var removedTasks = new List<GStask>();
 

@@ -44,7 +44,7 @@ public class ModuleConf : ModuleBaseConf
     /// <summary>
     /// количество буферных m4s
     /// </summary>
-    public int segment_buffer { get; set; } = 7;
+    public int segment_buffer { get; set; } = 10;
 
     /// <summary>
     /// максимальный размер буферных m4s в MB. 0 = без ограничения.
@@ -55,7 +55,7 @@ public class ModuleConf : ModuleBaseConf
     /// без transcode видео - примерная длительность сегмента
     /// для transcode видео - точная длительность сегмента
     /// </summary>
-    public int segment_seconds { get; set; } = 9;
+    public int segment_seconds { get; set; } = 6;
 
     /// <summary>
     /// граница выравнивания

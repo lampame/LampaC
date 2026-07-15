@@ -23,10 +23,20 @@ public partial class GStask
 
     public bool GetSubtitleVtt(StringBuilder sb, int subtitleIndex, int seg)
     {
-        int segmentSeconds = Math.Max(1, conf.segment_seconds);
+        ulong fromNs;
+        ulong toNs;
 
-        ulong fromNs = SegmentStartNs(seg, segmentSeconds);
-        ulong toNs = AddClockTime(fromNs, SecondsToClockTime(segmentSeconds));
+        if (cueTimeline?.TryGetSegment(seg, out CueSegment cueSegment) == true)
+        {
+            fromNs = cueSegment.StartNs;
+            toNs = cueSegment.EndNs;
+        }
+        else
+        {
+            int segmentSeconds = Math.Max(1, conf.segment_seconds);
+            fromNs = SegmentStartNs(seg, segmentSeconds);
+            toNs = AddClockTime(fromNs, SecondsToClockTime(segmentSeconds));
+        }
 
         sb.AppendLine("WEBVTT");
         sb.AppendLine($"X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:{ClockTimeToMpegTs(fromNs)}");
@@ -166,7 +176,8 @@ public partial class GStask
 
                         if (seekPosition > 0)
                         {
-                            ulong maxBackDiff = SecondsToClockTime(Math.Max(1, conf.segment_seconds));
+                            ulong maxBackDiff = cueTimeline?.MaxDurationNs ??
+                                SecondsToClockTime(Math.Max(1, conf.segment_seconds));
                             ulong minExpectedNs = seekPosition > maxBackDiff
                                 ? seekPosition - maxBackDiff
                                 : 0;

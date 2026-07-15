@@ -7,9 +7,9 @@ namespace GStreamer.Services;
 
 internal static class Mp4InitInfoReader
 {
-    public static HlsVariantInfo Read(byte[] data)
+    public static HlsVariantInfo Read(ReadOnlySpan<byte> data)
     {
-        if (data == null || data.Length < 8)
+        if (data.Length < 8)
             return null;
 
         try

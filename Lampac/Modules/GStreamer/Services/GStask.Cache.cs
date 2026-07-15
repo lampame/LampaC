@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Threading;
 
 namespace GStreamer.Services;
 
@@ -17,6 +18,7 @@ public partial class GStask
     int clientSegmentIndex = -1;
     bool segmentCacheTrimPending;
     string segmentCacheDir;
+    string initMp4Path;
 
     int SegmentPast()
         => Math.Max(1, conf.segment_past);
@@ -40,6 +42,12 @@ public partial class GStask
             "cache",
             "gstranscoding",
             id.ToString(CultureInfo.InvariantCulture)
+        );
+
+        initMp4Path = Path.Combine(
+            "cache",
+            "gstranscoding",
+            $"{id.ToString(CultureInfo.InvariantCulture)}.init.mp4"
         );
 
         ClearSegmentCache();
@@ -71,6 +79,52 @@ public partial class GStask
 
             foreach (int removeIndex in remove)
                 TryDeleteFile(SegmentFilePath(removeIndex));
+        }
+    }
+    #endregion
+
+    #region TryOpenInitFile
+    public bool TryOpenInitFile(out CachedSegmentFile file)
+    {
+        file = default;
+
+        long expectedLength = Volatile.Read(ref initMp4Length);
+        if (expectedLength <= 0)
+            return false;
+
+        SafeFileHandle handle = null;
+
+        try
+        {
+            handle = File.OpenHandle(
+                initMp4Path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete,
+                FileOptions.Asynchronous | FileOptions.SequentialScan
+            );
+
+            long length = RandomAccess.GetLength(handle);
+            if (length != expectedLength)
+            {
+                handle.Dispose();
+                return false;
+            }
+
+            file = new CachedSegmentFile(length, handle);
+            handle = null;
+
+            return true;
+        }
+        catch (IOException)
+        {
+            handle?.Dispose();
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            handle?.Dispose();
+            return false;
         }
     }
     #endregion
@@ -176,6 +230,42 @@ public partial class GStask
     #endregion
 
     #region Helpers
+    void StoreInitFile(ReadOnlySpan<byte> data)
+    {
+        if (data.IsEmpty)
+            throw new InvalidDataException("GStreamer init segment is empty.");
+
+        try
+        {
+            using var output = new FileStream(
+                initMp4Path,
+                new FileStreamOptions
+                {
+                    Mode = FileMode.Create,
+                    Access = FileAccess.Write,
+                    Share = FileShare.None,
+                    Options = FileOptions.SequentialScan,
+                    BufferSize = PoolInvk.msmBlockSize,
+                    PreallocationSize = data.Length
+                }
+            );
+
+            output.Write(data);
+
+            if (output.Position != data.Length)
+            {
+                throw new EndOfStreamException(
+                    $"Init writer produced {output.Position} of {data.Length} bytes."
+                );
+            }
+        }
+        catch
+        {
+            TryDeleteFile(initMp4Path);
+            throw;
+        }
+    }
+
     bool StoreSegmentFile(int index, Segment segment)
     {
         if (index < 0 || segment.length <= 0)
@@ -354,18 +444,7 @@ public partial class GStask
 
         try
         {
-            using var output = new FileStream(
-                path,
-                new FileStreamOptions
-                {
-                    Mode = FileMode.Create,
-                    Access = FileAccess.Write,
-                    Share = FileShare.None,
-                    Options = FileOptions.SequentialScan,
-                    BufferSize = PoolInvk.msmBlockSize,
-                    PreallocationSize = segment.length
-                }
-            );
+            using var output = new RandomAccessWriteStream(path, segment.length);
 
             segment.WriteTo(output);
 
@@ -375,6 +454,8 @@ public partial class GStask
                     $"Segment writer produced {output.Position} of {segment.length} bytes."
                 );
             }
+
+            output.Flush();
 
             return true;
         }

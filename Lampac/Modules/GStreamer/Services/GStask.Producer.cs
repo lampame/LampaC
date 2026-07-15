@@ -27,7 +27,15 @@ public partial class GStask
         return SeekClockTime(ns);
     }
 
-    bool SeekClockTime(ulong seekNs)
+    bool SeekSegment(int index)
+    {
+        if (cueTimeline?.TryGetSegment(index, out CueSegment segment) == true)
+            return SeekClockTime(segment.StartNs, accurate: true);
+
+        return Seek(index * conf.segment_seconds);
+    }
+
+    bool SeekClockTime(ulong seekNs, bool accurate = false)
     {
         CancellationTokenSource watchCts = null;
 
@@ -142,6 +150,7 @@ public partial class GStask
                 {
                     // appsink снимает backpressure до сброса timeline mp4mux
                     using var mux = bin?.GetByName("mux");
+                    using var videoTimestamper = bin?.GetByName("video_timestamper");
                     using var videoEncoder = IsVideoTranscoded
                         ? bin?.GetByName("video_encoder")
                         : null;
@@ -150,14 +159,18 @@ public partial class GStask
                         (IsVideoTranscoded && videoEncoder == null) ||
                         sink.SetState(State.Ready) == StateChangeReturn.Failure ||
                         mux.SetState(State.Ready) == StateChangeReturn.Failure ||
+                        (videoTimestamper != null &&
+                         videoTimestamper.SetState(State.Ready) == StateChangeReturn.Failure) ||
                         (videoEncoder != null && videoEncoder.SetState(State.Ready) == StateChangeReturn.Failure) ||
                         (videoEncoder != null && videoEncoder.SetState(State.Paused) == StateChangeReturn.Failure) ||
+                        (videoTimestamper != null &&
+                         videoTimestamper.SetState(State.Paused) == StateChangeReturn.Failure) ||
                         mux.SetState(State.Paused) == StateChangeReturn.Failure ||
                         sink.SetState(State.Paused) == StateChangeReturn.Failure)
                     {
                         LogTaskError(
                             "SeekClockTime",
-                            "Unable to reset mp4mux before reusing pipeline.",
+                            "Unable to reset mux/video state before reusing pipeline.",
                             seekNs: seekNs
                         );
 
@@ -172,21 +185,38 @@ public partial class GStask
                 Volatile.Write(ref positionSeekSeconds, seekNs);
 
                 InstallVideoStartProbe(seekNs);
-                InstallVideoSegmentClipProbe();
+                InstallVideoSegmentClipProbe(
+                    accurate ? seekNs : ulong.MaxValue
+                );
 
-                bool ok = pipeline.SeekSimple(
-                    Format.Time,
+                SeekFlags seekFlags =
                     SeekFlags.Flush |
                     SeekFlags.KeyUnit |
-                    SeekFlags.SnapAfter,
-                    (long)seekNs
+                    SeekFlags.SnapAfter;
+
+                if (accurate)
+                    seekFlags |= SeekFlags.Accurate;
+
+                using var multiqueue = bin.GetByName("mq");
+                using var videoPad = multiqueue?.GetStaticPad("src_0");
+
+                bool ok = videoPad != null && videoPad.SendEvent(
+                    Event.NewSeek(
+                        1.0,
+                        Format.Time,
+                        seekFlags,
+                        SeekType.Set,
+                        (long)seekNs,
+                        SeekType.None,
+                        -1
+                    )
                 );
 
                 if (!ok)
                 {
                     LogTaskError(
                         "SeekClockTime",
-                        "SeekSimple returned false.",
+                        "Video seek event returned false.",
                         seekNs: seekNs
                     );
 
@@ -394,11 +424,23 @@ public partial class GStask
             }
             #endregion
 
-            if (index < 0 && initMp4 != null)
+            if (index < 0 && InitMp4Ready)
                 return true;
 
             if (index >= 0 && SegmentFileReady(segmentIndex))
                 return true;
+
+            if (index >= 0 && cueTimeline != null)
+            {
+                if (!cueTimeline.TryGetSegment(segmentIndex, out CueSegment targetSegment))
+                    return false;
+
+                mp4Reader.SetTargetSegment(
+                    targetSegment.StartNs,
+                    targetSegment.EndNs,
+                    Math.Max(1UL, cueTimeline.TimestampScaleNs)
+                );
+            }
 
             lock (pipelineLock)
             {
@@ -485,7 +527,7 @@ public partial class GStask
                 if (activeSegmentStoreFailed)
                     return false;
 
-                if (index < 0 && initMp4 != null)
+                if (index < 0 && InitMp4Ready)
                     return true;
 
                 if (index >= 0 && SegmentFileReady(segmentIndex))
@@ -550,18 +592,18 @@ public partial class GStask
     #region EnsureInitAsync
     public async System.Threading.Tasks.Task<bool> EnsureInitAsync(int audio, CancellationToken cancellationToken)
     {
-        if (initMp4 != null)
+        if (InitMp4Ready)
             return true;
 
         await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            if (initMp4 != null)
+            if (InitMp4Ready)
                 return true;
 
             EnsureSegment(-1, cancellationToken, audio);
-            return initMp4 != null;
+            return InitMp4Ready;
         }
         catch (OperationCanceledException)
         {
@@ -569,7 +611,7 @@ public partial class GStask
         }
         catch
         {
-            return initMp4 != null;
+            return InitMp4Ready;
         }
         finally
         {
@@ -581,8 +623,12 @@ public partial class GStask
     #region EnsureClientSegment
     public bool EnsureClientSegment(int index, CancellationToken ct)
     {
-        if (index < 0 || IsDead)
+        if (index < 0 ||
+            IsDead ||
+            (cueTimeline != null && index >= cueTimeline.Count))
+        {
             return false;
+        }
 
         Volatile.Write(ref lastClientSegmentIndex, index);
 
@@ -595,7 +641,7 @@ public partial class GStask
         // а в cache его нет — без реального seek его уже нельзя получить.
         if (readerIndex >= 0 && index <= readerIndex)
         {
-            if (!Seek(index * conf.segment_seconds))
+            if (!SeekSegment(index))
                 return false;
 
             Volatile.Write(ref readerSegmentIndex, index - 1);
@@ -618,7 +664,7 @@ public partial class GStask
             return EnsureSegment(index, ct);
         }
 
-        if (!Seek(index * conf.segment_seconds))
+        if (!SeekSegment(index))
             return false;
 
         Volatile.Write(ref readerSegmentIndex, index - 1);
@@ -823,6 +869,9 @@ public partial class GStask
     {
         if (diff <= 0)
             return false;
+
+        if (cueTimeline != null)
+            return diff <= Math.Max(2, conf.segment_buffer);
 
         int segmentSeconds = Math.Max(1, conf.segment_seconds);
         int cutoff = Math.Max(2, conf.segment_buffer) * segmentSeconds;

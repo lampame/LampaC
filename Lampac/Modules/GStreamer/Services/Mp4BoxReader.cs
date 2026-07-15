@@ -98,10 +98,11 @@ public sealed class Mp4BoxReader : IDisposable
 
     const ulong GstSecond = 1_000_000_000UL;
 
-    readonly Action<byte[]> _onInit;
+    readonly Action<ReadOnlyMemory<byte>> _onInit;
     readonly Action<Segment> _onSegment;
     readonly int _segmentSeconds;
     readonly int _segmentDiff;
+    readonly bool _cueMode;
 
     readonly MemoryStream _init = new();
     readonly MemoryStream _sourceMoof = new(16 * 1024);
@@ -133,11 +134,21 @@ public sealed class Mp4BoxReader : IDisposable
     TrackInfo _videoTrack;
     TrackInfo _audioTrack;
 
+    uint _videoSampleDurationHint;
+    uint _videoSampleDurationHintTimescale;
+    uint _audioSampleDurationHint;
+    uint _audioSampleDurationHintTimescale;
+
     ulong _tfdtOffsetNs;
     uint _sequence = 1;
 
     ulong _lastVideoEndTime;
     int _completedVideoSegmentsCount;
+
+    bool _hasTargetSegment;
+    ulong _targetSegmentStartNs;
+    ulong _targetSegmentEndNs;
+    ulong _targetToleranceNs;
 
     enum Target
     {
@@ -175,6 +186,7 @@ public sealed class Mp4BoxReader : IDisposable
     {
         public byte Version;
         public bool HasCompositionOffset;
+        public bool HasInferredDuration;
         public int? SourceDataOffset;
         public ulong Duration;
         public ulong DataSize;
@@ -194,6 +206,7 @@ public sealed class Mp4BoxReader : IDisposable
         public ulong DecodeTime;
         public ulong Duration;
         public bool StartsWithSync;
+        public bool HasInferredDuration;
         public byte[] Tfhd;
         public readonly List<Run> Runs = new();
         public RecyclableMemoryStream Payload;
@@ -221,10 +234,11 @@ public sealed class Mp4BoxReader : IDisposable
     }
 
     public Mp4BoxReader(
-        Action<byte[]> onInit,
+        Action<ReadOnlyMemory<byte>> onInit,
         Action<Segment> onSegment,
         int segmentSeconds,
-        int segmentDiff
+        int segmentDiff,
+        bool cueMode = false
     )
     {
         _onInit = onInit ?? throw new ArgumentNullException(nameof(onInit));
@@ -241,6 +255,7 @@ public sealed class Mp4BoxReader : IDisposable
 
         _segmentSeconds = segmentSeconds;
         _segmentDiff = segmentDiff;
+        _cueMode = cueMode;
     }
 
     public void SeekReset()
@@ -263,6 +278,11 @@ public sealed class Mp4BoxReader : IDisposable
         _lastVideoEndTime = 0;
         _completedVideoSegmentsCount = 0;
 
+        _hasTargetSegment = false;
+        _targetSegmentStartNs = 0;
+        _targetSegmentEndNs = 0;
+        _targetToleranceNs = 0;
+
         Reset(_init);
         Reset(_sourceMoof);
         Reset(_sourceStyp);
@@ -280,6 +300,20 @@ public sealed class Mp4BoxReader : IDisposable
         _tfdtOffsetNs = offsetNs == ulong.MaxValue
             ? 0
             : offsetNs;
+    }
+
+    public void SetTargetSegment(ulong startNs, ulong endNs, ulong toleranceNs)
+    {
+        if (!_cueMode)
+            return;
+
+        if (endNs <= startNs)
+            throw new ArgumentOutOfRangeException(nameof(endNs));
+
+        _targetSegmentStartNs = startNs;
+        _targetSegmentEndNs = endNs;
+        _targetToleranceNs = toleranceNs;
+        _hasTargetSegment = true;
     }
 
     public void Push(Gst.Buffer buffer, int size)
@@ -373,6 +407,9 @@ public sealed class Mp4BoxReader : IDisposable
 
     public bool TryBuildEndOfStreamRemainder()
     {
+        if (_cueMode && !_hasTargetSegment)
+            return false;
+
         int videoCount = _video.Count;
         int audioCount = _audio.Count;
 
@@ -772,10 +809,17 @@ public sealed class Mp4BoxReader : IDisposable
         if (!_moovDone || _init.Length == 0)
             throw new InvalidDataException("Incomplete MP4 initialization.");
 
-        byte[] init = _init.ToArray();
+        if (!_init.TryGetBuffer(out ArraySegment<byte> buffer) || buffer.Array == null)
+            throw new InvalidOperationException("MP4 init buffer is not accessible.");
+
+        var init = new ReadOnlyMemory<byte>(
+            buffer.Array,
+            buffer.Offset,
+            checked((int)_init.Length)
+        );
 
         if (!TryParseInit(
-            init,
+            init.Span,
             out _videoTrack,
             out _audioTrack,
             out string error
@@ -787,7 +831,16 @@ public sealed class Mp4BoxReader : IDisposable
         }
 
         _initDone = true;
-        _onInit(init);
+
+        try
+        {
+            _onInit(init);
+        }
+        finally
+        {
+            Reset(_init);
+            _init.Capacity = 0;
+        }
     }
 
     void CompleteMoof()
@@ -798,6 +851,12 @@ public sealed class Mp4BoxReader : IDisposable
             moof,
             _videoTrack,
             _audioTrack,
+            _videoSampleDurationHintTimescale == _videoTrack.Timescale
+                ? _videoSampleDurationHint
+                : 0,
+            _audioSampleDurationHintTimescale == _audioTrack.Timescale
+                ? _audioSampleDurationHint
+                : 0,
             out Fragment fragment,
             out string error
         ))
@@ -805,8 +864,116 @@ public sealed class Mp4BoxReader : IDisposable
             throw new InvalidDataException($"Unable to parse source moof: {error}");
         }
 
+        ResolvePreviousInferredDuration(fragment);
+
+        uint durationHint = fragment.HasInferredDuration
+            ? 0
+            : LastSampleDuration(fragment);
+
+        if (durationHint != 0)
+        {
+            if (fragment.TrackId == _videoTrack.Id)
+            {
+                _videoSampleDurationHint = durationHint;
+                _videoSampleDurationHintTimescale = fragment.Timescale;
+            }
+            else if (fragment.TrackId == _audioTrack.Id)
+            {
+                _audioSampleDurationHint = durationHint;
+                _audioSampleDurationHintTimescale = fragment.Timescale;
+            }
+        }
+
         _pending = fragment;
         _sourcePayloadFromMoof = _sourceMoof.Length;
+    }
+
+    void ResolvePreviousInferredDuration(Fragment current)
+    {
+        List<Fragment> fragments = current.TrackId == _videoTrack.Id
+            ? _video
+            : current.TrackId == _audioTrack.Id
+                ? _audio
+                : null;
+
+        if (fragments == null || fragments.Count == 0)
+            return;
+
+        Fragment previous = fragments[^1];
+        if (!previous.HasInferredDuration)
+            return;
+
+        Run inferredRun = null;
+
+        for (int i = previous.Runs.Count - 1; i >= 0; i--)
+        {
+            if (previous.Runs[i].HasInferredDuration)
+            {
+                inferredRun = previous.Runs[i];
+                break;
+            }
+        }
+
+        if (inferredRun == null || inferredRun.Samples.Count == 0)
+            throw new InvalidDataException("Inferred sample duration marker is missing.");
+
+        int sampleIndex = inferredRun.Samples.Count - 1;
+        Sample sample = inferredRun.Samples[sampleIndex];
+        ulong durationBeforeSample = previous.Duration - sample.Duration;
+        ulong sampleStart = checked(previous.DecodeTime + durationBeforeSample);
+
+        if (current.DecodeTime < sampleStart)
+        {
+            throw new InvalidDataException(
+                $"Inferred sample moves decode time backwards: " +
+                $"track={current.TrackId}, previous_tfdt={previous.DecodeTime}, " +
+                $"previous_duration={previous.Duration}, sample_duration={sample.Duration}, " +
+                $"sample_start={sampleStart}, next_tfdt={current.DecodeTime}, " +
+                $"runs={previous.Runs.Count}, samples={previous.SampleCount}."
+            );
+        }
+
+        ulong exactDuration = current.DecodeTime - sampleStart;
+        if (exactDuration > uint.MaxValue)
+            throw new InvalidDataException("Inferred sample duration exceeds UInt32.");
+
+        uint exactDuration32 = (uint)exactDuration;
+        inferredRun.Samples[sampleIndex] = sample with { Duration = exactDuration32 };
+        inferredRun.Duration = checked(inferredRun.Duration - sample.Duration + exactDuration);
+        previous.Duration = checked(previous.Duration - sample.Duration + exactDuration);
+
+        foreach (Run run in previous.Runs)
+            run.HasInferredDuration = false;
+
+        previous.HasInferredDuration = false;
+
+        if (exactDuration32 != 0 && current.TrackId == _videoTrack.Id)
+        {
+            _videoSampleDurationHint = exactDuration32;
+            _videoSampleDurationHintTimescale = current.Timescale;
+        }
+        else if (exactDuration32 != 0)
+        {
+            _audioSampleDurationHint = exactDuration32;
+            _audioSampleDurationHintTimescale = current.Timescale;
+        }
+    }
+
+    static uint LastSampleDuration(Fragment fragment)
+    {
+        for (int runIndex = fragment.Runs.Count - 1; runIndex >= 0; runIndex--)
+        {
+            List<Sample> samples = fragment.Runs[runIndex].Samples;
+
+            for (int sampleIndex = samples.Count - 1; sampleIndex >= 0; sampleIndex--)
+            {
+                uint duration = samples[sampleIndex].Duration;
+                if (duration != 0)
+                    return duration;
+            }
+        }
+
+        return 0;
     }
 
     void CompleteMdat()
@@ -903,6 +1070,9 @@ public sealed class Mp4BoxReader : IDisposable
             );
         }
 
+        if (_cueMode)
+            return SelectCueVideoCount();
+
         ulong target = ToUnits(_segmentSeconds, _videoTrack.Timescale);
         bool takeFirstSyncBoundary = false;
 
@@ -985,6 +1155,66 @@ public sealed class Mp4BoxReader : IDisposable
         }
 
         return 0;
+    }
+
+    int SelectCueVideoCount()
+    {
+        if (!_hasTargetSegment || _video.Count < 2)
+            return 0;
+
+        long firstPresentationTime = FirstPresentationTime(_video[0]);
+        ulong targetDurationNs = _targetSegmentEndNs - _targetSegmentStartNs;
+
+        for (int i = 1; i < _video.Count; i++)
+        {
+            Fragment boundary = _video[i];
+
+            if (!boundary.StartsWithSync)
+                continue;
+
+            long boundaryPresentationTime = FirstPresentationTime(boundary);
+
+            if (boundaryPresentationTime <= firstPresentationTime)
+                throw new InvalidDataException("Cue presentation timeline is not increasing.");
+
+            ulong durationNs = ToNanoseconds(
+                checked((ulong)(boundaryPresentationTime - firstPresentationTime)),
+                _videoTrack.Timescale
+            );
+
+            if (durationNs < targetDurationNs &&
+                targetDurationNs - durationNs > _targetToleranceNs)
+            {
+                continue;
+            }
+
+            if (durationNs > targetDurationNs &&
+                durationNs - targetDurationNs > _targetToleranceNs)
+            {
+                throw new InvalidDataException(
+                    $"Cue sync boundary duration is {durationNs}, " +
+                    $"expected {targetDurationNs}."
+                );
+            }
+
+            return i;
+        }
+
+        return 0;
+    }
+
+    static long FirstPresentationTime(Fragment fragment)
+    {
+        if (fragment.Runs.Count == 0 || fragment.Runs[0].Samples.Count == 0)
+            throw new InvalidDataException("Video fragment has no first sample.");
+
+        Run run = fragment.Runs[0];
+        Sample sample = run.Samples[0];
+        long compositionOffset = run.Version == 1
+            ? unchecked((int)sample.CompositionOffset)
+            : sample.CompositionOffset;
+
+        return checked((long)fragment.DecodeTime + compositionOffset);
     }
 
     bool TryPrepareAudioForVideoEnd(ulong videoEnd, out int audioCount)
@@ -1390,6 +1620,9 @@ public sealed class Mp4BoxReader : IDisposable
                 AddClockTime(_tfdtOffsetNs, ToNanoseconds(last.EndTime, last.Timescale)),
                 WriteSegment
             ));
+
+            if (_cueMode)
+                _hasTargetSegment = false;
         }
         finally
         {
@@ -1513,7 +1746,7 @@ public sealed class Mp4BoxReader : IDisposable
 
     static void WriteTrun(Stream output, Run run, int dataOffset)
     {
-        if (run.SampleCount == 0 || run.SampleCount > uint.MaxValue)
+        if (run.SampleCount == 0)
             throw new InvalidDataException("Invalid trun sample count.");
 
         long size64 = GetTrunSize(run);
@@ -1572,6 +1805,8 @@ public sealed class Mp4BoxReader : IDisposable
         ReadOnlySpan<byte> moof,
         TrackInfo videoTrack,
         TrackInfo audioTrack,
+        uint videoDurationHint,
+        uint audioDurationHint,
         out Fragment fragment,
         out string error
     )
@@ -1620,6 +1855,8 @@ public sealed class Mp4BoxReader : IDisposable
                 headerSize,
                 videoTrack,
                 audioTrack,
+                videoDurationHint,
+                audioDurationHint,
                 out fragment,
                 out error
             ))
@@ -1642,6 +1879,8 @@ public sealed class Mp4BoxReader : IDisposable
         int trafHeader,
         TrackInfo videoTrack,
         TrackInfo audioTrack,
+        uint videoDurationHint,
+        uint audioDurationHint,
         out Fragment fragment,
         out string error
     )
@@ -1722,16 +1961,20 @@ public sealed class Mp4BoxReader : IDisposable
 
         uint timescale;
         Trex trex;
+        uint durationHint;
+        bool defaultDurationIsHint = false;
 
         if (trackId == videoTrack.Id)
         {
             timescale = videoTrack.Timescale;
             trex = videoTrack.Trex;
+            durationHint = videoDurationHint;
         }
         else if (trackId == audioTrack.Id)
         {
             timescale = audioTrack.Timescale;
             trex = audioTrack.Trex;
+            durationHint = audioDurationHint;
         }
         else
         {
@@ -1759,6 +2002,12 @@ public sealed class Mp4BoxReader : IDisposable
 
         if (defaultDuration == 0)
             defaultDuration = trex.Duration;
+
+        if (defaultDuration == 0)
+        {
+            defaultDuration = durationHint;
+            defaultDurationIsHint = defaultDuration != 0;
+        }
 
         if (defaultSize == 0)
             defaultSize = trex.Size;
@@ -1806,6 +2055,7 @@ public sealed class Mp4BoxReader : IDisposable
                 defaultDuration,
                 defaultSize,
                 defaultFlags,
+                defaultDurationIsHint,
                 out Run run,
                 out error
             ))
@@ -1815,6 +2065,7 @@ public sealed class Mp4BoxReader : IDisposable
             }
 
             duration = checked(duration + run.Duration);
+            result.HasInferredDuration |= run.HasInferredDuration;
             result.Runs.Add(run);
         }
 
@@ -1948,6 +2199,7 @@ public sealed class Mp4BoxReader : IDisposable
         uint defaultDuration,
         uint defaultSize,
         uint defaultFlags,
+        bool defaultDurationIsHint,
         out Run run,
         out string error
     )
@@ -2013,7 +2265,9 @@ public sealed class Mp4BoxReader : IDisposable
 
         if (!hasDuration && defaultDuration == 0)
         {
-            error = "sample duration is absent";
+            error =
+                $"sample duration is absent " +
+                $"(sample_count={sampleCount}, trun_flags=0x{flags:X6})";
             return false;
         }
 
@@ -2027,6 +2281,7 @@ public sealed class Mp4BoxReader : IDisposable
         {
             Version = version,
             HasCompositionOffset = hasCompositionOffset,
+            HasInferredDuration = !hasDuration && defaultDurationIsHint,
             SourceDataOffset = sourceDataOffset
         };
 
@@ -2082,9 +2337,33 @@ public sealed class Mp4BoxReader : IDisposable
             result.DataSize = checked(result.DataSize + sampleSize);
         }
 
-        if (cursor != box.Length || sampleCount == 0 || result.Duration == 0 || result.DataSize == 0)
+        if (cursor != box.Length)
         {
-            error = "invalid trun body";
+            error =
+                $"invalid trun body length: parsed={cursor}, actual={box.Length}, " +
+                $"sample_count={sampleCount}, flags=0x{flags:X6}";
+            return false;
+        }
+
+        if (sampleCount == 0)
+        {
+            error = $"empty trun (flags=0x{flags:X6})";
+            return false;
+        }
+
+        if (result.Duration == 0)
+        {
+            error =
+                $"trun duration is zero (sample_count={sampleCount}, " +
+                $"flags=0x{flags:X6})";
+            return false;
+        }
+
+        if (result.DataSize == 0)
+        {
+            error =
+                $"trun data size is zero (sample_count={sampleCount}, " +
+                $"flags=0x{flags:X6})";
             return false;
         }
 
@@ -2854,4 +3133,5 @@ public sealed class Mp4BoxReader : IDisposable
             ? ulong.MaxValue
             : left + right;
     }
+
 }

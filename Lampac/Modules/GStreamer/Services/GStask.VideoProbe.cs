@@ -15,6 +15,7 @@ public partial class GStask
     ulong videoSegmentClipProbeId;
     Gst.PadProbeCallback videoSegmentClipProbeCallback;
     ulong videoSegmentStart = ulong.MaxValue;
+    ulong videoSegmentRequestedStart = ulong.MaxValue;
 
     void InstallVideoStartProbe(ulong requestedNs)
     {
@@ -64,9 +65,12 @@ public partial class GStask
         videoStartProbeRequestedSeconds = 0;
     }
 
-    void InstallVideoSegmentClipProbe()
+    void InstallVideoSegmentClipProbe(ulong requestedStart)
     {
         RemoveVideoSegmentClipProbe();
+
+        videoSegmentRequestedStart = requestedStart;
+        videoSegmentStart = requestedStart;
 
         bool passthroughVideo = !IsVideoTranscoded;
         bool passthroughH264 = passthroughVideo && probe.IsH264;
@@ -102,6 +106,7 @@ public partial class GStask
         videoSegmentClipProbeId = 0;
         videoSegmentClipProbeCallback = null;
         videoSegmentStart = ulong.MaxValue;
+        videoSegmentRequestedStart = ulong.MaxValue;
 
         try
         {
@@ -120,7 +125,7 @@ public partial class GStask
 
             if (ev?.Type == EventType.FlushStart)
             {
-                videoSegmentStart = ulong.MaxValue;
+                videoSegmentStart = videoSegmentRequestedStart;
             }
             else if (TryGetTimeSegment(
                 ev,
@@ -128,7 +133,10 @@ public partial class GStask
                 out _
             ))
             {
-                videoSegmentStart = segmentStart;
+                videoSegmentStart = videoSegmentRequestedStart != ulong.MaxValue &&
+                    segmentStart < videoSegmentRequestedStart
+                        ? videoSegmentRequestedStart
+                        : segmentStart;
             }
 
             return PadProbeReturn.Ok;
@@ -222,7 +230,8 @@ public partial class GStask
     bool IsAcceptableVideoStartClockTime(ulong clockTime)
     {
         ulong requested = videoStartProbeRequestedSeconds;
-        ulong maxBackDiff = SecondsToClockTime(Math.Max(1, conf.segment_seconds));
+        ulong maxBackDiff = cueTimeline?.MaxDurationNs ??
+            SecondsToClockTime(Math.Max(1, conf.segment_seconds));
 
         return requested <= maxBackDiff ||
                clockTime >= requested - maxBackDiff;
