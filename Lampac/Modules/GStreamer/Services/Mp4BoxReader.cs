@@ -97,6 +97,34 @@ public sealed class Mp4BoxReader : IDisposable
     const uint TrunCompositionOffsetPresent = 0x000800;
 
     const ulong GstSecond = 1_000_000_000UL;
+    const uint MaxRunSamplePreallocation = 4096;
+    const int VideoPayloadBlockSize = 16 * 1024;
+    const int AudioPayloadBlockSize = 4 * 1024;
+
+    static readonly RecyclableMemoryStreamManager VideoPayloadPool =
+        CreatePayloadPool(VideoPayloadBlockSize, 42L * 1024 * 1024);
+
+    static readonly RecyclableMemoryStreamManager AudioPayloadPool =
+        CreatePayloadPool(AudioPayloadBlockSize, 2L * 1024 * 1024);
+
+    static RecyclableMemoryStreamManager CreatePayloadPool(
+        int blockSize,
+        long maximumSmallPoolFreeBytes
+    )
+    {
+        return new RecyclableMemoryStreamManager(
+            new RecyclableMemoryStreamManager.Options(
+                blockSize,
+                1024 * 1024,
+                10 * 1024 * 1024,
+                maximumSmallPoolFreeBytes,
+                0
+            )
+            {
+                AggressiveBufferReturn = false
+            }
+        );
+    }
 
     readonly Action<ReadOnlyMemory<byte>> _onInit;
     readonly Action<Segment> _onSegment;
@@ -130,6 +158,7 @@ public sealed class Mp4BoxReader : IDisposable
     bool _initDone;
     bool _moovDone;
     long _sourcePayloadFromMoof;
+    int _deferredStart;
 
     TrackInfo _videoTrack;
     TrackInfo _audioTrack;
@@ -184,6 +213,11 @@ public sealed class Mp4BoxReader : IDisposable
 
     sealed class Run
     {
+        public Run(int sampleCapacity)
+        {
+            Samples = new List<Sample>(sampleCapacity);
+        }
+
         public byte Version;
         public bool HasCompositionOffset;
         public bool HasInferredDuration;
@@ -193,7 +227,7 @@ public sealed class Mp4BoxReader : IDisposable
         public long PayloadOffset;
         public long OutputOffset;
         public bool StartsWithSync;
-        public readonly List<Sample> Samples = new();
+        public readonly List<Sample> Samples;
 
         public int SampleCount => Samples.Count;
     }
@@ -207,7 +241,7 @@ public sealed class Mp4BoxReader : IDisposable
         public ulong Duration;
         public bool StartsWithSync;
         public bool HasInferredDuration;
-        public byte[] Tfhd;
+        public uint SampleDescriptionIndexOverride;
         public readonly List<Run> Runs = new();
         public RecyclableMemoryStream Payload;
 
@@ -286,7 +320,7 @@ public sealed class Mp4BoxReader : IDisposable
         Reset(_init);
         Reset(_sourceMoof);
         Reset(_sourceStyp);
-        Reset(_deferred);
+        ResetDeferred();
 
         ClearSource();
         ClearFragments(_video);
@@ -325,8 +359,7 @@ public sealed class Mp4BoxReader : IDisposable
 
         if (TryProcessDeferred())
         {
-            AppendGstBuffer(buffer, 0, size, _deferred);
-            _deferred.Position = 0;
+            AppendGstBufferToDeferred(buffer, 0, size);
             return;
         }
 
@@ -354,12 +387,11 @@ public sealed class Mp4BoxReader : IDisposable
                 continue;
 
             if (consumed < copied)
-                _deferred.Write(_readBuffer.AsSpan(consumed, copied - consumed));
+                AppendDeferred(_readBuffer.AsSpan(consumed, copied - consumed));
 
             if (sourceOffset < size)
-                AppendGstBuffer(buffer, sourceOffset, size - sourceOffset, _deferred);
+                AppendGstBufferToDeferred(buffer, sourceOffset, size - sourceOffset);
 
-            _deferred.Position = 0;
             return;
         }
     }
@@ -369,28 +401,37 @@ public sealed class Mp4BoxReader : IDisposable
         if (TryBuildSegment())
             return true;
 
-        if (_deferred.Length == 0)
-            return false;
+        int deferredEnd = checked((int)_deferred.Length);
 
-        int length = checked((int)_deferred.Length);
+        if ((uint)_deferredStart > (uint)deferredEnd)
+            throw new InvalidOperationException("Deferred buffer range is invalid.");
+
+        int length = deferredEnd - _deferredStart;
+
+        if (length == 0)
+        {
+            ResetDeferred();
+            return false;
+        }
+
         ReadOnlySpan<byte> data;
         byte[] copy = null;
 
         if (_deferred.TryGetBuffer(out ArraySegment<byte> segment) && segment.Array != null)
         {
-            data = segment.Array.AsSpan(segment.Offset, length);
+            data = segment.Array.AsSpan(segment.Offset + _deferredStart, length);
         }
         else
         {
             copy = _deferred.ToArray();
-            data = copy;
+            data = copy.AsSpan(_deferredStart, length);
         }
 
         int consumed = Process(data, out bool completed);
 
         if (completed)
         {
-            KeepDeferred(data, consumed);
+            KeepDeferred(length, consumed);
             return true;
         }
 
@@ -401,7 +442,7 @@ public sealed class Mp4BoxReader : IDisposable
             );
         }
 
-        Reset(_deferred);
+        ResetDeferred();
         return false;
     }
 
@@ -620,7 +661,7 @@ public sealed class Mp4BoxReader : IDisposable
                     }
 
                     _sourcePayload?.Dispose();
-                    _sourcePayload = PoolInvk.msm.GetStream();
+                    _sourcePayload = CreatePayloadStream(_pending.TrackId);
 
                     _sourcePayloadFromMoof = checked(
                         _sourcePayloadFromMoof + headerSize
@@ -1001,6 +1042,17 @@ public sealed class Mp4BoxReader : IDisposable
         Reset(_sourceMoof);
     }
 
+    RecyclableMemoryStream CreatePayloadStream(uint trackId)
+    {
+        if (trackId == _videoTrack.Id)
+            return VideoPayloadPool.GetStream();
+
+        if (trackId == _audioTrack.Id)
+            return AudioPayloadPool.GetStream();
+
+        return PoolInvk.msm.GetStream();
+    }
+
     static void AttachPayload(
         Fragment fragment,
         RecyclableMemoryStream payload,
@@ -1287,7 +1339,7 @@ public sealed class Mp4BoxReader : IDisposable
         return count;
     }
 
-    static void SplitFragment(List<Fragment> fragments, int index, int firstSampleCount)
+    void SplitFragment(List<Fragment> fragments, int index, int firstSampleCount)
     {
         Fragment source = fragments[index];
         int totalSamples = source.SampleCount;
@@ -1315,7 +1367,7 @@ public sealed class Mp4BoxReader : IDisposable
         fragments.Insert(index + 1, tail);
     }
 
-    static Fragment SliceFragment(Fragment source, int startSample, int sampleCount)
+    Fragment SliceFragment(Fragment source, int startSample, int sampleCount)
     {
         if (sampleCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(sampleCount));
@@ -1328,8 +1380,8 @@ public sealed class Mp4BoxReader : IDisposable
             Timescale = source.Timescale,
             SampleDescriptionIndex = source.SampleDescriptionIndex,
             DecodeTime = decodeTime,
-            Tfhd = source.Tfhd,
-            Payload = PoolInvk.msm.GetStream()
+            SampleDescriptionIndexOverride = source.SampleDescriptionIndexOverride,
+            Payload = CreatePayloadStream(source.TrackId)
         };
 
         try
@@ -1418,7 +1470,7 @@ public sealed class Mp4BoxReader : IDisposable
 
     static Run CloneRunSlice(Run source, int startSample, int sampleCount, long payloadOffset)
     {
-        var result = new Run
+        var result = new Run(sampleCount)
         {
             Version = source.Version,
             HasCompositionOffset = source.HasCompositionOffset,
@@ -1685,7 +1737,11 @@ public sealed class Mp4BoxReader : IDisposable
 
     static long GetTrafSize(List<Fragment> fragments, int count)
     {
-        long size = 8L + fragments[0].Tfhd.Length + 20L;
+        long tfhdSize = fragments[0].SampleDescriptionIndexOverride == 0
+            ? 16L
+            : 20L;
+
+        long size = 8L + tfhdSize + 20L;
 
         for (int i = 0; i < count; i++)
         {
@@ -1719,7 +1775,7 @@ public sealed class Mp4BoxReader : IDisposable
         Fragment first = fragments[0];
 
         WriteHeader(output, (uint)size64, BoxTraf);
-        output.Write(first.Tfhd);
+        WriteTfhd(output, first.TrackId, first.SampleDescriptionIndexOverride);
 
         WriteTfdt(
             output,
@@ -2021,18 +2077,13 @@ public sealed class Mp4BoxReader : IDisposable
                 ? sampleDescriptionIndex
                 : 0;
 
-        byte[] tfhd = BuildCanonicalTfhd(
-            trackId,
-            sampleDescriptionIndexOverride
-        );
-
         var result = new Fragment
         {
             TrackId = trackId,
             Timescale = timescale,
             SampleDescriptionIndex = effectiveSampleDescriptionIndex,
             DecodeTime = decodeTime,
-            Tfhd = tfhd
+            SampleDescriptionIndexOverride = sampleDescriptionIndexOverride
         };
 
         ulong duration = 0;
@@ -2171,26 +2222,30 @@ public sealed class Mp4BoxReader : IDisposable
         return true;
     }
 
-    static byte[] BuildCanonicalTfhd(uint trackId, uint sampleDescriptionIndexOverride)
+    static void WriteTfhd(
+        Stream output,
+        uint trackId,
+        uint sampleDescriptionIndexOverride
+    )
     {
         bool hasSampleDescriptionIndex = sampleDescriptionIndexOverride != 0;
         int size = hasSampleDescriptionIndex ? 20 : 16;
-        byte[] tfhd = new byte[size];
+        Span<byte> tfhd = stackalloc byte[20];
 
         uint flags = TfhdDefaultBaseIsMoof;
 
         if (hasSampleDescriptionIndex)
             flags |= TfhdSampleDescriptionIndexPresent;
 
-        BinaryPrimitives.WriteUInt32BigEndian(tfhd.AsSpan(0, 4), (uint)size);
-        BinaryPrimitives.WriteUInt32BigEndian(tfhd.AsSpan(4, 4), BoxTfhd);
-        BinaryPrimitives.WriteUInt32BigEndian(tfhd.AsSpan(8, 4), flags);
-        BinaryPrimitives.WriteUInt32BigEndian(tfhd.AsSpan(12, 4), trackId);
+        BinaryPrimitives.WriteUInt32BigEndian(tfhd[..4], (uint)size);
+        BinaryPrimitives.WriteUInt32BigEndian(tfhd.Slice(4, 4), BoxTfhd);
+        BinaryPrimitives.WriteUInt32BigEndian(tfhd.Slice(8, 4), flags);
+        BinaryPrimitives.WriteUInt32BigEndian(tfhd.Slice(12, 4), trackId);
 
         if (hasSampleDescriptionIndex)
-            BinaryPrimitives.WriteUInt32BigEndian(tfhd.AsSpan(16, 4), sampleDescriptionIndexOverride);
+            BinaryPrimitives.WriteUInt32BigEndian(tfhd.Slice(16, 4), sampleDescriptionIndexOverride);
 
-        return tfhd;
+        output.Write(tfhd[..size]);
     }
 
     static bool TryNormalizeTrun(
@@ -2277,7 +2332,11 @@ public sealed class Mp4BoxReader : IDisposable
             return false;
         }
 
-        var result = new Run
+        int sampleCapacity = sampleCount <= MaxRunSamplePreallocation
+            ? (int)sampleCount
+            : 0;
+
+        var result = new Run(sampleCapacity)
         {
             Version = version,
             HasCompositionOffset = hasCompositionOffset,
@@ -3039,15 +3098,37 @@ public sealed class Mp4BoxReader : IDisposable
         _target = Target.None;
     }
 
-    void KeepDeferred(ReadOnlySpan<byte> data, int consumed)
+    void ResetDeferred()
     {
-        int count = data.Length - consumed;
+        _deferredStart = 0;
+        Reset(_deferred);
+    }
 
-        if (count <= 0)
+    void KeepDeferred(int length, int consumed)
+    {
+        if (length < 0 ||
+            (uint)consumed > (uint)length ||
+            checked(_deferredStart + length) != _deferred.Length)
         {
-            Reset(_deferred);
+            throw new InvalidOperationException("Deferred buffer range is invalid.");
+        }
+
+        if (consumed == length)
+        {
+            ResetDeferred();
             return;
         }
+
+        _deferredStart = checked(_deferredStart + consumed);
+        _deferred.Position = 0;
+    }
+
+    void AppendDeferred(ReadOnlySpan<byte> data)
+    {
+        if (data.IsEmpty)
+            return;
+
+        EnsureDeferredAppendCapacity(data.Length);
 
         if (!_deferred.TryGetBuffer(out ArraySegment<byte> segment) ||
             segment.Array == null)
@@ -3055,40 +3136,109 @@ public sealed class Mp4BoxReader : IDisposable
             throw new InvalidOperationException("Deferred buffer is not accessible.");
         }
 
-        Buffer.BlockCopy(
-            segment.Array,
-            segment.Offset + consumed,
-            segment.Array,
-            segment.Offset,
-            count
-        );
+        int start = checked((int)_deferred.Length);
+        data.CopyTo(segment.Array.AsSpan(segment.Offset + start, data.Length));
 
-        _deferred.SetLength(count);
-        _deferred.Position = count;
+        _deferred.SetLength(checked(start + data.Length));
+        _deferred.Position = 0;
     }
 
-    void AppendGstBuffer(
+    void EnsureDeferredAppendCapacity(int count)
+    {
+        if (count <= 0)
+            return;
+
+        int end = checked((int)_deferred.Length);
+
+        if ((uint)_deferredStart > (uint)end)
+            throw new InvalidOperationException("Deferred buffer range is invalid.");
+
+        if (count <= _deferred.Capacity - end)
+            return;
+
+        int activeLength = end - _deferredStart;
+
+        if (_deferredStart != 0)
+        {
+            if (!_deferred.TryGetBuffer(out ArraySegment<byte> segment) ||
+                segment.Array == null)
+            {
+                throw new InvalidOperationException("Deferred buffer is not accessible.");
+            }
+
+            if (activeLength != 0)
+            {
+                Buffer.BlockCopy(
+                    segment.Array,
+                    segment.Offset + _deferredStart,
+                    segment.Array,
+                    segment.Offset,
+                    activeLength
+                );
+            }
+
+            _deferredStart = 0;
+            _deferred.SetLength(activeLength);
+            _deferred.Position = 0;
+            end = activeLength;
+
+            if (count <= _deferred.Capacity - end)
+                return;
+        }
+
+        int requiredEnd = checked(end + count);
+        long doubled = (long)_deferred.Capacity * 2;
+        int newCapacity = requiredEnd;
+
+        if (doubled > newCapacity)
+        {
+            newCapacity = doubled > Array.MaxLength
+                ? Math.Max(requiredEnd, Array.MaxLength)
+                : (int)doubled;
+        }
+
+        _deferred.Capacity = newCapacity;
+    }
+
+    void AppendGstBufferToDeferred(
         Gst.Buffer buffer,
         int offset,
-        int count,
-        Stream destination
+        int count
     )
     {
-        while (count > 0)
+        if (count <= 0)
+            return;
+
+        EnsureDeferredAppendCapacity(count);
+
+        if (!_deferred.TryGetBuffer(out ArraySegment<byte> segment) ||
+            segment.Array == null)
         {
-            int requested = Math.Min(_readBuffer.Length, count);
+            throw new InvalidOperationException("Deferred buffer is not accessible.");
+        }
+
+        int start = checked((int)_deferred.Length);
+        int written = 0;
+
+        while (written < count)
+        {
+            int requested = Math.Min(_readBuffer.Length, count - written);
             int copied = (int)buffer.Extract(
-                (nuint)offset,
-                _readBuffer.AsSpan(0, requested)
+                (nuint)checked(offset + written),
+                segment.Array.AsSpan(
+                    segment.Offset + start + written,
+                    requested
+                )
             );
 
             if (copied <= 0)
-                return;
+                break;
 
-            destination.Write(_readBuffer.AsSpan(0, copied));
-            offset += copied;
-            count -= copied;
+            written += copied;
         }
+
+        _deferred.SetLength(checked(start + written));
+        _deferred.Position = 0;
     }
 
     static string FourCC(uint type)

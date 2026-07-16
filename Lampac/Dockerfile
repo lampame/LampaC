@@ -2,8 +2,8 @@
 # Build with: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile .
 
 # Global ARGs
-ARG DOTNET_VERSION=10.0.9
-ARG DOTNET_SDK_VERSION=10.0.301
+ARG DOTNET_VERSION=10.0.10
+ARG DOTNET_SDK_VERSION=10.0.302
 ARG CHROMIUM_VERSION=149.0.7827.196-1~deb13u1
 
 # Builder image — platform set by buildx
