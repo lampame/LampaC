@@ -588,14 +588,14 @@ install_os_packages() {
   local icu_pkg
   icu_pkg="$(pick_libicu_package)"
 
-  run_quiet "Installing system packages (curl, jq, fonts, GStreamer, ICU, ImageMagick, unzip)" \
+  run_quiet "Installing system packages (curl, jq, fonts, GStreamer, ICU, ImageMagick, unzip, rsync)" \
     env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl jq fontconfig \
       gstreamer1.0-libav gstreamer1.0-plugins-bad gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-base-apps gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
       gstreamer1.0-tools \
       imagemagick libgstreamer-plugins-base1.0-0 libgstreamer1.0-0 \
-      libjpeg-dev libnspr4 libpng-dev libwebp-dev unzip "$icu_pkg"
+      libjpeg-dev libnspr4 libpng-dev libwebp-dev unzip rsync "$icu_pkg"
 
   install_google_chrome
 
@@ -828,9 +828,9 @@ do_update() {
   fi
 
   if ! command -v rsync >/dev/null 2>&1; then
-    spinner_start "Installing rsync..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends rsync -qq 2>/dev/null
-    spinner_ok "rsync installed"
+    run_quiet "Updating package lists" apt-get update
+    run_quiet "Installing rsync" \
+      env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends rsync
   fi
 
   ensure_service_user
