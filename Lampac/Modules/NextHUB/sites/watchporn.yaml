@@ -1,11 +1,14 @@
-enable: false
+enable: true
 displayindex: 380
 displayname: WatchPorn
 rch_access: apk,cors
 stream_access: apk,cors
-rchstreamproxy: web
+rchstreamproxy: web, apk,cors
 host: https://watchporn.to
 priorityBrowser: http
+headers_stream:
+  User-Agent: "Mozilla/5.0"
+  Referer: "{host}/"
 #streamproxy_preview: true
 
 menu:
@@ -122,9 +125,10 @@ search:
   uri: search/{search}/?mode=async&function=get_block&block_id=list_videos_videos_list_search_result&from_videos={page}
 
 contentParse:
-  nodes: //div[@class='item  ']
+  nodes: //div[contains(concat(' ', normalize-space(@class), ' '), ' item ')]
   name:
-    node: .//strong
+    node: .//a
+    attribute: title
   href:
     node: .//a
     attribute: href
@@ -132,7 +136,7 @@ contentParse:
     node: .//img
     attribute: data-webp
   duration:
-    node: .//div[@class='duration']
+    node: .//span[@class='thumb__info-item']
   preview:
     node: .//img
     attribute: data-preview
@@ -140,12 +144,5 @@ contentParse:
 view:
   related: true
   viewsource: true
-  eval: |
-    {include:kt_player.eval}
-    return decode();
-
-#view:
-#  related: true
-#  patternFile: /get_file/
-#  patternWhiteRequest: kt_player\.
-#  waitLocationFile: true
+  regexMatch:
+    pattern: "video_alt_url: '([^']+)'"

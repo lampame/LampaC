@@ -1,7 +1,10 @@
-enable: false
+enable: true
 displayindex: 235
 displayname: yaeby
-host: https://www.yaeby.pro
+rch_access: apk,cors
+stream_access: apk,cors
+rchstreamproxy: web, apk,cors
+host: https://m.yaeby.dad/
 
 list:
   uri: "new-porno/?mode=async&function=get_block&block_id=list_videos_latest_videos_list&sort_by=post_date_and_popularity&from={page}"
