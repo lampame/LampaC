@@ -20,7 +20,7 @@ public static class MusicMapSupport
     // если сайт/парсер временно отдал мусор (совет Кодекса)
     static readonly TimeSpan similarCacheTtl = TimeSpan.FromDays(14);
 
-    static readonly HttpClient httpClient = FriendlyHttp.CreateHttpClient(useCookies: false);
+    static readonly HttpClient httpClient = MusicHttp.CreateClient("musicmap");
     static readonly Regex mapBlockRegex = new(@"<div id=gnodMap>(.*?)</div>", RegexOptions.Singleline | RegexOptions.Compiled);
     static readonly Regex anchorRegex = new("<a href=\"[^\"]*\" class=S id=s(\\d+)>([^<]*)</a>", RegexOptions.Compiled);
 
