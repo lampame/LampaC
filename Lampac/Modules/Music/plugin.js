@@ -1500,6 +1500,8 @@
             values.outplayer = 'Outplayer';
             values.nplayer = 'nPlayer';
             values.infuse = 'Infuse';
+        } else if (!Lampa.Platform.macOS()) {
+            values.ios = 'Music Player';
         }
 
         if (Lampa.Platform.macOS()) {
@@ -4953,8 +4955,7 @@
     // --- standalone <audio>: элемент, timeupdate, lock-kick ---
 
     function shouldUseStandaloneIosAudio() {
-        return Lampa.Platform.is('apple')
-            && currentExternalPlayer() === 'ios'
+        return currentExternalPlayer() === 'ios'
             && getPlaybackMode() === 'audio';
     }
 
@@ -9383,9 +9384,29 @@
 
     function pickPlaybackSource(sources) {
         if (!Array.isArray(sources) || !sources.length) return null;
-        if (!shouldUseStandaloneIosAudio()) return sources[0];
 
-        return sources.slice().sort(function (a, b) {
+        function isHls(s) {
+            var quality = String(s && s.quality || '').toLowerCase();
+            var protocol = String(s && s.protocol || '').toLowerCase();
+            var mime = String(s && s.mime_type || '').toLowerCase();
+            var url = String(s && s.url || '').toLowerCase();
+            return quality.indexOf('hls') !== -1
+                || protocol.indexOf('hls') !== -1
+                || mime.indexOf('mpegurl') !== -1
+                || url.indexOf('.m3u8') !== -1;
+        }
+
+        if (!shouldUseStandaloneIosAudio()) {
+            var nonHls = sources.filter(function (s) { return !isHls(s); });
+            return nonHls.length ? nonHls[0] : sources[0];
+        }
+
+        var candidates = Lampa.Platform.is('apple')
+            ? sources
+            : sources.filter(function (s) { return !isHls(s); });
+        if (!candidates.length) candidates = sources;
+
+        return candidates.slice().sort(function (a, b) {
             return iosSourceRank(a) - iosSourceRank(b);
         })[0];
     }
@@ -9570,11 +9591,12 @@
     var historyPlaybackTrackId = '';
 
     function hasMusicPlayerVisualArtifacts() {
-        return $('.lm-player-visual, .player-panel__music-lyrics, .player-panel__music-lyrics-offset, .player-video.lm-player-video--music').length > 0;
+        return $('.lm-player-visual, .player-panel__music-controls, .player-panel__music-lyrics, .player-panel__music-lyrics-offset, .player-video.lm-player-video--music').length > 0;
     }
 
     function removeMusicPlayerVisual() {
         $('.lm-player-visual').remove();
+        $('.player-panel__music-controls').remove();
         $('.player-panel__music-lyrics, .player-panel__music-lyrics-offset').remove();
         $('.player-video.lm-player-video--music').removeClass('lm-player-video--music');
         musicPlayerVisualContainer = null;
@@ -10224,10 +10246,31 @@
     }
 
     function ensureMusicPlayerPanelLyricsButton() {
-        var panel = $('.player-panel__right');
+        var modernPanel = $('.player-panel__right.player-panel__tv-visible').filter(function () {
+            return $(this).find('.player-panel__box-buttons').length > 0;
+        }).first();
+        var panel = modernPanel.length ? modernPanel : $('.player-panel__right').first();
         if (!panel.length) return;
 
-        var button = panel.find('.player-panel__music-lyrics');
+        var modern = modernPanel.length > 0;
+        if (modern) {
+            panel.children('.player-panel__music-lyrics, .player-panel__music-lyrics-offset').remove();
+            $('.player-panel__right.player-panel__mobile-visible')
+                .find('.player-panel__music-lyrics, .player-panel__music-lyrics-offset')
+                .remove();
+        }
+
+        var controls = modern ? panel.children('.player-panel__music-controls').first() : panel;
+
+        if (modern && !controls.length) {
+            controls = $('<div class="player-panel__box-buttons player-panel__music-controls"></div>');
+
+            var qualityGroup = panel.find('.player-panel__quality').first().closest('.player-panel__box-buttons');
+            if (qualityGroup.length) qualityGroup.after(controls);
+            else panel.prepend(controls);
+        }
+
+        var button = controls.find('.player-panel__music-lyrics').first();
         if (!button.length) {
             button = $('<div class="player-panel__music-lyrics button selector" data-controller="player_panel">Текст</div>');
             button.on('hover:enter click', function (event) {
@@ -10236,12 +10279,15 @@
                 toggleMusicPlayerVisualLyrics();
             });
 
-            var playlistButton = panel.find('.player-panel__playlist');
-            if (playlistButton.length) playlistButton.before(button);
-            else panel.prepend(button);
+            if (modern) controls.append(button);
+            else {
+                var playlistButton = panel.find('.player-panel__playlist');
+                if (playlistButton.length) playlistButton.before(button);
+                else panel.prepend(button);
+            }
         }
 
-        if (!panel.find('.player-panel__music-lyrics-offset').length) {
+        if (!controls.find('.player-panel__music-lyrics-offset').length) {
             var earlier = $('<div class="player-panel__music-lyrics-offset button selector hide" data-controller="player_panel" data-lyrics-offset-delta="-500" aria-label="Показывать текст раньше">−</div>');
             var later = $('<div class="player-panel__music-lyrics-offset button selector hide" data-controller="player_panel" data-lyrics-offset-delta="500" aria-label="Показывать текст позже">+</div>');
 
@@ -10257,7 +10303,8 @@
                 Lampa.Noty.show('Сдвиг текста: ' + formatLyricsOffsetMs(value));
             });
 
-            button.before(earlier, later);
+            if (modern) controls.append(earlier, later);
+            else button.before(earlier, later);
         }
 
         button
@@ -10529,7 +10576,7 @@
 
         if (!player) return true;
         if (player === 'inner' || player === 'lampa') return true;
-        if (Lampa.Platform.is('apple') && player === 'ios') return true;
+        if (player === 'ios') return true;
 
         return false;
     }
@@ -16479,6 +16526,23 @@
                 font-weight: 800;\
                 letter-spacing: 0;\
                 text-transform: none;\
+            }\
+            .player-panel__music-controls {\
+                flex-shrink: 0;\
+            }\
+            .player-panel__music-controls .player-panel__music-lyrics {\
+                width: auto;\
+                min-width: 3.35em;\
+                padding-left: 1em;\
+                padding-right: 1em;\
+                border-radius: 5em;\
+            }\
+            .player-panel__music-controls .player-panel__music-lyrics-offset {\
+                width: 3em;\
+                min-width: 3em;\
+                padding-left: 0.9em;\
+                padding-right: 0.9em;\
+                border-radius: 50%;\
             }\
             .lm-player-visual {\
                 position: fixed;\

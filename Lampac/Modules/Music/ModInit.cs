@@ -8,6 +8,9 @@ namespace Music;
 
 public class ModInit : IModuleLoaded, IModuleConfigure
 {
+    static readonly object wafRulesLock = new();
+    static List<WafLimitRootMap> appliedWafRules = new();
+
     public static string modpath;
     public static ModuleConf conf;
 
@@ -23,9 +26,6 @@ public class ModInit : IModuleLoaded, IModuleConfigure
         updateConf();
         EventListener.UpdateInitFile += updateConf;
 
-        foreach (var m in conf.limit_map)
-            CoreInit.conf.WAF.limit_map.Insert(0, m);
-
         Directory.CreateDirectory("database/music");
         MusicContext.Initialization(initspace.app.ApplicationServices);
     }
@@ -33,6 +33,7 @@ public class ModInit : IModuleLoaded, IModuleConfigure
     public void Dispose()
     {
         EventListener.UpdateInitFile -= updateConf;
+        RemoveWafRules();
     }
 
     void updateConf()
@@ -76,6 +77,60 @@ public class ModInit : IModuleLoaded, IModuleConfigure
             }
         });
 
+        ApplyWafRules(conf.limit_map);
         MusicProxyService.ConfigurationChanged();
+    }
+
+    static void ApplyWafRules(IReadOnlyCollection<WafLimitRootMap> currentRules)
+    {
+        var waf = CoreInit.conf?.WAF;
+        if (waf == null)
+            return;
+
+        lock (wafRulesLock)
+        {
+            var limitMap = waf.limit_map?.ToList() ?? new List<WafLimitRootMap>();
+            RemoveAppliedWafRules(limitMap);
+
+            var nextAppliedRules = new List<WafLimitRootMap>();
+
+            foreach (var rule in currentRules ?? Array.Empty<WafLimitRootMap>())
+            {
+                if (rule == null || (string.IsNullOrWhiteSpace(rule.path) && string.IsNullOrWhiteSpace(rule.pattern)))
+                    continue;
+
+                limitMap.Insert(0, rule);
+                nextAppliedRules.Add(rule);
+            }
+
+            // WAF может одновременно обслуживать запросы: публикуем новый снимок
+            // списка одной записью, не меняя коллекцию, которую он перечисляет.
+            waf.limit_map = limitMap;
+            appliedWafRules = nextAppliedRules;
+        }
+    }
+
+    static void RemoveWafRules()
+    {
+        lock (wafRulesLock)
+        {
+            var waf = CoreInit.conf?.WAF;
+            if (waf != null)
+            {
+                var limitMap = waf.limit_map?.ToList() ?? new List<WafLimitRootMap>();
+                RemoveAppliedWafRules(limitMap);
+                waf.limit_map = limitMap;
+            }
+
+            appliedWafRules = new List<WafLimitRootMap>();
+        }
+    }
+
+    static void RemoveAppliedWafRules(List<WafLimitRootMap> limitMap)
+    {
+        if (limitMap == null || appliedWafRules.Count == 0)
+            return;
+
+        limitMap.RemoveAll(existing => appliedWafRules.Any(applied => ReferenceEquals(existing, applied)));
     }
 }
