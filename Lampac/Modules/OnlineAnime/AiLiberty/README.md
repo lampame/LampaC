@@ -4,9 +4,9 @@
 
 ## Интерфейс
 
-**`IModuleLoaded`**, **`IModuleOnline`**.
+**`IModuleLoaded`**, **`IModuleOnline`**, **`IModuleOnlineSpider`**.
 
-## Условие (`Invoke`)
+## Условие (`Invoke` / `Spider`)
 
 Только **`args.isanime`**. Пункт: плагин **`ailiberty`**, имя **`AiLiberty`**.
 

@@ -10,7 +10,7 @@ using Shared;
 
 namespace AiLiberty;
 
-public class ModInit : IModuleLoaded, IModuleOnline
+public class ModInit : IModuleLoaded, IModuleOnline, IModuleOnlineSpider
 {
     public static OnlinesSettings conf;
 
@@ -22,6 +22,17 @@ public class ModInit : IModuleLoaded, IModuleOnline
         return new List<ModuleOnlineItem>()
         {
             new(conf, "ailiberty", "AiLiberty")
+        };
+    }
+
+    public List<ModuleOnlineSpiderItem> Spider(HttpContext httpContext, RequestModel requestInfo, string host, OnlineSpiderModel args)
+    {
+        if (!args.isanime)
+            return null;
+
+        return new List<ModuleOnlineSpiderItem>()
+        {
+            new(conf, "ailiberty")
         };
     }
 

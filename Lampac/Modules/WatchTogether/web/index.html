@@ -1,0 +1,1456 @@
+<!doctype html>
+<html lang="uk">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="dark" />
+        <title>WatchTogether</title>
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+        <style>
+            :root {
+                --bg: oklch(0.08 0 0);
+                --surface: oklch(0.145 0.008 160);
+                --surface-raised: oklch(0.19 0.01 160);
+                --line: oklch(
+                    0.27 0.008 160
+                ); /* separators: decorative, no contrast floor */
+                --line-control: oklch(
+                    0.52 0.01 160
+                ); /* control boundaries: 3:1 min, WCAG 1.4.11 */
+                --ink: oklch(0.97 0 0);
+                --ink-muted: oklch(0.74 0.012 160);
+                --accent: oklch(0.72 0.14 162);
+                --accent-ink: oklch(0.16 0.04 162);
+                --danger: oklch(0.68 0.185 25);
+                --warn: oklch(0.8 0.14 75);
+
+                --font:
+                    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                --font-mono:
+                    ui-monospace, "SF Mono", "JetBrains Mono", Consolas,
+                    monospace;
+
+                --fs-xs: 0.8125rem;
+                --fs-sm: 0.875rem;
+                --fs-base: 1rem;
+                --fs-lg: 1.1875rem;
+                --fs-xl: 1.5rem;
+                --fs-code: 1.75rem;
+
+                --r-field: 10px;
+                --r-card: 12px;
+                --ease: cubic-bezier(0.16, 1, 0.3, 1);
+                --z-sticky: 10;
+                --z-toast: 40;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                height: 100%;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--ink);
+                font: var(--fs-base)/1.5 var(--font);
+                -webkit-font-smoothing: antialiased;
+            }
+
+            :where(a):focus-visible,
+            :where(button, input, select, summary):focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+
+            /* ---------------------------------------------------------------- modes */
+            /* Opened from an invite: nothing but the room code until the room answers. No words —
+   the label would need i18n.js, which arrives after the first paint. */
+            #booting {
+                display: none;
+            }
+            html[data-boot="joining"] #booting {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 16px;
+                position: fixed;
+                inset: 0;
+                background: var(--bg);
+                z-index: var(--z-toast);
+            }
+            html[data-boot="joining"] #booting .dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 999px;
+                background: var(--accent);
+                animation: blink 1.2s ease-in-out infinite;
+            }
+            html[data-boot="joining"] #boot-code {
+                font: 600 var(--fs-code)/1 var(--font-mono);
+                letter-spacing: 0.12em;
+                color: var(--ink);
+            }
+            html[data-boot="joining"] #lobby,
+            html[data-boot="joining"] #room {
+                display: none !important;
+            }
+
+            #lobby,
+            #room {
+                display: none;
+            }
+            body[data-mode="lobby"] #lobby {
+                display: block;
+                animation: fade 200ms var(--ease);
+            }
+            body[data-mode="room"] #room {
+                display: flex;
+                animation: fade 200ms var(--ease);
+            }
+            body[data-mode="room"] {
+                overflow: hidden;
+            }
+            @keyframes fade {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+
+            /* ---------------------------------------------------------------- lobby */
+            /* Lucide icons are stroked, not filled. A <use> instance inherits from the element that
+   references it, not from the hidden sprite, so the stroke has to be set here. */
+            .i {
+                fill: none;
+                stroke: currentColor;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            #lobby > header {
+                /* center, not baseline: an icon-only button has no text baseline to sit on */
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+                max-width: 940px;
+                margin: 0 auto;
+                padding: 32px 24px 8px;
+            }
+            .mark {
+                font-size: var(--fs-lg);
+                font-weight: 600;
+                letter-spacing: -0.01em;
+            }
+            .mark span {
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+                font-weight: 400;
+                margin-left: 10px;
+            }
+            /* Language codes rather than a dropdown: one click to switch, and the inactive ones
+   stay lowercase and muted so the row never competes with the content. */
+            #lang {
+                margin-left: auto;
+                display: flex;
+                gap: 2px;
+            }
+            #lang button {
+                background: none;
+                border-color: transparent;
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+                font-weight: 500;
+                padding: 5px 8px;
+                border-radius: 6px;
+                text-transform: lowercase;
+                letter-spacing: 0.05em;
+                transition:
+                    color 160ms var(--ease),
+                    background 160ms var(--ease);
+            }
+            #lang button:hover {
+                color: var(--ink);
+                background: var(--surface);
+            }
+            #lang button[aria-pressed="true"] {
+                color: var(--accent);
+                font-weight: 600;
+                text-transform: uppercase;
+                text-decoration: underline;
+                text-underline-offset: 5px;
+                text-decoration-thickness: 2px;
+            }
+
+            #lobby > main {
+                max-width: 940px;
+                margin: 0 auto;
+                padding: 16px 24px 64px;
+                display: grid;
+                gap: 40px;
+            }
+
+            h1 {
+                font-size: var(--fs-xl);
+                font-weight: 600;
+                letter-spacing: -0.015em;
+                margin: 0 0 16px;
+                text-wrap: balance;
+            }
+            h2 {
+                font-size: var(--fs-lg);
+                font-weight: 600;
+                letter-spacing: -0.01em;
+                margin: 0;
+            }
+
+            .join-form {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            #join-code {
+                flex: 2 1 200px;
+                font: 600 var(--fs-lg)/1 var(--font-mono);
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+            }
+            #join-pwd {
+                flex: 1 1 150px;
+            }
+
+            input,
+            button,
+            select {
+                font: inherit;
+            }
+            input {
+                background: var(--surface-raised);
+                color: var(--ink);
+                border: 1px solid var(--line-control);
+                border-radius: var(--r-field);
+                padding: 12px 14px;
+                min-width: 0;
+                transition:
+                    border-color 160ms var(--ease),
+                    background 160ms var(--ease);
+            }
+            input::placeholder {
+                color: var(--ink-muted);
+                opacity: 1;
+                letter-spacing: normal;
+                text-transform: none;
+                font-weight: 400;
+            }
+            input:hover {
+                border-color: var(--ink-muted);
+            }
+            input:focus {
+                border-color: var(--accent);
+            }
+
+            button {
+                background: var(--surface-raised);
+                color: var(--ink);
+                border: 1px solid var(--line-control);
+                border-radius: var(--r-field);
+                padding: 12px 18px;
+                cursor: pointer;
+                transition:
+                    background 160ms var(--ease),
+                    border-color 160ms var(--ease),
+                    color 160ms var(--ease);
+            }
+            button:hover {
+                background: var(--surface);
+                border-color: var(--ink-muted);
+            }
+            button:active {
+                transform: translateY(1px);
+            }
+            button:disabled {
+                opacity: 0.5;
+                cursor: default;
+                transform: none;
+            }
+            button.primary {
+                background: var(--accent);
+                color: var(--accent-ink);
+                border-color: transparent;
+                font-weight: 600;
+                padding-inline: 26px;
+            }
+            button.primary:hover {
+                background: oklch(0.78 0.14 162);
+            }
+            button.icon {
+                padding: 12px;
+                line-height: 0;
+                flex: none;
+                color: var(--ink-muted);
+            }
+            button.icon:hover {
+                color: var(--ink);
+            }
+            /* In the header the gear sits beside the flat language codes: a filled, bordered box
+   there would be the loudest thing on a page whose job is a single input. The glyph
+   itself carries enough contrast to identify the control. */
+            #open-settings {
+                background: none;
+                border-color: transparent;
+                padding: 8px;
+            }
+            #open-settings:hover {
+                background: var(--surface);
+            }
+            button.ghost {
+                background: none;
+                border-color: transparent;
+                color: var(--ink-muted);
+                padding: 8px 12px;
+            }
+            button.ghost:hover {
+                background: var(--surface);
+                color: var(--ink);
+                border-color: transparent;
+            }
+
+            .section-head {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-top: 24px;
+            }
+            .section-head button:first-of-type {
+                margin-left: auto;
+            }
+
+            .rooms {
+                display: grid;
+                gap: 12px;
+                grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            }
+            .room {
+                display: flex;
+                gap: 12px;
+                align-items: stretch;
+                text-align: left;
+                width: 100%;
+                padding: 10px;
+                background: var(--surface);
+                border: 1px solid var(--line-control);
+                border-radius: var(--r-card);
+                color: inherit;
+            }
+            .room:hover {
+                background: var(--surface-raised);
+                border-color: var(--accent);
+            }
+            .room img {
+                width: 48px;
+                height: 72px;
+                flex: none;
+                object-fit: cover;
+                border-radius: 6px;
+                background: var(--surface-raised);
+            }
+            .room .meta {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                min-width: 0;
+                justify-content: center;
+            }
+            .room .title {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-weight: 600;
+            }
+            .room .title span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .room .sub {
+                font-size: var(--fs-xs);
+                color: var(--ink-muted);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .room svg {
+                flex: none;
+                color: var(--ink-muted);
+            }
+
+            .skeleton {
+                height: 94px;
+                border-radius: var(--r-card);
+                background: var(--surface);
+                animation: pulse 1.4s ease-in-out infinite;
+            }
+            .skeleton:nth-child(2) {
+                animation-delay: 0.15s;
+            }
+            .skeleton:nth-child(3) {
+                animation-delay: 0.3s;
+            }
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 0.5;
+                }
+                50% {
+                    opacity: 1;
+                }
+            }
+
+            .empty {
+                padding: 8px 0;
+            }
+            .empty p {
+                margin: 0;
+            }
+            .empty .t {
+                font-weight: 600;
+            }
+            .empty .h {
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+                max-width: 62ch;
+                margin-top: 6px;
+                text-wrap: pretty;
+            }
+
+            /* One area, three views: joining, creating and settings are separate tasks, so they
+   take turns rather than stacking behind disclosure triangles. */
+            #views > [data-panel] {
+                display: none;
+            }
+            #views[data-view="join"] > [data-panel="join"],
+            #views[data-view="create"] > [data-panel="create"],
+            #views[data-view="settings"] > [data-panel="settings"] {
+                display: grid;
+                gap: 16px;
+                animation: fade 160ms var(--ease);
+            }
+
+            #views > [data-panel] > h1 {
+                margin-bottom: 0;
+            }
+            #create-form,
+            [data-panel="settings"] {
+                display: grid;
+                gap: 14px;
+            }
+
+            .row {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            .row > input {
+                flex: 1 1 160px;
+            }
+            .field {
+                display: grid;
+                gap: 6px;
+                max-width: 460px;
+            }
+            .field > span:first-child {
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+            }
+            .field .row {
+                display: flex;
+            }
+            .check {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+                cursor: pointer;
+            }
+            .check input {
+                accent-color: var(--accent);
+                width: 16px;
+                height: 16px;
+                padding: 0;
+            }
+            .hint {
+                color: var(--ink-muted);
+                font-size: var(--fs-xs);
+                margin: -6px 0 0;
+                max-width: 62ch;
+            }
+            [data-panel] > .ghost,
+            .row > .ghost {
+                justify-self: start;
+            }
+
+            /* ---------------------------------------------------------------- room */
+            #room {
+                flex-direction: column;
+                height: 100dvh;
+            }
+            .bar {
+                position: sticky;
+                top: 0;
+                z-index: var(--z-sticky);
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                flex-wrap: wrap;
+                padding: 10px 16px;
+                background: var(--surface);
+                border-bottom: 1px solid var(--line);
+            }
+            .status {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: var(--fs-sm);
+                color: var(--ink-muted);
+            }
+            .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 999px;
+                background: var(--ink-muted);
+                flex: none;
+            }
+            .status[data-state="online"] .dot {
+                background: var(--accent);
+            }
+            .status[data-state="offline"] .dot {
+                background: var(--danger);
+            }
+            .status[data-state="connecting"] .dot {
+                background: var(--warn);
+                animation: blink 1.2s ease-in-out infinite;
+            }
+            @keyframes blink {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.25;
+                }
+            }
+
+            #room-code {
+                font: 600 var(--fs-code)/1 var(--font-mono);
+                letter-spacing: 0.12em;
+            }
+            #room-name {
+                color: var(--ink-muted);
+                font-size: var(--fs-sm);
+            }
+            #room-viewers {
+                font-size: var(--fs-sm);
+                color: var(--ink-muted);
+            }
+            .pill {
+                font-size: var(--fs-xs);
+                padding: 3px 10px;
+                border-radius: 999px;
+                background: var(--accent);
+                color: var(--accent-ink);
+                font-weight: 600;
+            }
+            #leave {
+                margin-left: auto;
+                padding: 8px 16px;
+            }
+
+            #host-tools {
+                display: flex;
+                gap: 8px;
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--line);
+                background: var(--surface);
+            }
+            #host-tools input {
+                flex: 1;
+            }
+            .stage {
+                flex: 1;
+                min-height: 0;
+                background: var(--bg);
+            }
+            video {
+                display: block;
+                width: 100%;
+                height: 100%;
+                background: var(--bg);
+            }
+
+            /* ---------------------------------------------------------------- toasts */
+            /* A popover so the layer survives fullscreen: nothing in the normal document paints over
+   a fullscreen video, and only the top layer sits above it. The reset undoes the popover
+   UA defaults (centred, bordered, opaque), which would otherwise park it mid-screen. */
+            #toasts {
+                position: fixed;
+                inset: auto 16px 16px auto;
+                z-index: var(--z-toast);
+                display: grid;
+                gap: 10px;
+                max-width: min(460px, calc(100vw - 32px));
+                margin: 0;
+                border: 0;
+                padding: 0;
+                background: none;
+                overflow: visible;
+                width: auto;
+                height: auto;
+                color: var(--ink);
+                pointer-events: none; /* never swallow a click meant for the player controls */
+            }
+            .toast {
+                background: var(--surface-raised);
+                border: 1px solid var(--line);
+                border-radius: var(--r-card);
+                padding: 14px 18px;
+                font-size: var(--fs-base);
+                line-height: 1.4;
+                box-shadow: 0 6px 18px oklch(0 0 0 / 0.55);
+                animation: rise 200ms var(--ease);
+            }
+            .toast.bad {
+                border-color: var(--danger);
+            }
+
+            /* The bottom strip of the video belongs to the native control bar. A toast parked there
+   covers the seek bar exactly when someone reaches for it, so in a room the layer sits
+   above the controls. The values clear Chrome's bar with room to spare; tune here. */
+            body[data-mode="room"] #toasts {
+                bottom: 92px;
+            }
+
+            /* Fullscreen means the screen is further away than a laptop lid — and a taller bar. */
+            body.fs .toast {
+                font-size: var(--fs-lg);
+                padding: 18px 24px;
+            }
+            body.fs #toasts {
+                gap: 12px;
+                inset: auto 28px 124px auto;
+                max-width: min(620px, calc(100vw - 56px));
+            }
+            @keyframes rise {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            [hidden] {
+                display: none !important;
+            }
+
+            @media (max-width: 560px) {
+                #lobby > header,
+                #lobby > main {
+                    padding-inline: 16px;
+                }
+                #room-code {
+                    font-size: var(--fs-lg);
+                }
+                #leave {
+                    margin-left: 0;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    animation-duration: 0.001ms !important;
+                    animation-iteration-count: 1 !important;
+                    transition-duration: 0.001ms !important;
+                }
+            }
+        </style>
+    </head>
+    <body data-mode="lobby">
+        <!-- Icons from Lucide 1.31.0 (ISC), inlined verbatim: same set as everywhere else, and no
+     extra network request. https://lucide.dev -->
+        <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+            <symbol id="i-lock" viewBox="0 0 24 24">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+            </symbol>
+            <symbol id="i-gear" viewBox="0 0 24 24">
+                <path
+                    d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+                />
+                <circle cx="12" cy="12" r="3" />
+            </symbol>
+        </svg>
+
+        <div id="booting"><i class="dot"></i><code id="boot-code"></code></div>
+        <script>
+            // Runs while the document is still parsing, which is the point: the module below is
+            // deferred, so by the time it could hide the lobby the browser has already painted it.
+            // An invite link must never flash the screen it is about to leave.
+            (function () {
+                var raw = new URLSearchParams(location.search).get("room");
+                if (!raw) return;
+
+                var code = raw;
+                try {
+                    code =
+                        decodeURIComponent(escape(atob(raw))).split(":")[0] ||
+                        raw;
+                } catch (err) {}
+
+                document.documentElement.dataset.boot = "joining";
+                document.getElementById("boot-code").textContent = code;
+            })();
+        </script>
+
+        <div id="lobby">
+            <header>
+                <div class="mark">
+                    WatchTogether<span data-i18n="tagline"></span>
+                </div>
+                <div id="lang" role="group" data-i18n-label="lang_label"></div>
+                <button
+                    type="button"
+                    id="open-settings"
+                    class="icon"
+                    data-i18n-label="settings_heading"
+                >
+                    <svg class="i" width="17" height="17" aria-hidden="true">
+                        <use href="#i-gear" />
+                    </svg>
+                </button>
+            </header>
+
+            <main id="views" data-view="join">
+                <section data-panel="join">
+                    <h1 data-i18n="join_heading"></h1>
+                    <form class="join-form" id="join-form">
+                        <input
+                            id="join-code"
+                            data-i18n-ph="code_ph"
+                            maxlength="6"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <input
+                            id="join-pwd"
+                            type="password"
+                            data-i18n-ph="pwd_ph"
+                            autocomplete="off"
+                        />
+                        <button class="primary" data-i18n="join_btn"></button>
+                    </form>
+
+                    <div class="section-head">
+                        <h2 data-i18n="rooms_heading"></h2>
+                        <button
+                            id="refresh"
+                            class="ghost"
+                            data-i18n="refresh_btn"
+                        ></button>
+                        <button
+                            type="button"
+                            id="open-create"
+                            class="ghost"
+                            data-i18n="create_heading"
+                        ></button>
+                    </div>
+                    <div class="rooms" id="rooms"></div>
+                    <div class="empty" id="rooms-empty" hidden>
+                        <p class="t" data-i18n="empty_title"></p>
+                        <p class="h" data-i18n="empty_hint"></p>
+                    </div>
+                </section>
+
+                <section data-panel="create">
+                    <h1 data-i18n="create_heading"></h1>
+                    <form id="create-form">
+                        <input id="create-url" data-i18n-ph="url_ph" />
+                        <p class="hint" data-i18n="url_hint"></p>
+                        <div class="row">
+                            <input id="create-title" data-i18n-ph="title_ph" />
+                            <input
+                                id="create-pwd"
+                                type="password"
+                                data-i18n-ph="pwd_ph"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <label class="check"
+                            ><input type="checkbox" id="cfg-publish" /><span
+                                data-i18n="publish_label"
+                            ></span
+                        ></label>
+                        <div class="row">
+                            <button
+                                class="primary"
+                                data-i18n="create_btn"
+                            ></button>
+                            <button
+                                type="button"
+                                class="ghost"
+                                data-back
+                                data-i18n="cancel_btn"
+                            ></button>
+                        </div>
+                    </form>
+                </section>
+
+                <section data-panel="settings">
+                    <h1 data-i18n="settings_heading"></h1>
+                    <label class="field">
+                        <span data-i18n="name_ph"></span>
+                        <span class="row">
+                            <input id="cfg-name" autocomplete="off" />
+                            <button
+                                type="button"
+                                id="cfg-name-new"
+                                class="icon"
+                                data-i18n-label="regenerate_name"
+                            >
+                                <svg
+                                    class="i"
+                                    width="17"
+                                    height="17"
+                                    aria-hidden="true"
+                                >
+                                    <use href="#i-refresh" />
+                                </svg>
+                            </button>
+                        </span>
+                    </label>
+                    <label class="field">
+                        <span data-i18n="relay_label"></span>
+                        <input id="cfg-relay" />
+                    </label>
+                    <button
+                        type="button"
+                        class="ghost"
+                        data-back
+                        data-i18n="done_btn"
+                    ></button>
+                </section>
+            </main>
+        </div>
+
+        <div id="room">
+            <div class="bar">
+                <span class="status" id="status" data-state="connecting">
+                    <i class="dot"></i><span id="status-text"></span>
+                </span>
+                <code id="room-code"></code>
+                <span id="room-name"></span>
+                <span id="room-viewers"></span>
+                <span
+                    class="pill"
+                    id="room-host"
+                    data-i18n="host_badge"
+                    hidden
+                ></span>
+                <button id="leave" data-i18n="leave_btn"></button>
+            </div>
+            <form id="host-tools" hidden>
+                <input id="new-url" data-i18n-ph="switch_ph" />
+                <button data-i18n="switch_btn"></button>
+            </form>
+            <div class="stage">
+                <video id="video" controls playsinline></video>
+            </div>
+        </div>
+
+        <div
+            id="toasts"
+            popover="manual"
+            role="status"
+            aria-live="polite"
+        ></div>
+
+        <script>
+            // A classic script, not a module: when the page is opened as file:// the browser
+            // blocks module imports over CORS and the page stays silently dead — the buttons are
+            // there but nothing is behind them. Strings are inlined here because i18n.js has not
+            // loaded either at this point.
+            addEventListener("load", () =>
+                setTimeout(() => {
+                    if (window.party) return;
+                    // The module never ran, so nothing will ever take the joining screen down.
+                    delete document.documentElement.dataset.boot;
+                    const lang = (navigator.languages || []).some((l) =>
+                        String(l).toLowerCase().startsWith("en"),
+                    )
+                        ? "en"
+                        : "uk";
+                    const msg = {
+                        uk: {
+                            file: "Сторінку відкрито як файл (file://) — браузер блокує завантаження модулів. Роздайте каталог по http, наприклад: python -m http.server 8777",
+                            other: "Скрипт не завантажився — дивіться консоль браузера",
+                        },
+                        en: {
+                            file: "This page was opened as a file (file://) — the browser blocks module loading. Serve the folder over http, e.g. python -m http.server 8777",
+                            other: "The script failed to load — check the browser console",
+                        },
+                    }[lang];
+                    const el = document.createElement("div");
+                    el.className = "toast bad";
+                    el.textContent =
+                        location.protocol === "file:" ? msg.file : msg.other;
+                    document.getElementById("toasts").append(el);
+                }, 1500),
+            );
+        </script>
+
+        <script type="module">
+            import { Party, DEFAULT_RELAY } from "./lparty-web.js";
+            import {
+                LANGS,
+                initLang,
+                getLang,
+                setLang,
+                onLangChange,
+                t,
+                applyTranslations,
+            } from "./i18n.js";
+            import { randomAlias } from "./names.js";
+
+            const $ = (id) => document.getElementById(id);
+            const video = $("video");
+            const params = new URLSearchParams(location.search);
+
+            // ---------------------------------------------------------------- settings
+            const cfg = {
+                // Generated on first use and kept, so the name stays the same from one room to the
+                // next and the settings field is never empty.
+                get name() {
+                    let v = localStorage.getItem("watchtogether_display_name");
+                    if (!v) {
+                        v = randomAlias();
+                        localStorage.setItem("watchtogether_display_name", v);
+                    }
+                    return v;
+                },
+                set name(v) {
+                    localStorage.setItem("watchtogether_display_name", v);
+                },
+                get relay() {
+                    return (
+                        localStorage.getItem("watchtogether_relay") ||
+                        DEFAULT_RELAY
+                    );
+                },
+                set relay(v) {
+                    localStorage.setItem("watchtogether_relay", v);
+                },
+                get publish() {
+                    return (
+                        localStorage.getItem("watchtogether_publish") !== "0"
+                    );
+                },
+                set publish(v) {
+                    localStorage.setItem(
+                        "watchtogether_publish",
+                        v ? "1" : "0",
+                    );
+                },
+            };
+
+            // ---------------------------------------------------------------- language
+            initLang();
+
+            function renderLangs() {
+                $("lang").replaceChildren(
+                    ...LANGS.map(({ code, name }) => {
+                        const b = document.createElement("button");
+                        b.type = "button";
+                        b.textContent = code;
+                        b.title = name;
+                        b.setAttribute("aria-label", name); // endonym, deliberately never translated
+                        b.setAttribute(
+                            "aria-pressed",
+                            String(code === getLang()),
+                        );
+                        b.onclick = () => setLang(code);
+                        return b;
+                    }),
+                );
+            }
+            renderLangs();
+
+            onLangChange(() => {
+                renderLangs();
+                applyTranslations();
+                $("cfg-relay").placeholder = DEFAULT_RELAY;
+                renderRooms(lastRooms);
+                renderRoom(lastRoom);
+                renderStatus();
+            });
+
+            // ---------------------------------------------------------------- toasts
+            // Older browsers ignore the popover attribute entirely and simply keep the layer in the
+            // normal document: everything still works, it just cannot cover a fullscreen video.
+            const POPOVER = Object.prototype.hasOwnProperty.call(
+                HTMLElement.prototype,
+                "popover",
+            );
+            const toastLayer = () => $("toasts");
+
+            function raiseToastLayer() {
+                if (!POPOVER || toastLayer().matches(":popover-open")) return;
+                try {
+                    toastLayer().showPopover();
+                } catch (err) {}
+            }
+
+            function dropToastLayerIfEmpty() {
+                if (
+                    !POPOVER ||
+                    toastLayer().children.length ||
+                    !toastLayer().matches(":popover-open")
+                )
+                    return;
+                try {
+                    toastLayer().hidePopover();
+                } catch (err) {}
+            }
+
+            for (const ev of ["fullscreenchange", "webkitfullscreenchange"]) {
+                document.addEventListener(ev, () => {
+                    document.body.classList.toggle(
+                        "fs",
+                        !!(
+                            document.fullscreenElement ||
+                            document.webkitFullscreenElement
+                        ),
+                    );
+
+                    // The top layer is ordered by who entered it last. A toast already on screen when
+                    // fullscreen starts would end up underneath the video, so it re-enters on top.
+                    if (
+                        POPOVER &&
+                        toastLayer().children.length &&
+                        toastLayer().matches(":popover-open")
+                    ) {
+                        try {
+                            toastLayer().hidePopover();
+                            toastLayer().showPopover();
+                        } catch (err) {}
+                    }
+                });
+            }
+
+            function toast(msg, bad) {
+                // Errors name a cause worth reading twice; notices are just chatter.
+                const life = bad ? 14000 : 5000;
+                const text =
+                    typeof msg === "string"
+                        ? msg
+                        : t(msg.key, {
+                              ...msg,
+                              name: msg.name || t("someone"),
+                          });
+
+                // A blocked autoplay or a dead stream reports itself on every retry. Stacking four
+                // identical lines says nothing the first one did not — refresh it instead.
+                const shown = [...toastLayer().children].find(
+                    (el) => el.textContent === text,
+                );
+                if (shown) {
+                    clearTimeout(shown._timer);
+                    shown._timer = setTimeout(() => {
+                        shown.remove();
+                        dropToastLayerIfEmpty();
+                    }, life);
+                    return;
+                }
+
+                const el = document.createElement("div");
+                el.className = "toast" + (bad ? " bad" : "");
+                el.textContent = text;
+                toastLayer().append(el);
+                raiseToastLayer();
+                el._timer = setTimeout(() => {
+                    el.remove();
+                    dropToastLayerIfEmpty();
+                }, life);
+            }
+
+            // ---------------------------------------------------------------- stream
+            let hls = null;
+            let streamUrl = null;
+            let triedHls = false;
+
+            const hlsAvailable = () => !!(window.Hls && Hls.isSupported());
+
+            function loadStream(url) {
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                video.removeAttribute("src");
+                streamUrl = url;
+                triedHls = false;
+
+                if (location.protocol === "https:" && url.startsWith("http://"))
+                    return toast({ key: "mixed_content" }, true);
+
+                // hls.js is tried before canPlayType, not after it. Chrome answers "maybe" to
+                // canPlayType for the HLS mime types and then fails the load with
+                // MEDIA_ERR_SRC_NOT_SUPPORTED, so that answer cannot be trusted to pick the path.
+                // Native playback is the fallback for Safari, where hls.js is unsupported and the
+                // element really does handle HLS.
+                if (/\.m3u8(\?|$)/i.test(url) && hlsAvailable()) attachHls(url);
+                else {
+                    video.src = url;
+                    // Safari playing HLS itself ignores playbackRate and seeks coarsely, so the sync
+                    // layer has to stop nudging the rate and allow a looser drift before jumping.
+                    party.nativePlayback = /\.m3u8(\?|$)/i.test(url);
+                }
+            }
+
+            function attachHls(url) {
+                triedHls = true;
+                party.nativePlayback = false;
+                hls = new Hls();
+                hls.on(Hls.Events.ERROR, (_, d) => {
+                    if (!d.fatal) return;
+                    // A network error on the manifest almost always means a missing CORS header:
+                    // the request goes out, but the browser refuses to hand us the response.
+                    if (d.type === Hls.ErrorTypes.NETWORK_ERROR)
+                        toast({ key: "cors_error" }, true);
+                    else
+                        toast(
+                            { key: "playback_error", details: d.details },
+                            true,
+                        );
+                });
+                hls.loadSource(url);
+                hls.attachMedia(video);
+            }
+
+            video.addEventListener("error", () => {
+                const code = video.error && video.error.code;
+
+                // Plenty of streams are HLS without saying so in the URL. The element rejects those with
+                // SRC_NOT_SUPPORTED while hls.js plays them fine, so that verdict is worth a second try.
+                if (code === 4 && !triedHls && streamUrl && hlsAvailable()) {
+                    video.removeAttribute("src");
+                    attachHls(streamUrl);
+                    return;
+                }
+
+                if (video.src || triedHls) toast({ key: "media_error" }, true);
+            });
+
+            // ---------------------------------------------------------------- participant
+            const party = new Party({
+                video,
+                relay: cfg.relay,
+                name: cfg.name,
+                publish: cfg.publish,
+                onEvent: (type, data) => {
+                    if (type === "notice") toast(data);
+                    else if (type === "error") toast(data, true);
+                    else if (type === "stream") loadStream(data.url);
+                    else if (type === "members") {
+                        lastViewers = data;
+                        renderViewers();
+                    } else if (type === "room") renderRoom(data);
+                    else if (type === "left") {
+                        renderRoom(null);
+                        $("views").dataset.view = "join";
+                        refreshLobby();
+                    }
+                },
+            });
+            window.party = party; // party.debug() from the console when chasing incompatibilities
+
+            $("cfg-name").value = cfg.name;
+            $("cfg-relay").value = cfg.relay;
+            $("cfg-publish").checked = cfg.publish;
+            $("cfg-name").onchange = (e) => {
+                // Clearing the field hands back a fresh name rather than an empty one.
+                const v = e.target.value.trim() || randomAlias();
+                cfg.name = v;
+                e.target.value = v;
+                party.name = v;
+            };
+            $("cfg-name-new").onclick = () => {
+                cfg.name = randomAlias();
+                $("cfg-name").value = cfg.name;
+                party.name = cfg.name;
+            };
+            $("cfg-relay").onchange = (e) => {
+                cfg.relay = e.target.value.trim();
+                party.setRelay(cfg.relay);
+            };
+            $("cfg-publish").onchange = (e) => {
+                cfg.publish = e.target.checked;
+                party.publish = e.target.checked;
+            };
+
+            // ---------------------------------------------------------------- room rendering
+            let lastRoom = null,
+                lastViewers = 0,
+                lastRooms = [];
+
+            function renderRoom(info) {
+                lastRoom = info;
+                // The attempt is over either way — hand the screen back to the normal modes.
+                delete document.documentElement.dataset.boot;
+                document.body.dataset.mode = info ? "room" : "lobby";
+                if (!info) {
+                    clearInterval(statusTimer);
+                    statusTimer = null;
+                    return;
+                }
+
+                $("room-code").textContent = info.id;
+                $("room-name").textContent = info.name || "";
+                $("room-host").hidden = !info.iAmHost;
+                $("host-tools").hidden = !info.iAmHost;
+                renderViewers();
+                if (!statusTimer) statusTimer = setInterval(renderStatus, 1000);
+                renderStatus();
+            }
+
+            function renderViewers() {
+                $("room-viewers").textContent = lastViewers
+                    ? t("viewers", { n: lastViewers })
+                    : "";
+            }
+
+            // The socket state raises no events, so poll it once a second while we are in a
+            // room. Cheaper than building a separate event stream for one indicator.
+            let statusTimer = null;
+            function renderStatus() {
+                if (!lastRoom) return;
+                const ws = party.debug().ws;
+                const state =
+                    ws === "OPEN"
+                        ? "online"
+                        : ws === "CONNECTING"
+                          ? "connecting"
+                          : "offline";
+                $("status").dataset.state = state;
+                $("status-text").textContent = t("status_" + state);
+            }
+
+            // ---------------------------------------------------------------- lobby
+            function renderRooms(rooms) {
+                lastRooms = rooms;
+                $("rooms-empty").hidden = rooms.length > 0;
+
+                $("rooms").replaceChildren(
+                    ...rooms.map((r) => {
+                        const btn = document.createElement("button");
+                        btn.className = "room";
+
+                        // Advertisements come from strangers over a public relay, so build the card with
+                        // textContent and properties only — never innerHTML.
+                        // No poster means no frame: an empty box carries nothing and reads as broken.
+                        let img = null;
+                        if (/^https?:\/\//i.test(r.poster || "")) {
+                            img = document.createElement("img");
+                            img.alt = "";
+                            img.src = r.poster;
+                            img.onerror = () => img.remove();
+                        }
+
+                        const title = document.createElement("div");
+                        title.className = "title";
+                        if (r.pwd) {
+                            const lock = document.createElementNS(
+                                "http://www.w3.org/2000/svg",
+                                "svg",
+                            );
+                            lock.setAttribute("class", "i");
+                            lock.setAttribute("width", "13");
+                            lock.setAttribute("height", "13");
+                            const use = document.createElementNS(
+                                "http://www.w3.org/2000/svg",
+                                "use",
+                            );
+                            use.setAttribute("href", "#i-lock");
+                            lock.append(use);
+                            title.append(lock);
+                        }
+                        const name = document.createElement("span");
+                        name.textContent = r.name || r.id;
+                        title.append(name);
+
+                        const sub = document.createElement("div");
+                        sub.className = "sub";
+                        sub.textContent = [
+                            r.title,
+                            r.owner,
+                            t("viewers", { n: r.members || 0 }),
+                        ]
+                            .filter(Boolean)
+                            .join(" · ");
+
+                        const meta = document.createElement("div");
+                        meta.className = "meta";
+                        meta.append(title, sub);
+                        if (img) btn.append(img);
+                        btn.append(meta);
+
+                        btn.onclick = async () => {
+                            const pwd = r.pwd
+                                ? prompt(
+                                      t("password_prompt", {
+                                          name: r.name || r.id,
+                                      }),
+                                  )
+                                : "";
+                            if (pwd === null) return;
+                            toast({ key: "connecting" });
+                            await party.join(r.id, pwd, r.name);
+                        };
+                        return btn;
+                    }),
+                );
+            }
+
+            async function refreshLobby() {
+                if ($("refresh").disabled) return;
+                $("refresh").disabled = true;
+                $("rooms-empty").hidden = true;
+                $("rooms").replaceChildren(
+                    ...Array.from({ length: 3 }, () => {
+                        const s = document.createElement("div");
+                        s.className = "skeleton";
+                        return s;
+                    }),
+                );
+
+                const rooms = await party.browse();
+                $("refresh").disabled = false;
+                renderRooms(rooms);
+            }
+
+            // ---------------------------------------------------------------- actions
+            $("join-form").onsubmit = async (e) => {
+                e.preventDefault();
+                const code = $("join-code").value.trim();
+                if (!code) return toast({ key: "need_code" }, true);
+                toast({ key: "connecting" });
+                await party.join(code, $("join-pwd").value, code);
+            };
+
+            $("create-form").onsubmit = async (e) => {
+                e.preventDefault();
+                const url = $("create-url").value.trim();
+                if (!url) return toast({ key: "need_url" }, true);
+                const title = $("create-title").value.trim();
+                await party.create({
+                    url,
+                    title,
+                    name: title,
+                    password: $("create-pwd").value,
+                });
+            };
+
+            $("host-tools").onsubmit = (e) => {
+                e.preventDefault();
+                const url = $("new-url").value.trim();
+                if (!url) return toast({ key: "need_url" }, true);
+                party.setStream(url, url);
+                $("new-url").value = "";
+            };
+
+            $("leave").onclick = () => party.leave(true);
+            $("refresh").onclick = refreshLobby;
+
+            // Joining, creating and settings take turns in one area. Escape and the back buttons
+            // always land on joining, which is the only thing the lobby is really for.
+            const showView = (name) => {
+                $("views").dataset.view = name;
+            };
+            $("open-create").onclick = () => showView("create");
+            $("open-settings").onclick = () => showView("settings");
+            document.querySelectorAll("[data-back]").forEach((b) => {
+                b.onclick = () => showView("join");
+            });
+            addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && $("views").dataset.view !== "join")
+                    showView("join");
+            });
+
+            /**
+             * An invite carries `room=` as base64 of "CODE:password", the same shape the Lampa
+             * plugin builds. A bare code is accepted too: it is not valid base64 (six characters
+             * never pad to a multiple of four), so it falls through to the plain branch.
+             */
+            function readRoomParam(raw) {
+                let decoded = null;
+                try {
+                    decoded = new TextDecoder().decode(
+                        Uint8Array.from(atob(raw), (c) => c.charCodeAt(0)),
+                    );
+                } catch (err) {
+                    /* not base64 — treat the value as a bare room code */
+                }
+
+                if (decoded === null) return { id: raw.trim(), pwd: "" };
+                const sep = decoded.indexOf(":"); // split on the first colon: a password may contain more
+                return sep === -1
+                    ? { id: decoded.trim(), pwd: "" }
+                    : {
+                          id: decoded.slice(0, sep).trim(),
+                          pwd: decoded.slice(sep + 1),
+                      };
+            }
+
+            if (params.get("relay")) {
+                cfg.relay = params.get("relay");
+                $("cfg-relay").value = cfg.relay;
+                party.setRelay(cfg.relay);
+            }
+
+            addEventListener("beforeunload", () => party.leave(true));
+
+            applyTranslations();
+            $("cfg-relay").placeholder = DEFAULT_RELAY;
+
+            const invite = params.get("room")
+                ? readRoomParam(params.get("room"))
+                : null;
+
+            if (invite && invite.id) {
+                // Straight into the room. The form is filled too, so a failed join leaves something to
+                // retry rather than an empty field. Playback may still need one click: without a user
+                // gesture the browser refuses play(), and the page says so when that happens.
+                $("join-code").value = invite.id;
+                $("join-pwd").value = invite.pwd;
+                toast({ key: "connecting" });
+                party.join(invite.id, invite.pwd, invite.id);
+            } else {
+                refreshLobby();
+            }
+        </script>
+    </body>
+</html>
