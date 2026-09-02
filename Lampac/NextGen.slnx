@@ -103,6 +103,7 @@
     <Project Path="Modules/OnlineRUS/Collaps/Collaps.csproj" />
     <Project Path="Modules/OnlineRUS/FanCDN/FanCDN.csproj" />
     <Project Path="Modules/OnlineRUS/FlixCDN/FlixCDN.csproj" />
+    <Project Path="Modules/OnlineRUS/Gencit/Gencit.csproj" />
     <Project Path="Modules/OnlineRUS/HDVB/HDVB.csproj" />
     <Project Path="Modules/OnlineRUS/Kinobase/Kinobase.csproj" />
     <Project Path="Modules/OnlineRUS/Kinogo/Kinogo.csproj" />
