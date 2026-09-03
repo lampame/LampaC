@@ -1,0 +1,34 @@
+---
+title: "Tracks: анализ дорожек FFprobe"
+sidebarTitle: "Tracks"
+description: "Получите метаданные аудио, видео и субтитров через /tracks.js и /ffprobe."
+keywords: ["Tracks", "ffprobe", "субтитры"]
+---
+
+Данные пишутся в `database/tracks`. WAF по умолчанию ограничивает `/ffprobe` десятью запросами в секунду. Для транскодинга предпочтителен [GStreamer](/modules/gstreamer).
+
+## Состояние
+
+Выключен в `base.conf` SkipModules и `manifest.enable: false`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/tracks.js` | Plugin |
+| `GET` | `/tracks/js/{token}` | Plugin с токеном |
+| `GET` | `/ffprobe` | Метаданные дорожек |
+
+## Конфигурация
+
+```json
+{
+  "Tracks": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/tracks.js`

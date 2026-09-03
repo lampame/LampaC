@@ -1,0 +1,58 @@
+---
+title: "Lampac APK: Android-клиент для вашего сервера"
+sidebarTitle: "Lampac APK"
+description: "Сгенерируйте подписанный Android APK, в который автоматически встроен адрес вашего сервера Lampac."
+keywords: ["Lampac APK", "Android", "apksigner", "zipalign", "lampac.apk"]
+---
+
+Модуль **LampacApk** создаёт Android APK с адресом текущего Lampac в `assets/lampac.json`, выравнивает архив через `zipalign` и подписывает локальным ключом.
+
+## Требования
+
+Для нативной установки нужны JDK, `apksigner` и `zipalign`:
+
+```bash
+sudo apt update
+sudo apt install -y default-jdk-headless apksigner zipalign
+```
+
+В Docker зависимости должны находиться **внутри образа**, а не только на хосте.
+
+## Скачать APK
+
+Откройте один из адресов:
+
+```text
+http://HOST:9118/lampac.apk
+http://HOST:9118/android.apk
+```
+
+Чтобы явно записать другой адрес сервера:
+
+```text
+http://HOST:9118/lampac.apk?overwritehost=http://192.168.1.10:9118
+```
+
+## Проверить подпись и конфигурацию
+
+```bash
+curl -fL -o /tmp/lampac.apk http://127.0.0.1:9118/lampac.apk
+apksigner verify --verbose /tmp/lampac.apk
+unzip -p /tmp/lampac.apk assets/lampac.json
+```
+
+<Warning>
+  Сохраните `database/lampac-apk/lampac-apk.jks` и `database/lampac-apk/lampac-apk.pass`. После потери ключа новый APK получит другую подпись, и Android потребует удалить ранее установленное приложение.
+</Warning>
+
+## Файлы
+
+| Путь | Назначение |
+| --- | --- |
+| `database/lampac-apk/lampac-apk.jks` | Приватный ключ подписи |
+| `database/lampac-apk/lampac-apk.pass` | Пароль ключа |
+| `cache/widgets/android/` | Кеш готовых APK |
+
+<Tip>
+  Для публичного сервера используйте HTTPS. APK содержит широкий JavaScript bridge и должен открывать только доверенный Lampac.
+</Tip>

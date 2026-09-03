@@ -1,0 +1,18 @@
+---
+title: "Admin API"
+sidebarTitle: "Admin"
+description: "Root-защищённые маршруты AdminPanel, DatabaseEditor, WebLog и Telemetry."
+keywords: ["AdminPanel API", "DatabaseEditor", "WebLog", "Telemetry"]
+---
+
+Все маршруты требуют root `passwd`. Сервер может отвечать 404 вместо 401.
+
+| Модуль | Пути |
+| --- | --- |
+| AdminPanel | `/adminpanel`, `/adminpanel/api/*` |
+| DatabaseEditor | `/database-editor`, `/database-editor/api/*` |
+| WebLog | `/weblog` |
+| Telemetry | `/telemetry`, `/telemetry/api/*` |
+| OpenStat | `/stats`, `/stats/*` при `openstat.enable` |
+
+См. [аутентификацию](/api/authentication).

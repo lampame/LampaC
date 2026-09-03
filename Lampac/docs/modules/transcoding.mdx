@@ -1,0 +1,39 @@
+---
+title: "Transcoding: legacy FFmpeg"
+sidebarTitle: "Transcoding"
+description: "Legacy HLS/DASH транскодинг через FFmpeg. Для новых установок используйте GStreamer."
+keywords: ["Transcoding", "FFmpeg", "HLS", "legacy"]
+---
+
+Кеш — `cache/transcoding/`. Модуль ограничен по числу одновременных потоков.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules и `manifest.enable: false`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/transcoding.js` | Plugin |
+| `GET` | `/transcoding/js/{token}` | Plugin с токеном |
+| `GET` | `/transcoding/start.m3u8` | Старт |
+| `GET` | `/transcoding/{streamId}/live.m3u8` | Live playlist |
+| `GET` | `/transcoding/{streamId}/heartbeat` | Heartbeat |
+| `GET` | `/transcoding/{streamId}/stop` | Стоп |
+
+## Конфигурация
+
+```json
+{
+  "Transcoding": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+<Warning>Предпочтительнее [GStreamer](/modules/gstreamer).</Warning>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/transcoding.js`

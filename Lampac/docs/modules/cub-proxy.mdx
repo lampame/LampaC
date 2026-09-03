@@ -1,0 +1,33 @@
+---
+title: "CubProxy"
+sidebarTitle: "CubProxy"
+description: "Прокси CUB API с файловым кешем: /cubproxy.js и /cub/*."
+keywords: ["CubProxy", "cubproxy.js", "CUB"]
+---
+
+Кеш — `cache/cub/`.
+
+## Состояние
+
+Загружается по умолчанию. `base.conf` включает `LampaWeb.initPlugins.cubProxy`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/cubproxy.js` | Plugin |
+| `GET, POST` | `/cub/{*suffix}` | CUB proxy |
+
+## Конфигурация
+
+```json
+{
+  "cub": { "enable": true, "cache_api": 180 }
+}
+```
+
+<Danger>
+  Не открывайте этот proxy как универсальный выход в сеть. Ограничьте цели, rate limit и accsdb.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/cubproxy.js`

@@ -1,0 +1,41 @@
+---
+title: "DLNA и локальные медиафайлы"
+sidebarTitle: "DLNA"
+description: "Включите DLNA/UPnP в Lampac для каталога локальных файлов, стриминга и управления раздачами."
+keywords: ["DLNA", "UPnP", "dlna.js", "локальные файлы"]
+---
+
+DLNA обслуживает локальные файлы и торренты в домашней сети. Данные по умолчанию лежат в `data/dlna`. WAF ограничивает `^/dlna/`.
+
+## Состояние
+
+Starter `example.init.conf` добавляет `DLNA` в `SkipModules`. `manifest.json` разрешает загрузку.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/dlna.js` | Plugin Lampa |
+| `GET` | `/dlna/js/{token}` | Plugin с токеном |
+| `GET` | `/dlna` | Каталог |
+| `GET` | `/dlna/stream` | Поток |
+| `GET` | `/dlna/delete` | Удаление |
+| `GET` | `/dlna/tracker/*` | Торрент-операции |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] },
+  "DLNA": {
+    "path": "data/dlna",
+    "autoupdatetrackers": true
+  }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/dlna.js`

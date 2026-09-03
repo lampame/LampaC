@@ -1,0 +1,41 @@
+---
+title: "Локальные каталоги, DLNA и служебные модули"
+sidebarTitle: "Локальные медиа"
+description: "Обзор локальных медиамодулей Lampac: DLNA, Catalog, Tracks, Transcoding, Kit и альтернативные клиенты."
+keywords: ["DLNA", "Catalog", "Tracks", "ffprobe", "Transcoding", "Kit", "ForkPlayerXML"]
+---
+
+Эти модули работают с локальными файлами, YAML-каталогами, анализом дорожек и служебными bind/kit маршрутами. Они не входят в основной пользовательский путь VOD и требуют явного включения.
+
+<Danger>
+  Catalog, DLNA, Tracks и Transcoding не экранируют входящие запросы как публичный API. Не открывайте их в интернет без firewall, reverse proxy и аутентификации.
+</Danger>
+
+<Columns cols={2}>
+  <Card title="DLNA" href="/modules/dlna" icon="tv">
+    UPnP/DLNA-медиасервер и `/dlna/stream`
+  </Card>
+  <Card title="Catalog" href="/modules/catalog" icon="library">
+    YAML-каналы `/catalog.js`
+  </Card>
+  <Card title="Tracks" href="/modules/tracks" icon="audio-lines">
+    FFprobe и `/ffprobe`
+  </Card>
+  <Card title="Transcoding" href="/modules/transcoding" icon="clapperboard">
+    Legacy FFmpeg HLS/DASH
+  </Card>
+  <Card title="Kit" href="/modules/kit" icon="link">
+    `/kit`, `/bind/*` и одноразовые ключи
+  </Card>
+  <Card title="ForkPlayerXML" href="/modules/forkplayer" icon="code-xml">
+    XML-адаптер `/fxml`
+  </Card>
+  <Card title="MSX Native" href="/modules/msx-native" icon="monitor">
+    Адаптация SISI для MSX
+  </Card>
+  <Card title="Potok" href="/modules/potok" icon="radio">
+    Служебные потоковые маршруты
+  </Card>
+</Columns>
+
+Подробнее о фильтрах загрузки: [система модулей](/architecture/modules).

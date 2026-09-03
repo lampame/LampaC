@@ -1,0 +1,26 @@
+---
+title: "JacRed API"
+sidebarTitle: "JacRed"
+description: "Search API JacRed: /api/v1.0/conf, /api/v2.0/indexers, /api/v1.0/torrents и префиксы трекеров."
+keywords: ["JacRed API", "Jackett", "api/v2.0"]
+---
+
+Модуль должен быть убран из starter `SkipModules`. Конфиг: [JacRed](/modules/jacred).
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/api/v1.0/conf` | Проверка API key |
+| `GET` | `/api/v2.0/indexers/{status}/results` | Поиск Jackett/indexers |
+| `GET` | `/api/v1.0/torrents` | Расширенный поиск |
+
+<ParamField query="query" type="string">
+  Поисковая строка для indexers results.
+</ParamField>
+
+<ParamField query="apikey" type="string">
+  Если задан `JacRed.apikey`.
+</ParamField>
+
+```bash
+curl -G "http://127.0.0.1:9118/api/v2.0/indexers/all/results" --data-urlencode "query=Название"
+```

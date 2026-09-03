@@ -1,0 +1,29 @@
+---
+title: "Платные VOD-провайдеры (OnlinePaid)"
+sidebarTitle: "OnlinePaid"
+description: "9 платных источников: Rezka, Filmix, KinoPub, Alloha и другие. Нужны токены."
+keywords: ["OnlinePaid", "Rezka", "Filmix", "KinoPub", "Alloha"]
+---
+
+| Провайдер | Примечания |
+| --- | --- |
+| `Alloha` | Балансер |
+| `Filmix` | `/lite/filmix`, `/lite/filmixpro`, `/lite/fxapi`, `/lite/filmixtv` |
+| `GetsTV` | Платный источник |
+| `IptvOnline` | IPTV |
+| `iRemux` | Remux |
+| `KinoPub` | Обязательный `token` |
+| `Rezka` | Premium — флаг `Rezka.premium` |
+| `SakhTV` | Региональный |
+| `VoKino` | Платный VOD |
+
+```json
+{
+  "Rezka": { "enable": true, "premium": true },
+  "KinoPub": { "enable": true, "token": "ВАШ_ТОКЕН" }
+}
+```
+
+<Warning>
+  Не коммитьте токены. Храните их только в `init.conf` на сервере.
+</Warning>

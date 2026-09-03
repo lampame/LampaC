@@ -1,0 +1,33 @@
+---
+title: "Potok: служебные media-маршруты"
+sidebarTitle: "Potok"
+description: "Служебные маршруты /blue-oyster/* и /naked-gun/* модуля Potok."
+keywords: ["Potok", "blue-oyster", "naked-gun"]
+---
+
+Это не пользовательский VOD-плагин. Включайте только если понимаете назначение встроенных ресурсов.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/blue-oyster/{file}` | Ресурс blue-oyster |
+| `GET` | `/naked-gun/{file}` | Ресурс naked-gun |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+После включения уберите `Potok` из `SkipModules` и проверьте журнал загрузки модуля. Не запрашивайте произвольные пути `/blue-oyster/*` на публичном адресе.

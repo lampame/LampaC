@@ -1,0 +1,86 @@
+---
+title: "Настройка провайдеров контента"
+sidebarTitle: "Провайдеры"
+description: "Включайте провайдеры Lampac, задавайте зеркала, токены, прокси и приоритеты без изменения исходного кода."
+keywords: ["Lampac providers config", "Rezka", "Filmix", "KinoPub", "token", "priority", "proxy"]
+---
+
+Каждый VOD- или anime-провайдер читает собственную секцию из `init.conf`. Точная схема находится в `ModuleConf.cs`, `ModInit.cs` или README соответствующего проекта в `Modules/`.
+
+<Warning>
+  Не копируйте токены из примеров и не сохраняйте свои credentials в Git. Используйте локальный `init.conf` с ограниченными правами доступа.
+</Warning>
+
+## Типовая секция
+
+```jsonc
+{
+  "Rezka": {
+    "enable": true,
+    "host": "https://your-rezka-mirror.example",
+    "priority": 1,
+    "useproxy": false
+  },
+  "Filmix": {
+    "enable": true,
+    "token": "YOUR_TOKEN",
+    "priority": 2
+  },
+  "KinoPub": {
+    "enable": true,
+    "token": "YOUR_TOKEN"
+  }
+}
+```
+
+| Поле | Типичное назначение |
+| --- | --- |
+| `enable` | Участвует ли источник в выдаче |
+| `host` | Текущее зеркало или API host |
+| `token` | Собственный API/partner token |
+| `priority` | Позиция источника; меньше — выше |
+| `useproxy` | Использовать настроенный proxy для запросов |
+| `streamproxy` | Проксировать media URL через Lampac |
+
+<Info>
+  Поля не унифицированы между всеми провайдерами. Не добавляйте параметр только потому, что он существует у другого источника.
+</Info>
+
+## Включить один источник
+
+<Steps>
+  <Step title="Проверьте модуль">
+    Найдите проект в `Modules/OnlineRUS`, `OnlinePaid`, `OnlineAnime`, `OnlineENG`, `OnlineUKR` или `OnlineGEO`.
+  </Step>
+  <Step title="Проверьте фильтры загрузки">
+    Имя проекта не должно быть в `SkipModules`, а группа должна попадать в `LoadModules`.
+  </Step>
+  <Step title="Добавьте минимальную секцию">
+    Начните с `enable`, затем добавьте только обязательные host/token поля из README или модели конфигурации.
+  </Step>
+  <Step title="Проверьте endpoint">
+    ```bash
+    curl -G http://127.0.0.1:9118/lite/rezka \
+      --data-urlencode "title=Интерстеллар" \
+      --data-urlencode "year=2014"
+    ```
+  </Step>
+</Steps>
+
+## Отключить группу
+
+`SkipModules` сравнивается с именем модуля и родительской группой. Например:
+
+```json
+{
+  "BaseModule": {
+    "SkipModules": ["OnlineAnime", "FanCDN"]
+  }
+}
+```
+
+<Note>
+  `LoadModules` — allowlist, а не список исключений. Для простого отключения используйте `SkipModules`; сложные regex allowlist усложняют диагностику.
+</Note>
+
+Список источников и их групп: [обзор провайдеров](/providers/overview).

@@ -1,0 +1,30 @@
+---
+title: "ExternalBind: удалённая привязка URL"
+sidebarTitle: "ExternalBind"
+description: "Привяжите Lite/Online к удалённым URL FilmixPro, Rezka и KinoPub."
+keywords: ["ExternalBind", "FilmixPro", "удалённый bind"]
+---
+
+Скопируйте модуль в `mods/`, включите манифест и не храните токены в репозитории. README: `Modules/ExternalBind/README.md`.
+
+## Состояние
+
+`manifest.json` содержит `"enable": false`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/lite/*` | Зависит от привязанного провайдера |
+
+## Конфигурация
+
+```json
+{
+  "ExternalBind": { "enable": true }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+После включения манифеста проверьте журнал `loaded module ExternalBind` и рабочий маршрут привязанного провайдера, например `GET /lite/filmix`.

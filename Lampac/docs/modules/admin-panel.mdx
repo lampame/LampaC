@@ -1,0 +1,40 @@
+---
+title: "AdminPanel: редактор конфигурации"
+sidebarTitle: "AdminPanel"
+description: "Редактируйте init.conf, current.conf и users.json через /adminpanel."
+keywords: ["AdminPanel", "init.conf", "users.json", "root password"]
+---
+
+Это не токен accsdb. Cookie `accspasswd` / заголовок `lcrqpasswd`. См. [auth](/api/authentication) и [API admin](/api/admin).
+
+## Состояние
+
+`manifest.enable: false`. Требует файл `passwd`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/adminpanel/auth` | Вход |
+| `GET` | `/adminpanel` | UI |
+| `GET` | `/adminpanel/api/groups` | Группы |
+| `GET` | `/adminpanel/api/groups/catalog` | Каталог групп |
+| `GET` | `/adminpanel/api/init` | Чтение init.conf |
+| `POST` | `/adminpanel/api/init` | Полная запись |
+| `POST` | `/adminpanel/api/init/section/{key}` | Секция |
+| `GET` | `/adminpanel/api/current` | Merged config |
+| `GET` | `/adminpanel/api/users-json` | users.json |
+
+## Конфигурация
+
+```json
+{
+  "AdminPanel": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/adminpanel/auth`

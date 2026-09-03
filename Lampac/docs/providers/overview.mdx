@@ -1,0 +1,37 @@
+---
+title: "Провайдеры контента Lampac NextGen"
+sidebarTitle: "Обзор"
+description: "Группы источников Lampac: OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO и Adult."
+keywords: ["Lampac провайдеры", "VOD", "аниме", "OnlineRUS", "OnlinePaid"]
+---
+
+Провайдеры организованы по каталогам `Modules/`. Включайте и отключайте целую группу через `SkipModules` / `LoadModules`.
+
+<Columns cols={2}>
+  <Card title="VOD" icon="play" href="/providers/vod">
+    Карта групп OnlineRUS и OnlinePaid
+  </Card>
+  <Card title="Российские CDN" icon="clapperboard" href="/providers/rus">
+    22 источника OnlineRUS
+  </Card>
+  <Card title="Платные" icon="key" href="/providers/paid">
+    Rezka, Filmix, KinoPub и другие
+  </Card>
+  <Card title="Аниме" icon="sparkles" href="/providers/anime">
+    13 источников OnlineAnime
+  </Card>
+  <Card title="Англоязычный" icon="globe" href="/providers/english">
+    10 западных источников
+  </Card>
+  <Card title="Украинский" icon="map-pin" href="/providers/ukrainian">
+    8 украинских CDN
+  </Card>
+  <Card title="Грузинский" icon="languages" href="/providers/georgian">
+    OnlineGEO
+  </Card>
+  <Card title="SISI 18+" icon="flame" href="/providers/adult">
+    Платформы Adult и NextHUB
+  </Card>
+</Columns>
+
+Подробная настройка секций `init.conf`: [конфигурация провайдеров](/configuration/providers).

@@ -1,0 +1,33 @@
+---
+title: "Corseu"
+sidebarTitle: "Corseu"
+description: "Настраиваемый HTTP или browser-запрос через /corseu."
+keywords: ["Corseu", "Playwright request"]
+---
+
+Может использовать Playwright. Не публикуйте без allowlist целей.
+
+## Состояние
+
+Загружается, если не исключён. Часто держат выключенным в секции.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET, POST` | `/corseu` | Запрос |
+| `GET` | `/corseu/{token}/{*url}` | Токенизированный URL |
+
+## Конфигурация
+
+```json
+{
+  "Corseu": { "enable": false }
+}
+```
+
+<Danger>
+  Не открывайте этот proxy как универсальный выход в сеть. Ограничьте цели, rate limit и accsdb.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/corseu`

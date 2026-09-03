@@ -1,0 +1,32 @@
+---
+title: "LogUserRequest-Lite"
+sidebarTitle: "LogUserRequest"
+description: "Собирайте статистику запросов Lite на /lite/logrequest."
+keywords: ["LogUserRequest-Lite", "lite/logrequest"]
+---
+
+Модуль пишет служебную статистику. Не включайте на публичном сервере без root-защиты.
+
+## Состояние
+
+`manifest.enable: false`. Не входит в SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/lite/logrequest` | Статистика Lite |
+
+## Конфигурация
+
+```json
+{
+  "LogUserRequest": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/lite/logrequest`

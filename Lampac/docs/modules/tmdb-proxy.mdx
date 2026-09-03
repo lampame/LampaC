@@ -1,0 +1,36 @@
+---
+title: "TmdbProxy"
+sidebarTitle: "TmdbProxy"
+description: "Локальный кеш TMDB API и изображений через /tmdbproxy.js и /tmdb/*."
+keywords: ["TmdbProxy", "tmdbproxy.js", "TMDB cache"]
+---
+
+Кеш — `cache/tmdb/`. Обзор всех proxy: [прокси](/modules/proxies).
+
+## Состояние
+
+Загружается по умолчанию. `base.conf` включает `LampaWeb.initPlugins.tmdbProxy`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/tmdbproxy.js` | Plugin |
+| `GET` | `/tmdb/api/{*suffix}` | API cache |
+| `GET` | `/tmdb/img/{*suffix}` | Картинки |
+| `GET` | `/tmdb/api.themoviedb.org/*` | Канонический API host |
+| `GET` | `/tmdb/image.tmdb.org/*` | Канонический image host |
+
+## Конфигурация
+
+```json
+{
+  "tmdb": { "enable": true, "cache_api": 1440, "cache_img": 4320 }
+}
+```
+
+<Danger>
+  Не открывайте этот proxy как универсальный выход в сеть. Ограничьте цели, rate limit и accsdb.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/tmdbproxy.js`

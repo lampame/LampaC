@@ -1,0 +1,34 @@
+---
+title: "TimeCode: позиция воспроизведения"
+sidebarTitle: "TimeCode"
+description: "Сохраняйте и восстанавливайте позицию просмотра через /timecode.js и /timecode/*."
+keywords: ["TimeCode", "timecode.js", "SQLite"]
+---
+
+SQLite: `database/TimeCode.sql`.
+
+## Состояние
+
+Starter `example.init.conf` исключает `TimeCode`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/timecode.js` | Plugin |
+| `GET` | `/timecode/js/{token}` | Plugin с токеном |
+| `GET` | `/timecode/all` | Все позиции |
+| `GET` | `/timecode/add` | Записать |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] },
+  "TimeCode": { "enable": true }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/timecode.js`

@@ -1,0 +1,30 @@
+---
+title: "SyncEvents: WebSocket-события"
+sidebarTitle: "SyncEvents"
+description: "Транслируйте события синхронизации через NativeWebSocket."
+keywords: ["SyncEvents", "NWS", "WebSocket"]
+---
+
+Клиент: `/nws-client-es5.js`. См. [архитектуру middleware](/architecture/middleware).
+
+## Состояние
+
+Загружается вместе с ядром, пока не добавите `SyncEvents` в SkipModules. Отдельных HTTP `[Route]` нет.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `WS` | `/nws` | NativeWebSocket, если включён BaseModule.nws |
+
+## Конфигурация
+
+```json
+{
+  "rch": { "enable": true }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/nws`

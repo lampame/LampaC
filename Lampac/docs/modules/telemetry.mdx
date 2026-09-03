@@ -1,0 +1,57 @@
+---
+title: "Telemetry: история запросов и аналитика"
+sidebarTitle: "Telemetry"
+description: "Включите root-защищённую Telemetry-панель Lampac для анализа запросов, пользователей, IP и балансеров."
+keywords: ["Lampac Telemetry", "request analytics", "stats.db", "telemetry API", "root authorization"]
+---
+
+Модуль **Telemetry** записывает выбранные запросы в SQLite и предоставляет dashboard с поиском, графиками, топами, деталями пользователей/IP и экспортом.
+
+<Warning>
+  `Modules/Telemetry/manifest.json` содержит `"enable": false`. Модуль сохраняет URL и пользовательские признаки; включайте его только при наличии законного основания и политики хранения данных.
+</Warning>
+
+## Включение
+
+<Steps>
+  <Step title="Создайте пользовательскую копию">
+    Скопируйте модуль в `mods/Telemetry` и установите `"enable": true` в его `manifest.json`.
+  </Step>
+  <Step title="Перезапустите Lampac">
+    Telemetry регистрирует DbContext и middleware на startup, поэтому изменения manifest требуют рестарта.
+  </Step>
+  <Step title="Откройте dashboard">
+    Перейдите на `/telemetry` и войдите root-паролем из `passwd`.
+  </Step>
+</Steps>
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/telemetry` | Dashboard |
+| `GET` | `/telemetry/api/stats` | Сводная статистика |
+| `GET` | `/telemetry/api/logs` | Поиск и пагинация запросов |
+| `GET` | `/telemetry/api/chart` | Временной график |
+| `GET` | `/telemetry/api/tops` | Топы за период |
+| `GET` | `/telemetry/api/user` | Детали UID |
+| `GET` | `/telemetry/api/ip` | Детали IP |
+| `GET` | `/telemetry/api/balancer` | Статистика источника |
+| `GET`, `POST` | `/telemetry/api/settings` | Фильтры сбора |
+| `POST` | `/telemetry/api/logs/delete` | Удаление выборки |
+| `GET` | `/telemetry/api/export` | Экспорт |
+
+Все маршруты защищены root authorization и могут отвечать 404 до входа.
+
+## Данные и retention
+
+| Путь | Назначение |
+| --- | --- |
+| `database/Telemetry/stats.db` | SQLite-журнал и пользователи |
+| `database/Telemetry/settings.json` | Prefix/extension/regex/IP filters |
+
+Текущая очистка удаляет записи старше 90 дней. Каталог `database/Telemetry/` должен находиться на persistent volume и входить в backup policy.
+
+<Info>
+  Telemetry и `openstat` — разные функции. `/stats/*` показывает runtime-состояние процесса, а Telemetry хранит историю HTTP-активности.
+</Info>

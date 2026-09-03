@@ -1,0 +1,39 @@
+---
+title: "VOD-провайдеры Lampac"
+sidebarTitle: "VOD"
+description: "Обзор VOD-групп Lampac: OnlineRUS, OnlinePaid и ссылки на аниме, ENG, UKR и GEO."
+keywords: ["VOD", "OnlineRUS", "OnlinePaid", "провайдеры"]
+---
+
+VOD-источники разделены по группам модулей. Подробные таблицы — на дочерних страницах.
+
+<Columns cols={2}>
+  <Card title="OnlineRUS" href="/providers/rus" icon="clapperboard">
+    22 российских CDN
+  </Card>
+  <Card title="OnlinePaid" href="/providers/paid" icon="key">
+    9 платных источников с токенами
+  </Card>
+  <Card title="Аниме" href="/providers/anime" icon="sparkles">
+    13 источников OnlineAnime
+  </Card>
+  <Card title="OnlineENG" href="/providers/english" icon="globe">
+    10 англоязычных источников
+  </Card>
+  <Card title="OnlineUKR" href="/providers/ukrainian" icon="map-pin">
+    8 украинских CDN
+  </Card>
+  <Card title="OnlineGEO" href="/providers/georgian" icon="languages">
+    Kinoflix, AsiaGe, Geosaitebi
+  </Card>
+</Columns>
+
+Отключение группы:
+
+```json
+{
+  "BaseModule": {
+    "SkipModules": ["OnlinePaid"]
+  }
+}
+```

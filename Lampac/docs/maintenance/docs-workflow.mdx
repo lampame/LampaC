@@ -1,0 +1,126 @@
+---
+title: "Разработка Mintlify-документации"
+sidebarTitle: "Docs workflow"
+description: "Локально редактируйте и проверяйте документацию Lampac с Mintlify CLI, documentation skill и MCP."
+keywords: ["Mintlify", "Mintlify MCP", "mint validate", "docs.json", "Lampac docs contribution", "DeepWiki", "wiki.json"]
+---
+
+Эта страница предназначена для сопровождающих документацию. Mintlify-корень — каталог `docs/`: здесь лежат `docs.json`, `.mintignore` и все MDX. Постоянные инструкции агента — в `docs/AGENTS.md` и `.cursor/rules/mintlify-docs.mdc`. Skills Mintlify лежат в `.agents/skills/`; MCP — в `.cursor/mcp.json`. Для работы с документацией вызывайте субагента `mintlify-docsops` (`.cursor/agents/mintlify-docsops.md`).
+
+<Note>
+  Если вы открыли каталог `docs/` на GitHub, начните с [`README.md`](https://github.com/lampac-nextgen/lampac/blob/main/docs/README.md). Эта страница — рабочий цикл сопровождающего.
+</Note>
+
+<Note>
+  В Mintlify dashboard укажите content path `/docs`. Workflow `.github/workflows/pages.yml` собирает Astro-проект в `site/` и публикует `site/dist`; это маркетинговый хаб lampac.dev, а не замена Mintlify.
+</Note>
+
+## Установить инструменты
+
+<Tabs>
+  <Tab title="Mintlify CLI">
+    ```bash
+    npm install --global mint
+    mint --version
+    ```
+  </Tab>
+  <Tab title="Documentation skill">
+    ```bash
+    npx skills add https://mintlify.com/docs
+    ```
+  </Tab>
+  <Tab title="Search MCP">
+    ```bash
+    npx @mintlify/mcp@latest add mintlify
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  В Cursor официальный Mintlify plugin уже предоставляет documentation skill, read-only Search MCP и OAuth Admin MCP. Не устанавливайте вторую копию, если эти инструменты доступны в текущем workspace.
+</Info>
+
+## Рабочий цикл
+
+<Steps>
+  <Step title="Обновите контекст">
+    Сверьте текст с кодом, `config/base.conf`, `config/example.init.*`, `manifest.json`, compose/Helm и README модуля.
+  </Step>
+  <Step title="Измените MDX">
+    Сохраняйте существующие slug, добавляйте `keywords`, используйте root-relative ссылки без префикса `/docs/` и включайте новые страницы в `docs/docs.json`.
+  </Step>
+  <Step title="Запустите preview">
+    ```bash
+    cd docs
+    mint dev --no-open
+    ```
+  </Step>
+  <Step title="Проверьте качество">
+    ```bash
+    cd docs
+    mint validate
+    mint broken-links --check-anchors
+    mint a11y
+    ```
+  </Step>
+  <Step title="Просмотрите diff">
+    Убедитесь, что примеры не содержат credentials, внутренние ссылки открываются, а заявленные defaults совпадают с кодом.
+  </Step>
+</Steps>
+
+## Admin MCP
+
+Write-enabled Mintlify MCP работает через OAuth и создаёт отдельную branch session:
+
+```text
+list deployments → checkout → read/search → edit content/navigation/config → diff → save
+```
+
+`checkout` обязателен перед редакторскими операциями. Используйте `save` в режиме PR, чтобы изменения прошли review.
+
+<Warning>
+  Не смешивайте независимые изменения в одной Admin MCP session. Перед `save` всегда проверяйте `diff`.
+</Warning>
+
+## GitHub Pages (lampac.dev)
+
+Маркетинговый хаб — Astro-проект в `site/`. Сборка в CI: Node 22, `npm ci`, `npm run build`, артефакт `site/dist`.
+
+Локально:
+
+```bash
+cd site
+npm install
+npm run dev
+```
+
+Продакшен-сборка: `npm run build` (выход в `site/dist`). Не коммитьте `dist/`, `node_modules/` и `.astro/`. Пользовательские гайды остаются на этом Mintlify-сайте; лендинг на них только ссылается.
+
+Dependabot раз в неделю открывает PR на npm-зависимости в `site/` (экосистема `npm`, каталог `/site` в `.github/dependabot.yml`).
+
+## DeepWiki
+
+Публичный [DeepWiki](https://deepwiki.com/lampac-nextgen/lampac) — английский code-wiki, а не Devin Enterprise и не вторая копия Mintlify. Его рулит [`.devin/wiki.json`](https://github.com/lampac-nextgen/lampac/blob/main/.devin/wiki.json) в корне репозитория.
+
+Лимиты публичного DeepWiki:
+
+- не больше **30 страниц**, если задан массив `pages` — генерируются только они;
+- не больше **100** заметок (`repo_notes` + все `page_notes`);
+- не больше **10 000** символов на заметку;
+- заголовки страниц уникальны.
+
+Страницы wiki зеркалят **группы навигации** Mintlify (`docs/docs.json`), а не каждый MDX-файл. Процедуры установки, таблицы API и пользовательские гайды остаются на [docs.lampac.dev](https://docs.lampac.dev). DeepWiki объясняет, где тема живёт в коде, и ссылается на соответствующие URL Mintlify.
+
+Когда вы добавляете **группу** в навигацию `docs.json`, впишите её в существующую wiki-страницу или замените лист. Не добавляйте 31-ю страницу.
+
+Репозиторий не умеет пересобрать wiki. После merge в `main` откройте [deepwiki.com/lampac-nextgen/lampac](https://deepwiki.com/lampac-nextgen/lampac) и запросите повторную индексацию вручную.
+
+## Что документировать
+
+- пользовательский результат и проверяемую процедуру;
+- реальные route names, методы и ограничения;
+- различие между base defaults, starter config и manifest state;
+- риски публичного доступа и расположение persistent data;
+- troubleshooting с конкретной командой проверки.
+
+Не переносите README дословно: README может описывать внутреннюю реализацию, несколько языков или экспериментальные детали, которые не нужны в основном user journey.

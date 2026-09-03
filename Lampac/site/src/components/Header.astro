@@ -1,0 +1,77 @@
+---
+import { Image } from "astro:assets";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { DOCS, GITHUB, t, type Lang } from "../i18n/ui";
+import logoMark from "../assets/logo-mark.png";
+
+interface Props {
+  lang: Lang;
+  isHome?: boolean;
+}
+
+const { lang, isHome = false } = Astro.props;
+const home = getRelativeLocaleUrl(lang);
+const ruHome = getRelativeLocaleUrl("ru");
+const enHome = getRelativeLocaleUrl("en");
+const howHref = `${home}#how`;
+const featuresHref = `${home}#features`;
+const installHref = `${home}#install`;
+const homeCurrent = isHome ? "page" : undefined;
+---
+
+<header class="site-header">
+  <nav aria-label={t(lang, "navAria")}>
+    <div class="nav-inner">
+      <a class="nav-logo" href={home}>
+        <Image src={logoMark} alt="" width={32} height={32} densities={[1, 2]} />
+        Lampac NextGen
+      </a>
+      <ul class="nav-links">
+        <li>
+          <a href={home} aria-current={homeCurrent}>{t(lang, "navHome")}</a>
+        </li>
+        <li><a href={howHref}>{t(lang, "navHow")}</a></li>
+        <li><a href={featuresHref}>{t(lang, "navFeatures")}</a></li>
+        <li><a href={installHref}>{t(lang, "navInstall")}</a></li>
+        <li><a href={DOCS} rel="noopener">{t(lang, "navDocs")}</a></li>
+        <li>
+          <a class="btn-nav-gh" href={GITHUB} target="_blank" rel="noopener">{t(lang, "linkGithub")}</a>
+        </li>
+        <li>
+          <div class="lang-switch" role="group" aria-label={t(lang, "langAria")}>
+            <a href={ruHome} data-astro-prefetch data-set-lang="ru" aria-current={lang === "ru" ? "true" : undefined}>RU</a>
+            <a href={enHome} data-astro-prefetch data-set-lang="en" aria-current={lang === "en" ? "true" : undefined}>EN</a>
+          </div>
+        </li>
+      </ul>
+      <button
+        class="nav-hamburger"
+        id="hamburgerBtn"
+        type="button"
+        aria-label={t(lang, "navOpen")}
+        aria-expanded="false"
+        aria-haspopup="dialog"
+        aria-controls="navDialog"
+        data-label-open={t(lang, "navOpen")}
+        data-label-close={t(lang, "navClose")}
+      >
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+</header>
+
+<dialog class="nav-dialog" id="navDialog" aria-label={t(lang, "navAria")}>
+  <div class="nav-dialog-inner">
+    <a href={home} aria-current={homeCurrent}>{t(lang, "navHome")}</a>
+    <a href={howHref}>{t(lang, "navHow")}</a>
+    <a href={featuresHref}>{t(lang, "navFeatures")}</a>
+    <a href={installHref}>{t(lang, "navInstall")}</a>
+    <a href={DOCS} rel="noopener">{t(lang, "navDocs")}</a>
+    <a class="btn-nav-gh" href={GITHUB} target="_blank" rel="noopener">{t(lang, "linkGithub")}</a>
+    <div class="lang-switch" role="group" aria-label={t(lang, "langAria")}>
+      <a href={ruHome} data-astro-prefetch data-set-lang="ru" aria-current={lang === "ru" ? "true" : undefined}>RU</a>
+      <a href={enHome} data-astro-prefetch data-set-lang="en" aria-current={lang === "en" ? "true" : undefined}>EN</a>
+    </div>
+  </div>
+</dialog>

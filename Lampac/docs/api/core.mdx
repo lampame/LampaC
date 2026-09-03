@@ -1,0 +1,110 @@
+---
+title: "Core API Lampac: версия, GeoIP и статистика"
+sidebarTitle: "Core"
+description: "Базовые эндпоинты Lampac NextGen: версия сервера, GeoIP, IP клиента, Playwright ping, RCH-реле и статистика."
+keywords: ["Lampac Core API", "GeoIP", "статистика", "RCH", "Playwright"]
+---
+
+Lampac NextGen предоставляет набор базовых HTTP- и WebSocket-эндпоинтов для проверки состояния сервера, геолокации, диагностики Playwright, ретрансляции данных через RCH и мониторинга внутренних метрик. Все эндпоинты описаны в разделе **Core** API.
+
+## Таблица эндпоинтов
+
+| Метод | Путь | Описание | Auth |
+| --- | --- | --- | --- |
+| `GET` | `/version` | Redirect при `listen.version`; не JSON health check | Нет |
+| `GET` | `/version?type=hash` | MD5-хеш `Shared.dll` | Нет |
+| `GET` | `/version?type=name` | Имя сборки (`Helikopter`) | Нет |
+| `GET` | `/nws-client-es5.js`, `/js/nws-client-es5.js` | Клиент NativeWebSocket | Нет |
+| `GET` | `/api/headers` | Заголовки текущего запроса | Нет |
+| `GET` | `/api/geo` | GeoIP-локация IP-адреса | Нет |
+| `GET` | `/api/myip` | IP-адрес клиента | Нет |
+| `GET` | `/api/chromium/ping` | Лёгкий ping Core (`pong`) | Нет |
+| `GET` | `/api/chromium/iframe?src=` | Диагностическая HTML-страница с iframe | Нет |
+| `POST` | `/rch/result?id=` | RCH-реле: запись результата (макс. 10 МБ) | Нет |
+| `POST` | `/rch/gzresult?id=` | RCH-реле: запись gzip-результата (макс. 10 МБ) | Нет |
+| `GET` | `/rch/check/connected` | Состояние RCH-клиента | Нет |
+| `WS` | `/nws` | NativeWebSocket, если `BaseModule.nws` включён | Зависит от сообщения |
+| `GET` | `/stats` | HTML dashboard | Root |
+| `GET` | `/stats/gc` | Память: heap, WorkingSet, PrivateMemory | Root |
+| `GET` | `/stats/request` | Счётчики запросов, активные соединения, топ медленных путей | Root |
+| `GET` | `/stats/tempdb` | Кеши и пулы буферов | Root |
+| `GET` | `/stats/threadpool` | Диагностика ThreadPool | Root |
+| `GET` | `/stats/browser/context` | Состояние Playwright (контексты, счётчики) | Root |
+
+## Примеры запросов
+
+### Проверить идентификатор сборки
+
+<CodeGroup>
+
+```bash cURL
+curl -fsS "http://localhost:9118/version?type=hash"
+```
+
+</CodeGroup>
+
+Ответ имеет тип `text/plain`. Запрос `/version` без `type` при включённом `listen.version` выполняет redirect и не является JSON health endpoint.
+
+### GeoIP-локация
+
+<CodeGroup>
+
+```bash cURL
+curl -s "http://localhost:9118/api/geo?ip=8.8.8.8"
+```
+
+</CodeGroup>
+
+<ParamField query="ip" type="string">
+  Проверяемый адрес. Если не указан, используется IP текущего клиента.
+</ParamField>
+
+<ParamField query="select" type="string">
+  `ip` возвращает только адрес, `country` — только код страны. Без параметра ответ JSON.
+</ParamField>
+
+<ResponseField name="ip" type="string">
+  IP, для которого выполнена проверка.
+</ResponseField>
+
+<ResponseField name="country" type="string">
+  Код страны из локальной базы GeoLite2.
+</ResponseField>
+
+<Note>
+  В исходниках базы находятся в `Core/data/`, а в опубликованной сборке — в runtime-каталоге `data/`. Для GeoIP не требуется внешний API-ключ.
+</Note>
+
+## Статистика и мониторинг
+
+Эндпоинты `/stats/*` предоставляют информацию о работе сервера в реальном времени:
+
+- `/stats/gc` — метрики памяти: размер кучи, WorkingSet, PrivateMemory
+- `/stats/request` — счётчики HTTP-запросов, число активных соединений, топ самых медленных маршрутов
+- `/stats/tempdb` — состояние внутренних кешей и пулов буферов
+- `/stats/threadpool` — диагностика пула потоков .NET
+- `/stats/browser/context` — состояние Playwright: активные контексты, счётчики страниц
+
+<Note>
+  Все `/stats` endpoints требуют `openstat.enable: true` и root authorization через cookie `accspasswd` или заголовок `lcrqpasswd`. При невыполненном условии сервер скрывает их ответом 404.
+</Note>
+
+## RCH-реле (Remote Client Hub)
+
+Модуль RCH позволяет клиентам за NAT обмениваться данными через WebSocket-реле на сервере.
+
+<Steps>
+  <Step title="Включите RCH">
+    Установите `"rch": { "enable": true, "requiredConnected": 1 }` в `init.conf`.
+  </Step>
+  <Step title="Отправьте результат">
+    Используйте `POST /rch/result?id=<id>` для записи результата до 10 МБ или `POST /rch/gzresult?id=<id>` для сжатых данных.
+  </Step>
+  <Step title="Проверьте соединение">
+    Вызовите `GET /rch/check/connected`; для NativeWebSocket используйте `ws://<host>:9118/nws`, если endpoint включён конфигурацией.
+  </Step>
+</Steps>
+
+## Core ping
+
+Эндпоинт `GET /api/chromium/ping` всегда возвращает строку `pong`. Он подтверждает доступность Core, но **не** запускает Chromium и не доказывает исправность browser pool. Состояние Playwright проверяйте через `/stats/browser/context` и журнал запуска.

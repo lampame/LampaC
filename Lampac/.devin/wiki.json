@@ -2,153 +2,308 @@
   "repo_notes": [
     {
       "author": "Lampac maintainers",
-      "content": "Repository: Lampac Next Generation — self-hosted ASP.NET Core (.NET 10) backend that extends the Lampa TV client via plugin JSON APIs and optional browser automation. Default port 9118.\n\nSOURCE LAYOUT (this tree): Core/ (host, Program/Startup, middleware, Core/wwwroot for SISI SPA fragments, stats, buy pages, Core/plugins for NWS/RCH clients); Shared/ (cross-cutting library: CoreInit, AppConf models, BaseController, HTTP pools, caching, Playwright, module loading hooks); Online/ (VOD core: online.js, shared controllers, ModInit); SISI/ (18+ core: sisi.js, SQLite bookmarks/history, SisiApi — individual adult SITE implementations live under Modules/Adult/<Name>/, one project per provider); Modules/ (feature modules: Catalog, JacRed, DLNA, LampaWeb, NextHUB, TorrServer, Transcoding, Tracks, Sync subtree, AdminPanel, Kit, ExternalBind, Community/TelegramAuth*, Proxy/TmdbProxy and CubProxy, WatchTogether, PidTor, WebLog, plus all OnlineRUS/OnlinePaid/OnlineAnime/OnlineENG/OnlineUKR/OnlineGEO provider projects); TestModules/ (samples published under mods/); config/ (example init.conf / base.conf).\n\nRUNTIME VS REPO: After dotnet publish, Core.csproj copies module sources into module/ and mods/ next to Core.dll; precompiled assemblies also load from runtimes/references/. User overlays go in mods/. Each loadable unit uses manifest.json with \"enable\": true|false and typically ModInit.cs implementing Shared module interfaces (e.g. IModuleLoaded / IModuleConfigure).\n\nDOCUMENTATION PRIORITIES: (1) Explain how Core wires middleware and discovers modules. (2) Map Online/ + Modules/Online* to Lampa plugin routes and provider patterns (ModInit, Controller, manifest). (3) Split SISI/ (shared 18+ pipeline) vs Modules/Adult/* (per-site routes). (4) NextHUB YAML under Modules/NextHUB/sites/. (5) Docker: Dockerfile and docker-compose.yaml at REPO ROOT (there is no docker/ directory). (6) CI: .github/workflows. (7) When describing static assets, distinguish Core/wwwroot from plugin JS under Modules/LampaWeb/plugins and Core/plugins — do not treat every SVG under wwwroot as architectural signal.\n\nANTI-PATTERNS: Do not describe a simplified \"modules-only\" workspace; Core and Shared are in-repo. Do not merge Kit/AdminPanel security details with generic API docs — call out auth paths and accsdb/WAF from Shared models. Keep config examples non-secret (no real tokens)."
+      "content": "Public DeepWiki for lampac-nextgen/lampac. This is not Devin Enterprise: no playbooks, secrets files, or ACU effort levels. wiki.json pages are an explicit 30-page cap (public DeepWiki maximum). Generate exactly these pages.\n\nROLES: Canonical operator docs are Russian Mintlify at https://docs.lampac.dev (source: docs/ with docs.json). GitHub Pages site/ is an Astro marketing hub (pages.yml builds site/dist) that links and redirects old HTML to Mintlify. DeepWiki is the English code-grounded twin: explain where topics live in the repo and link the matching docs.lampac.dev URLs. Do not paste install scripts, docker-compose dumps, or API tables — those belong on Mintlify.\n\nSOURCE OF TRUTH: application code, config/base.conf, config/example.init.conf / example.init.yaml, module manifest.json files. Not DeepWiki, not site/, not generated wiki text.\n\nFACTS: default port 9118; listen.ip is \"any\" in base.conf; RCH WebSocket is /nws (not /ws); torrent Online source is PidTor (not PiTor); JacRed APIs are /api/v1.0 and /api/v2.0; health check GET /version?type=hash. SkipModules in base.conf: Catalog, Tracks, Transcoding, WebLog, CacheMedia, ForkPlayerXML, MsxNative, Potok, TelegramAuth, TelegramAuthBot. Starter example.init.conf additionally skips DLNA, JacRed, Sync, TimeCode, TorrServer. manifest enable false includes AdminPanel, DatabaseEditor, Music, WatchTogether, TelegramAuth/Bot, Tracks, Transcoding, Telemetry. Rezka premium is Rezka.premium in config, not a provider named RezkaPremium.\n\nLAYOUT: Core/ host (Program.cs, Startup.cs, Middlewares/, Controllers/, plugins/, wwwroot/); Shared/ library (CoreInit, AppConf, BaseController, HTTP pools, HybridCache, PlaywrightCore, CSharpEval); Online/ VOD core; SISI/ 18+ core; Modules/ feature and provider projects; NextGen.slnx. After publish, Core.csproj copies module sources to module/ and TestModules to mods/ beside Core.dll. Compose files docker-compose.yaml and docker-compose.dev.yaml live at repo root (there is no docker/ directory). Mintlify root is docs/. Pages landing is site/. Helm chart is charts/lampac/. CI is .github/workflows/. Custom overlays: mods/.\n\nIGNORE as architecture: temp/, gitignored lampac-docker/, bin/obj, vendored binaries, every SVG under wwwroot. Do not treat site/ Astro pages as API docs. Never emit real tokens, passwd contents, provider cookies, or private hosts.\n\nWhen a Mintlify nav group is added in docs/docs.json, fold it into an existing wiki page or replace a leaf. Do not add a 31st page."
     }
   ],
   "pages": [
     {
-      "title": "Lampac NextGen — Project Overview",
-      "purpose": "High-level introduction: self-hosted .NET 10 media-aggregator backend for Lampa; how Core, Shared, Online, SISI, and Modules cooperate; default port 9118; link to child sections and to README architecture diagram."
+      "title": "Overview",
+      "purpose": "English introduction to Lampac NextGen: ASP.NET Core (.NET 10) self-hosted Lampa backend on port 9118. How Core, Shared, Online, SISI, and Modules/ cooperate. Point readers to https://docs.lampac.dev for operator docs and to child wiki pages for code maps. Do not duplicate the Russian landing page.",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev"
+        }
+      ]
     },
     {
-      "title": "Getting Started, Docker & Repository Layout",
-      "purpose": "Installation: Dockerfile and root-level docker-compose.yaml / docker-compose.dev.yaml (no docker/ directory), install.sh / build.sh, default port 9118. Configuration: config/ examples and runtime init.conf / init.yaml, passwd, accsdb. Repository map: Core/, Shared/, Online/, SISI/, Modules/, TestModules/, NextGen.slnx, .github/workflows — and how publish maps sources to module/ and mods/ via Core/Core.csproj.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "Getting Started",
+      "purpose": "Map clone-and-run paths in the repo: docker-compose.yaml, docker-compose.dev.yaml, install.sh, build.sh, config/example.init.conf, config/example.init.yaml. Default port 9118 and GET /version?type=hash. Link Mintlify; do not paste full install scripts.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/quickstart and https://docs.lampac.dev/installation"
+        }
+      ]
     },
     {
-      "title": "Core Application — Bootstrap & Request Pipeline",
-      "purpose": "Core project: Program.cs and Startup.cs, dynamic loading of module/ and mods/, relationship to Shared and runtimes/references/. Link to middleware, controllers, proxy, websockets, static files.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "Configuration",
+      "purpose": "How CoreInit in Shared loads init.conf / init.yaml, merges config/base.conf, and hot-reloads. Cover AppConf models under Shared/Models/AppConf (listen, online, sisi, cache, puppeteer, pool). Provider section keys live beside Modules/Online* ModuleConf. Distinguish base defaults vs starter example.init.conf.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/configuration/overview https://docs.lampac.dev/configuration/providers https://docs.lampac.dev/configuration/memory"
+        }
+      ]
     },
     {
-      "title": "Middleware Pipeline",
-      "purpose": "Each middleware in Core/Middlewares registered from Startup: responsibilities (WAF, accsdb, limits, static cache, headers, module integration, proxy image, etc.) and request ordering.",
-      "parent": "Core Application — Bootstrap & Request Pipeline"
+      "title": "Security and Access",
+      "purpose": "WAF, Accsdb, GeoIP, Cloudflare IP lists, kit encryption, and passwd usage. Source: Core/Middlewares/WAF.cs, Accsdb.cs; Shared security/geo helpers. Document public-exposure risks without publishing secrets. Accsdb and Kit must not be merged into generic API docs.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/configuration/security"
+        }
+      ]
     },
     {
-      "title": "Media Proxy Subsystem",
-      "purpose": "Core/Middlewares/ProxyMedia and related: HLS/DASH/MPD handling, ProxyAPI dispatch, ProxyLink encryption, buffering options from Shared server-proxy models.",
-      "parent": "Core Application — Bootstrap & Request Pipeline"
+      "title": "Architecture",
+      "purpose": "Layer diagram in code terms: Core host, Shared services, Online and SISI cores, Roslyn module compile, middleware pipeline. Repository map of Core/, Shared/, Online/, SISI/, Modules/. Link child pages. Operator overview stays on Mintlify.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/architecture/overview"
+        }
+      ]
     },
     {
-      "title": "Core Controllers & API Endpoints",
-      "purpose": "Core/Controllers: version, geo, diagnostics, Chromium iframe, statistics, RCH ingestion — attribute routes and how they relate to Lampa and admin use cases.",
-      "parent": "Core Application — Bootstrap & Request Pipeline"
+      "title": "Core Host and Middleware",
+      "purpose": "Core/Program.cs and Startup.cs: DI, module load, Map(\"/nws\"). Middleware order in Core/Middlewares: RequestInfo, WAF, Accsdb, Module/ModuleAsync, Staticache, ProxyAPI (HLS/DASH/MPD), ProxyImg, OverrideResponse. Core/Controllers for version, geo, RCH. Media proxy models in Shared.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/architecture/middleware"
+        }
+      ]
     },
     {
-      "title": "WebSocket & RCH (Remote Client Hub)",
-      "purpose": "Native WebSocket /nws path, RchClient bridging to HTTP, and Core/plugins JS clients (nws-client, invc variants) consumed by Lampa-side integrations.",
-      "parent": "Core Application — Bootstrap & Request Pipeline"
+      "title": "Shared Library",
+      "purpose": "Shared as the common library: BaseController, CoreInit, module interfaces (IModuleLoaded / IModuleConfigure), HTTP client factory, HybridCache and Staticache, Pools, CSharpEval/Roslyn, GeoIP, PlaywrightCore. How Online and SISI consume these services.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": "User-facing guide (Shared layer): https://docs.lampac.dev/architecture/overview"
+        }
+      ]
     },
     {
-      "title": "Static Assets & Web UI",
-      "purpose": "Core/wwwroot: SISI UI (sisi/), MSX assets, buy/, stats/; Core/plugins for server-delivered JS helpers. Contrast with Modules/LampaWeb/plugins (Lampa client plugin sources copied with that module).",
-      "parent": "Core Application — Bootstrap & Request Pipeline"
+      "title": "Module Loader",
+      "purpose": "How Core discovers and compiles modules from module/ and mods/, ApplicationPartManager, FileSystemWatcher hot reload, manifest.json enable, BaseModule.LoadModules / SkipModules. Runtime vs repo copy rules in Core/Core.csproj.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/architecture/modules"
+        }
+      ]
     },
     {
-      "title": "Shared Library — Services & Models",
-      "purpose": "Shared as the common library: BaseController, CoreInit, module interfaces, major service folders. Child pages for AppConf, HTTP, cache, pools, security, Playwright.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "Modules Overview",
+      "purpose": "Catalog of in-tree Modules/ families and how to read state: manifest enable, SkipModules in base.conf vs example.init.conf. Honest defaults: Music/WatchTogether/AdminPanel manifest-off; TorrServer/JacRed/Sync skipped in starter; Catalog/Tracks/WebLog skipped in base.conf. Link child group pages instead of one page per module.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/modules/overview"
+        }
+      ]
     },
     {
-      "title": "Configuration Models (AppConf)",
-      "purpose": "Shared/Models/AppConf: listen, accsdb/WAF, online/sisi/kit/rch/cache/puppeteer/pool settings; how CoreInit loads init.conf / init.yaml and hot-reload events.",
-      "parent": "Shared Library — Services & Models"
+      "title": "Client and Content Modules",
+      "purpose": "Code map for Online/ (/online.js, /lite/*), SISI/ (/sisi.js), Modules/NextHUB, Modules/LampaWeb, Modules/Music (manifest off), Modules/LampacApk, Modules/WatchTogether (manifest off). Point to each module README and Mintlify module page; do not copy plugin JS.",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/online https://docs.lampac.dev/modules/sisi https://docs.lampac.dev/modules/nexthub https://docs.lampac.dev/modules/lampa-web https://docs.lampac.dev/modules/music https://docs.lampac.dev/modules/lampac-apk https://docs.lampac.dev/modules/watch-together"
+        }
+      ]
     },
     {
-      "title": "HTTP Client & Request Services",
-      "purpose": "Shared HTTP helpers and named HttpClientFactory clients: proxy routing, headers, spans, and EventListener hooks used by Online/SISI scrapers.",
-      "parent": "Shared Library — Services & Models"
+      "title": "Media Modules",
+      "purpose": "Code map for Modules/GStreamer, TorrServer, JacRed, PidTor, DLNA, Catalog, Tracks, Transcoding. Note starter SkipModules for TorrServer/JacRed/DLNA and base.conf SkipModules for Catalog/Tracks/Transcoding. JacRed routes /api/v1.0 and /api/v2.0. PidTor spelling.",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/gstreamer https://docs.lampac.dev/modules/torrserver https://docs.lampac.dev/modules/jacred https://docs.lampac.dev/modules/pidtor https://docs.lampac.dev/modules/local-media https://docs.lampac.dev/modules/dlna https://docs.lampac.dev/modules/catalog https://docs.lampac.dev/modules/tracks https://docs.lampac.dev/modules/transcoding"
+        }
+      ]
     },
     {
-      "title": "Caching — HybridCache & Staticache",
-      "purpose": "Hybrid file/memory caches, response caching, Staticache middleware and relevant AppConf keys (type, extend, memExtend).",
-      "parent": "Shared Library — Services & Models"
+      "title": "Sync Modules",
+      "purpose": "Modules/Sync subtree: sync.js, storage, bookmarks, TimeCode. SQLite paths. Starter example.init.conf skips Sync and TimeCode. Map controllers and database files without dumping API tables.",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/sync https://docs.lampac.dev/modules/storage https://docs.lampac.dev/modules/timecode https://docs.lampac.dev/modules/sync-events"
+        }
+      ]
     },
     {
-      "title": "Object Pools & Performance Utilities",
-      "purpose": "Shared/Services/Pools and related performance types (buffers, JSON pools, streams) plus CSharpEval / Roslyn compilation used for runtime module compilation and NextHUB scripting.",
-      "parent": "Shared Library — Services & Models"
+      "title": "Proxy Modules",
+      "purpose": "Modules/Proxy/TmdbProxy and CubProxy, plus CorsMedia, CorsEU, CacheMedia, ProxyLimiter. Cache directories under cache/. CacheMedia is in base.conf SkipModules. Contrast with Core ProxyAPI middleware (stream proxy vs module proxies).",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/proxies https://docs.lampac.dev/modules/tmdb-proxy https://docs.lampac.dev/modules/cub-proxy https://docs.lampac.dev/modules/cors-media https://docs.lampac.dev/modules/corseu https://docs.lampac.dev/modules/cache-media https://docs.lampac.dev/modules/proxy-limiter"
+        }
+      ]
     },
     {
-      "title": "Security & Geo Utilities",
-      "purpose": "Crypto helpers, proxy link AES, GeoIP / CIDR matching, AccsDb resolution, Cloudflare IP lists — how they support WAF and access control without duplicating secret values.",
-      "parent": "Shared Library — Services & Models"
+      "title": "Admin Modules",
+      "purpose": "AdminPanel (manifest off), DatabaseEditor (manifest off), WebLog (base SkipModules, needs passwd), Telemetry (manifest off), LogUserRequest. Hub page modules/admin-tools on Mintlify. Do not document live admin credentials.",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/admin-tools https://docs.lampac.dev/modules/admin-panel https://docs.lampac.dev/modules/database-editor https://docs.lampac.dev/modules/weblog https://docs.lampac.dev/modules/telemetry https://docs.lampac.dev/modules/log-user-request"
+        }
+      ]
     },
     {
-      "title": "Playwright Browser Automation",
-      "purpose": "Playwright pools and contexts in Shared; how Online and SISI controllers request rendered pages when plain HTTP is insufficient.",
-      "parent": "Shared Library — Services & Models"
+      "title": "Integration Modules",
+      "purpose": "Modules/Community/TelegramAuth and TelegramAuthBot (base SkipModules, often manifest off), Tg-notify, Kit (encrypted credentials for paid providers), ExternalBind (often disabled), ForkPlayerXML, MsxNative, Potok (base SkipModules). Kit storage paths and consumption by OnlinePaid.",
+      "parent": "Modules Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/modules/community https://docs.lampac.dev/modules/telegram-auth https://docs.lampac.dev/modules/telegram-auth-bot https://docs.lampac.dev/modules/tg-notify https://docs.lampac.dev/modules/kit https://docs.lampac.dev/modules/external-bind https://docs.lampac.dev/modules/forkplayer https://docs.lampac.dev/modules/msx-native https://docs.lampac.dev/modules/potok"
+        }
+      ]
     },
     {
-      "title": "Online Module — Video Streaming Sources",
-      "purpose": "Online/ project: ModInit, online.js plugin surface, OnlineApi, relationship to per-provider projects under Modules/OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "Providers Overview",
+      "purpose": "How VOD providers are grouped: Modules/OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO, Adult/. Enabling groups via SkipModules/LoadModules. Do not invent a RezkaPremium provider. PidTor is the torrent Online source.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/providers/overview https://docs.lampac.dev/providers/vod"
+        }
+      ]
     },
     {
-      "title": "Online Controller Architecture & Base Classes",
-      "purpose": "Patterns for VOD controllers in Online/ and Modules/Online*: base classes, episode/season resolution, subtitles, spider/search, SQL cache under Online/SQL if present, shared services.",
-      "parent": "Online Module — Video Streaming Sources"
+      "title": "Russian and Paid VOD",
+      "purpose": "Representative projects under Modules/OnlineRUS and Modules/OnlinePaid (Rezka including Rezka.premium config, Filmix, KinoPub, Kodik, HDVB, Collaps, and peers). Per-provider ModuleConf vs Online/Config. No one wiki page per provider.",
+      "parent": "Providers Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/providers/rus https://docs.lampac.dev/providers/paid"
+        }
+      ]
     },
     {
-      "title": "Supported Streaming Providers",
-      "purpose": "Catalog by folder: Modules/OnlineRUS, OnlinePaid, OnlineAnime, OnlineENG, OnlineUKR, OnlineGEO — representative providers (Rezka, Filmix, Kodik, HDVB, Collaps, VidSrc, Kinoflix, etc.) and where per-provider config lives (Online/Config and module ModuleConf).",
-      "parent": "Online Module — Video Streaming Sources"
+      "title": "Anime ENG UKR GEO",
+      "purpose": "Modules/OnlineAnime (13 sources including AniLibria, AnimeLib, AnimeON), OnlineENG, OnlineUKR (Ashdi, Kinoukr, not AshdiTV), OnlineGEO (AsiaGe, Geosaitebi). Folder layout and shared Online controller patterns.",
+      "parent": "Providers Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/providers/anime https://docs.lampac.dev/providers/english https://docs.lampac.dev/providers/ukrainian https://docs.lampac.dev/providers/georgian"
+        }
+      ]
     },
     {
-      "title": "SISI Module — Adult Content Aggregator",
-      "purpose": "SISI/ core: plugins (sisi.js), SQLite persistence, WAF limits, SisiApi entry — explicitly state that each third-party SITE integration is a separate project under Modules/Adult/<SiteName>/.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "Adult Content",
+      "purpose": "SISI/ shared pipeline vs Modules/Adult/<Site>/ one project per platform, plus NextHUB YAML under Modules/NextHUB/sites/. Bookmarks/history SQLite in SISI core. WAF limits. Do not scrape or duplicate adult catalogs.",
+      "parent": "Providers Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/providers/adult"
+        }
+      ]
     },
     {
-      "title": "SISI Controllers & Site Integrations",
-      "purpose": "Document Modules/Adult/* projects (manifest, ModInit, Controller/Service patterns), bookmark/history flow through SISI core, and route naming conventions; reference SISI/README.md route tables.",
-      "parent": "SISI Module — Adult Content Aggregator"
+      "title": "Deployment",
+      "purpose": "Repo artifacts for Docker (Dockerfile, docker-compose.yaml, docker-compose.dev.yaml, GHCR), Linux install.sh and systemd, Windows release zip + dotnet Core.dll, Helm charts/lampac/, reverse-proxy notes. Link Mintlify deployment pages; do not paste compose files.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/deployment/docker https://docs.lampac.dev/deployment/linux https://docs.lampac.dev/deployment/windows https://docs.lampac.dev/deployment/kubernetes https://docs.lampac.dev/deployment/reverse-proxy"
+        }
+      ]
     },
     {
-      "title": "NextHUB — Dynamic YAML-Driven Site Engine",
-      "purpose": "Modules/NextHUB: sites/*.yaml, ListController/ViewController, Roslyn-evaluated scripts, integration with Playwright; how to add a site YAML safely.",
-      "parent": "SISI Module — Adult Content Aggregator"
+      "title": "Maintenance",
+      "purpose": "Release/update flow (install.sh --update, GitHub releases, rsync excludes), troubleshooting entry points (logs/, journalctl, /version?type=hash), and pointer to custom modules child page. Mintlify holds operator procedures.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/maintenance/updates https://docs.lampac.dev/maintenance/troubleshooting https://docs.lampac.dev/maintenance/custom-modules"
+        }
+      ]
     },
     {
-      "title": "Modules — Pluggable Feature Extensions",
-      "purpose": "Cross-cutting module loading: manifest.json, IModuleLoaded/IModuleConfigure, FileSystemWatcher hot reload, ApplicationPartManager. Overview of major module families with links to child pages.",
-      "parent": "Lampac NextGen — Project Overview"
+      "title": "API Overview",
+      "purpose": "Where routes are declared: [Route] attributes on Core/Controllers and module controllers. Plugin JS: /online.js, /sisi.js, /gst.js. WebSocket /nws. Hand-written API MDX on Mintlify is canonical; this page maps code to those docs. No OpenAPI unless the repo adds it.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/api/overview"
+        }
+      ]
     },
     {
-      "title": "Catalog Module",
-      "purpose": "Modules/Catalog: YAML sites under sites/, catalog plugin endpoints, list/card controllers and mapping to online sources.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "API Core and Auth",
+      "purpose": "Core/Controllers (version, geo, diagnostics, RCH ingestion) and authentication/accsdb gates. NativeWebSocket /nws in Core/Startup.cs. Link Mintlify API core and authentication pages instead of reproducing request/response tables.",
+      "parent": "API Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/api/core https://docs.lampac.dev/api/authentication"
+        }
+      ]
     },
     {
-      "title": "JacRed Module — Torrent Indexer Proxy",
-      "purpose": "Modules/JacRed: Jackett-compatible API, engines, models, tracker-specific code under Controllers and Engine.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "API Online SISI Music",
+      "purpose": "OnlineApi, /lite/*, SISI API and SQLite bookmarks, Music /music.js and /music/* (manifest off). Source: Online/, SISI/, Modules/Music. API contracts stay on Mintlify.",
+      "parent": "API Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/api/online https://docs.lampac.dev/api/sisi https://docs.lampac.dev/api/music"
+        }
+      ]
     },
     {
-      "title": "DLNA Module — Local Media Server",
-      "purpose": "Modules/DLNA: torrent integration, local browsing, thumbnails, UPnP/DLNA discovery, background jobs.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "API Media and Sync",
+      "purpose": "GStreamer /gst/*, Sync /storage/ and /bookmark/, TorrServer /ts/*, JacRed /api/v1.0 and /api/v2.0. Source modules under Modules/. Map controllers to Mintlify API pages; do not duplicate parameter lists.",
+      "parent": "API Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/api/gstreamer https://docs.lampac.dev/api/sync https://docs.lampac.dev/api/torrserver https://docs.lampac.dev/api/jacred https://docs.lampac.dev/api/modules"
+        }
+      ]
     },
     {
-      "title": "LampaWeb, Sync, Community, Proxies & Satellite Modules",
-      "purpose": "Modules/LampaWeb (Lampa UI/plugin hosting, lampainit.js family, telegram gate plugins). Modules/Sync subtree (sync.js, bookmarks, storage, timecode). Modules/Community/TelegramAuth and TelegramAuthBot (HTTP API, bot sessions — link Community READMEs). Modules/Proxy/TmdbProxy and CubProxy. TorrServer, Transcoding, Tracks, WebLog, WatchTogether, PidTor — each: manifest, ModInit, main routes or jobs.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "API Proxies Admin Telegram",
+      "purpose": "Proxy module HTTP surfaces, AdminPanel /adminpanel/ (manifest off), Telegram auth/bot/notify endpoints. Source: Modules/Proxy, AdminPanel, Community, Tg-notify. Never document live tokens.",
+      "parent": "API Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guides: https://docs.lampac.dev/api/proxies https://docs.lampac.dev/api/admin https://docs.lampac.dev/api/telegram"
+        }
+      ]
     },
     {
-      "title": "AdminPanel Module — Web Configuration UI",
-      "purpose": "Modules/AdminPanel: /adminpanel UI, API for reading/patching init sections, auth model — align with mods/AdminPanel README conventions if present in tree.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "Docs Sites Mintlify Pages DeepWiki",
+      "purpose": "Three surfaces: docs/ Mintlify (docs.json, MDX, content path /docs), site/ Astro GitHub Pages hub (pages.yml builds site/dist; / and /en/; old .html stubs redirect to Mintlify), .devin/wiki.json public DeepWiki (30-page cap). Agents: docs/AGENTS.md, .cursor/rules/mintlify-docs.mdc, .agents/skills/mintlify*. DeepWiki is not a source of truth and must not copy MDX.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/maintenance/docs-workflow Public wiki: https://deepwiki.com/lampac-nextgen/lampac"
+        }
+      ]
     },
     {
-      "title": "ExternalBind Module — Remote Device Binding",
-      "purpose": "Modules/ExternalBind: EventListener hooks, IsLocalIp overrides for lite bind routes, security notes and manifest defaults (often disabled).",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "Repository CI and Publish",
+      "purpose": "NextGen.slnx, build.sh, Core/Core.csproj publish layout (module/, mods/, runtimes/references/). Workflows: build.yml, test-build.yml, release.yml, format-code.yml, pages.yml, reusable-docker-build.yml. GHCR image, Helm charts/lampac/, site/ Pages artifact. Do not treat CI YAML as runtime config.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": "CI lives in .github/workflows/. Pages builds Astro in site/ and publishes site/dist. Docker image: ghcr.io/lampac-nextgen/lampac. Helm: charts/lampac/."
+        }
+      ]
     },
     {
-      "title": "Kit Module — Encrypted User Configuration & Service Binding",
-      "purpose": "Modules/Kit: encrypted kit store, unite flows, BindController for third-party OAuth/credentials; storage paths and consumption by paid provider modules.",
-      "parent": "Modules — Pluggable Feature Extensions"
+      "title": "Playwright and Provider Patterns",
+      "purpose": "Shared/PlaywrightCore (Chromium/Firefox pools), how Online and SISI controllers request rendered pages. Typical provider project: manifest.json, ModInit.cs, Controller, ModuleConf. NextHUB YAML + Roslyn scripts. Do not document bypass recipes as exploits; describe the code layout only.",
+      "parent": "Architecture",
+      "page_notes": [
+        {
+          "content": "Provider groups: https://docs.lampac.dev/providers/overview Architecture: https://docs.lampac.dev/architecture/modules"
+        }
+      ]
+    },
+    {
+      "title": "Custom Modules and TestModules",
+      "purpose": "User overlays in mods/, TestModules/ copied to mods/ on publish, IModuleLoaded/IModuleConfigure, hot reload. How to enable a stock module that is SkipModules or manifest-off by overlaying a copy. Mintlify custom-modules page is the operator procedure.",
+      "parent": "Maintenance",
+      "page_notes": [
+        {
+          "content": "User-facing guide: https://docs.lampac.dev/maintenance/custom-modules"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,19 @@
+---
+import Base from "../layouts/Base.astro";
+import { DOCS, t } from "../i18n/ui";
+
+const lang = "ru" as const;
+---
+
+<Base lang={lang} title={`404 — ${t(lang, "notFoundTitle")}`} noindex>
+  <main id="main" class="not-found">
+    <div>
+      <h1>{t(lang, "notFoundTitle")}</h1>
+      <p>{t(lang, "notFoundBody")}</p>
+      <div class="not-found-actions">
+        <a class="btn btn-primary" href="/">{t(lang, "notFoundHome")}</a>
+        <a class="btn btn-secondary" href={DOCS}>{t(lang, "ctaDocs")}</a>
+      </div>
+    </div>
+  </main>
+</Base>

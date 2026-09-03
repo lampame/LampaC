@@ -1,0 +1,59 @@
+---
+title: "WatchTogether: синхронный просмотр"
+sidebarTitle: "WatchTogether"
+description: "Создавайте комнаты совместного просмотра с LParty-совместимым WebSocket relay и автоматическим резервным хостом Lampac."
+keywords: ["WatchTogether", "LParty", "совместный просмотр", "WebSocket relay", "watchtogether.js"]
+---
+
+**WatchTogether** синхронизирует воспроизведение между Lampa-клиентами и совместимыми LParty-приложениями. Lampac пассивно хранит состояние комнаты и становится хостом, если создатель отключился.
+
+<Warning>
+  Модуль поставляется с `"enable": false` в `Modules/WatchTogether/manifest.json`. Включайте его через пользовательскую копию модуля.
+</Warning>
+
+## Подключение
+
+| Клиент | Адрес |
+| --- | --- |
+| Lampa plugin | `http://HOST:9118/watchtogether.js` |
+| Веб-гость | `https://HOST/watch_together/?room=INVITE_CODE` |
+| LParty relay | `ws://HOST:9118/wt/c/` или `wss://HOST/wt/c/` |
+
+## Конфигурация
+
+```json
+{
+  "WatchTogether": {
+    "enable": true,
+    "allow_anonymous": true,
+    "relay_max_channels": 500,
+    "relay_max_clients_per_channel": 32,
+    "gc_empty_timeout_minutes": 30,
+    "gc_max_lifetime_hours": 12
+  }
+}
+```
+
+<ParamField path="enable" type="boolean" default="true">
+  Включает обработчики модуля после его загрузки.
+</ParamField>
+
+<ParamField path="allow_anonymous" type="boolean" default="true">
+  Разрешает получать plugin и web player без аккаунта Lampac.
+</ParamField>
+
+<ParamField path="relay_max_clients_per_channel" type="number" default="32">
+  Ограничивает размер одной комнаты.
+</ParamField>
+
+<ParamField path="gc_empty_timeout_minutes" type="number" default="30">
+  Удаляет пустую комнату после периода без участников.
+</ParamField>
+
+## Reverse proxy
+
+Прокси должен поддерживать WebSocket upgrade для `/wt/c/`, отключать response buffering и иметь timeout больше длительности просмотра. Пример общей настройки: [reverse proxy](/deployment/reverse-proxy).
+
+<Note>
+  При публичном `allow_anonymous: true` ограничения каналов и клиентов защищают relay от бесконтрольного потребления ресурсов. Дополните их сетевыми лимитами reverse proxy.
+</Note>

@@ -1,0 +1,43 @@
+---
+import { DOCS, GITHUB, SITE, t, type Lang } from "../i18n/ui";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const faqs = [
+  { q: t(lang, "faq1q"), a: t(lang, "faq1a") },
+  { q: t(lang, "faq2q"), a: t(lang, "faq2a") },
+  { q: t(lang, "faq3q"), a: t(lang, "faq3a") },
+  { q: t(lang, "faq4q"), a: t(lang, "faq4a") },
+  { q: t(lang, "faq5q"), a: t(lang, "faq5a") },
+];
+
+const software = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Lampac NextGen",
+  applicationCategory: "MultimediaApplication",
+  operatingSystem: "Linux, Windows, Docker",
+  url: SITE,
+  downloadUrl: `${GITHUB}/releases`,
+  license: `${GITHUB}/blob/main/LICENSE`,
+  softwareRequirements: ".NET 10",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  documentation: DOCS,
+};
+
+const faqPage = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
+---
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(software)} />
+<script type="application/ld+json" is:inline set:html={JSON.stringify(faqPage)} />

@@ -1,0 +1,181 @@
+---
+title: "Модули Lampac NextGen"
+sidebarTitle: "Обзор модулей"
+description: "Каталог встроенных модулей Lampac: назначение, маршруты, состояние manifest.json и способы включения."
+keywords: ["Lampac модули", "manifest.json", "SkipModules", "LampaWeb", "GStreamer", "TorrServer"]
+---
+
+Lampac расширяется динамическими C#-модулями. При запуске сервер компилирует исходники из `module/` и `mods/`, регистрирует контроллеры и запускает фоновые задачи.
+
+<Info>
+  Состояние модуля определяется двумя независимыми фильтрами: `enable` в `manifest.json` и списками `BaseModule.LoadModules` / `BaseModule.SkipModules`.
+</Info>
+
+## Как читать состояние
+
+- **Доступен** — `manifest.json` разрешает загрузку, если модуль не исключён конфигурацией.
+- **Выключен в starter-конфиге** — имя есть в `config/example.init.conf`. Новая установка на основе этого файла модуль не загрузит.
+- **Выключен манифестом** — требуется собственная копия модуля с `"enable": true`; одного изменения `init.conf` недостаточно.
+- **Требует секцию конфигурации** — код загружается, но функция не активируется до `enable: true` в секции модуля.
+
+## Клиент и контент
+
+<Columns cols={2}>
+  <Card title="Online" href="/modules/online" icon="play">
+    `/online.js` и `/lite/*`
+  </Card>
+  <Card title="SISI" href="/modules/sisi" icon="flame">
+    `/sisi.js` и платформы 18+
+  </Card>
+  <Card title="NextHUB" href="/modules/nexthub" icon="layers">
+    YAML-витрина и `/nexthub`
+  </Card>
+  <Card title="LampaWeb" href="/modules/lampa-web" icon="globe">
+    Веб-клиент Lampa
+  </Card>
+  <Card title="Music" href="/modules/music" icon="music">
+    Каталог и стримы
+  </Card>
+  <Card title="Lampac APK" href="/modules/lampac-apk" icon="smartphone">
+    Сборка Android-клиента
+  </Card>
+  <Card title="Watch Together" href="/modules/watch-together" icon="users">
+    Совместный просмотр
+  </Card>
+</Columns>
+
+## Медиа
+
+<Columns cols={2}>
+  <Card title="GStreamer" href="/modules/gstreamer" icon="film">
+    HLS/fMP4 транскодинг
+  </Card>
+  <Card title="TorrServer" href="/modules/torrserver" icon="download">
+    Торрент-прокси `/ts/*`
+  </Card>
+  <Card title="JacRed" href="/modules/jacred" icon="search">
+    Поиск раздач `/api/v1.0`
+  </Card>
+  <Card title="PidTor" href="/modules/pidtor" icon="magnet">
+    Торрент-источник Online
+  </Card>
+  <Card title="Локальные медиа" href="/modules/local-media" icon="hard-drive">
+    DLNA, Catalog, Tracks, Transcoding
+  </Card>
+  <Card title="DLNA" href="/modules/dlna" icon="tv">
+    UPnP-медиасервер
+  </Card>
+  <Card title="Catalog" href="/modules/catalog" icon="library">
+    YAML-каналы
+  </Card>
+  <Card title="Tracks" href="/modules/tracks" icon="audio-lines">
+    FFprobe `/ffprobe`
+  </Card>
+  <Card title="Transcoding" href="/modules/transcoding" icon="clapperboard">
+    Legacy FFmpeg
+  </Card>
+</Columns>
+
+## Синхронизация
+
+<Columns cols={2}>
+  <Card title="Sync" href="/modules/sync" icon="refresh-cw">
+    Закладки и оркестрация
+  </Card>
+  <Card title="Storage" href="/modules/storage" icon="database">
+    `/storage/*` и `/backup.js`
+  </Card>
+  <Card title="TimeCode" href="/modules/timecode" icon="clock">
+    Позиции воспроизведения
+  </Card>
+  <Card title="SyncEvents" href="/modules/sync-events" icon="radio">
+    WebSocket-события
+  </Card>
+</Columns>
+
+## Прокси
+
+<Card title="Обзор proxy" href="/modules/proxies" icon="globe">
+  TmdbProxy, CubProxy, CorsMedia, Corseu, CacheMedia, ProxyLimiter
+</Card>
+
+## Администрирование
+
+<Columns cols={2}>
+  <Card title="Admin tools" href="/modules/admin-tools" icon="shield">
+    Обзор административных интерфейсов
+  </Card>
+  <Card title="AdminPanel" href="/modules/admin-panel" icon="settings">
+    Редактор `init.conf`
+  </Card>
+  <Card title="DatabaseEditor" href="/modules/database-editor" icon="database">
+    Базы Sync и TimeCode
+  </Card>
+  <Card title="WebLog" href="/modules/weblog" icon="activity">
+    Поток запросов
+  </Card>
+  <Card title="Telemetry" href="/modules/telemetry" icon="chart-line">
+    Диагностическая телеметрия
+  </Card>
+  <Card title="LogUserRequest" href="/modules/log-user-request" icon="list">
+    Статистика Lite-запросов
+  </Card>
+</Columns>
+
+## Интеграции
+
+<Columns cols={2}>
+  <Card title="Community" href="/modules/community" icon="users">
+    Telegram-авторизация
+  </Card>
+  <Card title="TelegramAuth" href="/modules/telegram-auth" icon="key-round">
+    API `/tg/auth/*`
+  </Card>
+  <Card title="TelegramAuthBot" href="/modules/telegram-auth-bot" icon="bot">
+    Бот привязки UID
+  </Card>
+  <Card title="Tg-notify" href="/modules/tg-notify" icon="send">
+    Уведомления в Telegram
+  </Card>
+  <Card title="Kit" href="/modules/kit" icon="link">
+    `/kit` и `/bind/*`
+  </Card>
+  <Card title="ExternalBind" href="/modules/external-bind" icon="unplug">
+    Внешняя привязка аккаунтов
+  </Card>
+  <Card title="ForkPlayerXML" href="/modules/forkplayer" icon="code-xml">
+    XML-адаптер `/fxml`
+  </Card>
+  <Card title="MSX Native" href="/modules/msx-native" icon="monitor">
+    Адаптация SISI для MSX
+  </Card>
+  <Card title="Potok" href="/modules/potok" icon="radio">
+    Служебные потоковые маршруты
+  </Card>
+</Columns>
+
+## Включить модуль
+
+<Steps>
+  <Step title="Проверьте manifest.json">
+    Если в манифесте указано `"enable": false`, скопируйте модуль в `mods/`, измените флаг и не редактируйте встроенную копию внутри образа.
+  </Step>
+  <Step title="Уберите исключение">
+    Удалите точное имя модуля или его группы из `BaseModule.SkipModules`.
+  </Step>
+  <Step title="Проверьте LoadModules">
+    При ограниченном allowlist добавьте имя модуля или его родительскую группу.
+  </Step>
+  <Step title="Настройте функцию">
+    Добавьте секцию модуля в `init.conf`, если модуль имеет отдельный runtime-флаг, например `"gst": { "enable": true }`.
+  </Step>
+  <Step title="Проверьте журнал запуска">
+    В логе должны появиться строки `compilation`, `configure module` и `loaded module` для нужного имени.
+  </Step>
+</Steps>
+
+<Warning>
+  Не включайте административные, filesystem-, proxy- и transcoding-модули на публичном адресе без аутентификации, WAF и сетевого ограничения.
+</Warning>
+
+Подробнее о механике загрузки: [система модулей](/architecture/modules). Создание собственного модуля: [пользовательские модули](/maintenance/custom-modules).

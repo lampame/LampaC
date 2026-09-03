@@ -1,0 +1,46 @@
+---
+title: "Telegram API"
+sidebarTitle: "Telegram"
+description: "HTTP-маршруты TelegramAuth /tg/auth/* и Tg-notify /api/tg/*."
+keywords: ["TelegramAuth API", "tg-notify", "api/tg", "bind/complete"]
+---
+
+Конфиг и риски: [TelegramAuth](/modules/telegram-auth), [TelegramAuthBot](/modules/telegram-auth-bot), [Tg-notify](/modules/tg-notify).
+
+## TelegramAuth
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/tg/auth/status` | Опрос гейта до успеха авторизации |
+| `GET` | `/tg/auth/me` | Текущий пользователь |
+| `POST` | `/tg/auth/bind/start` | Начать привязку |
+| `POST` | `/tg/auth/bind/complete` | Бот завершает привязку UID |
+| `GET` | `/tg/auth/user/by-telegram` | Найти пользователя по Telegram ID |
+| `GET` | `/tg/auth/devices` | Список устройств |
+| `POST` | `/tg/auth/device/name` | Сохранить название устройства |
+| `POST` | `/tg/auth/device/unbind` | Отвязать устройство |
+| `POST` | `/tg/auth/device/reactivate` | Повторно активировать устройство |
+| `GET` | `/tg/auth/admin/users` | Админ: список пользователей |
+| `POST` | `/tg/auth/admin/user` | Админ: создать пользователя |
+| `POST` | `/tg/auth/admin/user/patch` | Админ: изменить пользователя |
+| `POST` | `/tg/auth/import` | Импорт привязок |
+
+<ParamField query="uid" type="string">
+  UID устройства Lampa для `/tg/auth/status`.
+</ParamField>
+
+```bash
+curl -fsS "http://127.0.0.1:9118/tg/auth/status?uid=DEVICE_UID"
+```
+
+## Tg-notify.bot
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/tg-notify.js` | Plugin Lampa |
+| `GET` | `/api/tg/voices` | Голосовые |
+| `POST` | `/api/tg/subscribe` | Подписка |
+| `POST` | `/api/tg/unsubscribe` | Отписка |
+| `GET` | `/api/tg/status` | Статус |
+| `GET` | `/api/tg/link` | Ссылка на бота |
+| `GET` | `/api/tg/subscriptions` | Список подписок |

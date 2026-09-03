@@ -1,0 +1,30 @@
+---
+title: "PidTor: торрент-стриминг в Online"
+sidebarTitle: "PidTor"
+description: "Источник PidTor отдаёт торрент-стриминг через /lite/pidtor и использует JacRed redapi."
+keywords: ["PidTor", "lite/pidtor", "торрент стриминг"]
+---
+
+PidTor опирается на API JacRed (`/api/v2.0/indexers/{status}/results`). См. [JacRed](/modules/jacred) и [Online API](/api/online).
+
+## Состояние
+
+Загружается с Online, если не исключён.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/lite/pidtor` | Поиск и выдача |
+
+## Конфигурация
+
+```json
+{
+  "PidTor": { "enable": true }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/lite/pidtor`

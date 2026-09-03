@@ -1,0 +1,347 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "Lampac NextGen",
+  "description": "Установка, настройка, модули и API самохостируемого backend-сервера Lampac NextGen для Lampa.",
+  "colors": {
+    "primary": "#6D5DFB",
+    "light": "#8B7FFF",
+    "dark": "#5B50D6"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "logo": {
+    "light": "/assets/logo-light.png",
+    "dark": "/assets/logo-dark.png",
+    "href": "/"
+  },
+  "favicon": "/assets/favicon.png",
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "github-dark"
+      }
+    }
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "search": {
+    "prompt": "Поиск по документации Lampac..."
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "chatgpt",
+      "claude",
+      "cursor",
+      "mcp"
+    ],
+    "display": "header"
+  },
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "og:locale": "ru_RU",
+      "og:image": "/assets/og-preview.png"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/docs",
+      "destination": "/"
+    },
+    {
+      "source": "/docs/index",
+      "destination": "/"
+    },
+    {
+      "source": "/docs/quickstart",
+      "destination": "/quickstart"
+    },
+    {
+      "source": "/docs/installation",
+      "destination": "/installation"
+    },
+    {
+      "source": "/docs/configuration/:slug",
+      "destination": "/configuration/:slug"
+    },
+    {
+      "source": "/docs/architecture/:slug",
+      "destination": "/architecture/:slug"
+    },
+    {
+      "source": "/docs/modules/:slug",
+      "destination": "/modules/:slug"
+    },
+    {
+      "source": "/docs/providers/:slug",
+      "destination": "/providers/:slug"
+    },
+    {
+      "source": "/docs/deployment/:slug",
+      "destination": "/deployment/:slug"
+    },
+    {
+      "source": "/docs/maintenance/:slug",
+      "destination": "/maintenance/:slug"
+    },
+    {
+      "source": "/docs/api/:slug",
+      "destination": "/api/:slug"
+    }
+  ],
+  "api": {
+    "playground": {
+      "display": "simple"
+    },
+    "mdx": {
+      "server": "http://localhost:9118"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "type": "github",
+        "href": "https://github.com/lampac-nextgen/lampac"
+      },
+      {
+        "label": "Сообщество",
+        "href": "https://t.me/LampacTalks/13998"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Релизы",
+      "href": "https://github.com/lampac-nextgen/lampac/releases"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/lampac-nextgen/lampac",
+      "telegram": "https://t.me/LampacTalks/13998"
+    },
+    "links": [
+      {
+        "header": "Проект",
+        "items": [
+          {
+            "label": "Исходный код",
+            "href": "https://github.com/lampac-nextgen/lampac"
+          },
+          {
+            "label": "Релизы",
+            "href": "https://github.com/lampac-nextgen/lampac/releases"
+          },
+          {
+            "label": "DeepWiki",
+            "href": "https://deepwiki.com/lampac-nextgen/lampac"
+          },
+          {
+            "label": "Сообщить о проблеме",
+            "href": "https://github.com/lampac-nextgen/lampac/issues"
+          }
+        ]
+      }
+    ]
+  },
+  "errors": {
+    "404": {
+      "redirect": true,
+      "title": "Страница не найдена",
+      "description": "Проверьте адрес или воспользуйтесь поиском по документации."
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Документация",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Начало работы",
+            "icon": "rocket",
+            "pages": [
+              "index",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Конфигурация",
+            "icon": "settings",
+            "pages": [
+              "configuration/overview",
+              "configuration/providers",
+              "configuration/security",
+              "configuration/memory"
+            ]
+          },
+          {
+            "group": "Архитектура",
+            "icon": "blocks",
+            "pages": [
+              "architecture/overview",
+              "architecture/modules",
+              "architecture/middleware"
+            ]
+          },
+          {
+            "group": "Модули",
+            "icon": "puzzle",
+            "pages": [
+              "modules/overview",
+              {
+                "group": "Клиент и контент",
+                "pages": [
+                  "modules/online",
+                  "modules/sisi",
+                  "modules/nexthub",
+                  "modules/lampa-web",
+                  "modules/music",
+                  "modules/lampac-apk",
+                  "modules/watch-together"
+                ]
+              },
+              {
+                "group": "Медиа",
+                "pages": [
+                  "modules/gstreamer",
+                  "modules/torrserver",
+                  "modules/jacred",
+                  "modules/pidtor",
+                  "modules/local-media",
+                  "modules/dlna",
+                  "modules/catalog",
+                  "modules/tracks",
+                  "modules/transcoding"
+                ]
+              },
+              {
+                "group": "Синхронизация",
+                "pages": [
+                  "modules/sync",
+                  "modules/storage",
+                  "modules/timecode",
+                  "modules/sync-events"
+                ]
+              },
+              {
+                "group": "Прокси",
+                "pages": [
+                  "modules/proxies",
+                  "modules/tmdb-proxy",
+                  "modules/cub-proxy",
+                  "modules/cors-media",
+                  "modules/corseu",
+                  "modules/cache-media",
+                  "modules/proxy-limiter"
+                ]
+              },
+              {
+                "group": "Администрирование",
+                "pages": [
+                  "modules/admin-tools",
+                  "modules/admin-panel",
+                  "modules/database-editor",
+                  "modules/weblog",
+                  "modules/telemetry",
+                  "modules/log-user-request"
+                ]
+              },
+              {
+                "group": "Интеграции",
+                "pages": [
+                  "modules/community",
+                  "modules/telegram-auth",
+                  "modules/telegram-auth-bot",
+                  "modules/tg-notify",
+                  "modules/kit",
+                  "modules/external-bind",
+                  "modules/forkplayer",
+                  "modules/msx-native",
+                  "modules/potok"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Провайдеры",
+            "icon": "clapperboard",
+            "pages": [
+              "providers/overview",
+              "providers/vod",
+              "providers/rus",
+              "providers/paid",
+              "providers/anime",
+              "providers/english",
+              "providers/ukrainian",
+              "providers/georgian",
+              "providers/adult"
+            ]
+          },
+          {
+            "group": "Развёртывание",
+            "icon": "server",
+            "pages": [
+              "deployment/docker",
+              "deployment/linux",
+              "deployment/windows",
+              "deployment/kubernetes",
+              "deployment/reverse-proxy"
+            ]
+          },
+          {
+            "group": "Обслуживание",
+            "icon": "wrench",
+            "pages": [
+              "maintenance/updates",
+              "maintenance/troubleshooting",
+              "maintenance/custom-modules",
+              "maintenance/docs-workflow"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "Основы",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Справочник",
+            "pages": [
+              "api/core",
+              "api/online",
+              "api/sisi",
+              "api/music",
+              "api/modules",
+              "api/gstreamer",
+              "api/sync",
+              "api/torrserver",
+              "api/jacred",
+              "api/proxies",
+              "api/admin",
+              "api/telegram"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+---
+title: "Catalog: YAML-каталоги сайтов"
+sidebarTitle: "Catalog"
+description: "Подключите браузер каталогов из YAML: plugin /catalog.js, списки и карточки."
+keywords: ["Catalog", "catalog.js", "YAML каталоги"]
+---
+
+Описания сайтов лежат в `Modules/Catalog/sites/*.yaml`, переопределения — в `override/`.
+
+## Состояние
+
+Выключен в `config/base.conf` (`SkipModules`).
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/catalog.js` | Plugin |
+| `GET` | `/catalog/js/{token}` | Plugin с токеном |
+| `GET` | `/catalog` | JSON каналов |
+| `GET` | `/catalog/list` | Список |
+| `GET` | `/catalog/card` | Карточка |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] },
+  "Catalog": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/catalog.js`

@@ -85,7 +85,11 @@ public class AiLibertyController : BaseOnlineController
                 return OnError();
 
             if (!similar && cache.Value != null && cache.Value.Count == 1)
-                return LocalRedirect(accsArgs($"/lite/ailiberty?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(cache.Value[0].uri)}"));
+            {
+                string sarg = SeasonArg(ParseSeason(cache.Value[0].title));
+
+                return LocalRedirect(accsArgs($"/lite/ailiberty?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(cache.Value[0].uri)}{sarg}"));
+            }
 
             return ContentTpl(cache, () =>
             {
@@ -97,7 +101,7 @@ public class AiLibertyController : BaseOnlineController
                         res.title,
                         res.year,
                         string.Empty,
-                        $"{host}/lite/ailiberty?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(res.uri)}",
+                        $"{host}/lite/ailiberty?rjson={rjson}&title={HttpUtility.UrlEncode(title)}&uri={HttpUtility.UrlEncode(res.uri)}{SeasonArg(ParseSeason(res.title))}",
                         PosterApi.Size(res.img)
                     );
                 }
@@ -109,15 +113,18 @@ public class AiLibertyController : BaseOnlineController
         else
         {
             #region Серии
-            var cache = await InvokeCacheResult<List<PlayerJsItem>>($"ailiberty:playlist:{uri}", TimeSpan.FromSeconds(0), async e =>
+            var cache = await InvokeCacheResult<ReleaseData>($"ailiberty:playlist:{uri}", TimeSpan.FromSeconds(0), async e =>
             {
                 List<PlayerJsItem> items = null;
+                int pageSeason = 0;
 
                 await httpHydra.GetSpan($"{init.host}/releases/{uri}", html =>
                 {
-                    var match = Regex.Match(html.ToString(), "file\\s*:\\s*(\\[.*?\\])\\s*,?\\s*default_quality", RegexOptions.Singleline);
+                    string htmlStr = html.ToString();
+
+                    var match = Regex.Match(htmlStr, "file\\s*:\\s*(\\[.*?\\])\\s*,?\\s*default_quality", RegexOptions.Singleline);
                     if (!match.Success)
-                        match = Regex.Match(html.ToString(), "file\\s*:\\s*(\\[.*?\\])\\s*\\}", RegexOptions.Singleline);
+                        match = Regex.Match(htmlStr, "file\\s*:\\s*(\\[.*?\\])\\s*\\}", RegexOptions.Singleline);
 
                     if (match.Success)
                     {
@@ -127,33 +134,59 @@ public class AiLibertyController : BaseOnlineController
                         }
                         catch { }
                     }
+
+                    if (items != null && items.Count > 0)
+                    {
+                        string pageTitle = Regex.Match(htmlStr, "<h1[^>]*>(.*?)</h1>", RegexOptions.Singleline | RegexOptions.IgnoreCase).Groups[1].Value;
+
+                        if (string.IsNullOrEmpty(pageTitle))
+                            pageTitle = Regex.Match(htmlStr, "<title[^>]*>(.*?)</title>", RegexOptions.Singleline | RegexOptions.IgnoreCase).Groups[1].Value;
+
+                        if (string.IsNullOrEmpty(pageTitle))
+                            pageTitle = Regex.Match(htmlStr, "og:title\"\\s+content=\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+
+                        if (!string.IsNullOrEmpty(pageTitle))
+                            pageSeason = ParseSeason(Regex.Replace(pageTitle, "<[^>]+>", " "));
+                    }
                 });
 
                 if (items == null || items.Count == 0)
                     return e.Fail("episodes");
 
-                return e.Success(items);
+                return e.Success(new ReleaseData
+                {
+                    items = items,
+                    season = pageSeason
+                });
             });
 
             if (IsRhubFallback(cache))
                 goto rhubFallback;
 
-            if (cache?.Value == null || cache.Value.Count == 0)
+            if (cache?.Value?.items == null || cache.Value.items.Count == 0)
                 return OnError("empty cache");
 
             return ContentTpl(cache, () =>
             {
-                var etpl = new EpisodeTpl(cache.Value.Count);
+                string seasonStr;
 
-                foreach (var episode in cache.Value)
+                if (int.TryParse(s, out int qseason) && qseason > 0)
+                    seasonStr = qseason.ToString();
+                else if (cache.Value.season > 0)
+                    seasonStr = cache.Value.season.ToString();
+                else
+                    seasonStr = "1";
+
+                var etpl = new EpisodeTpl(cache.Value.items.Count);
+
+                for (int i = 0; i < cache.Value.items.Count; i++)
                 {
+                    var episode = cache.Value.items[i];
+                    int index = i;
+
                     string name = string.IsNullOrEmpty(episode.title) ? "Серия" : episode.title;
-                    string episodeNumber = Regex.Match(name, "([0-9]+)").Groups[1].Value;
-                    if (string.IsNullOrEmpty(episodeNumber))
-                        episodeNumber = "1";
 
                     var streams = new StreamQualityTpl();
-                    int index = cache.Value.IndexOf(episode);
 
                     // Parse stream qualities just to know which ones exist
                     var qualities = Regex.Matches(episode.file, "\\[(360p|480p|720p|1080p)\\]([^\\[\\,]+)");
@@ -174,8 +207,8 @@ public class AiLibertyController : BaseOnlineController
                         etpl.Append(
                             name,
                             title,
-                            s ?? "1",
-                            episodeNumber,
+                            seasonStr,
+                            ParseEpisodeNumber(name, index),
                             first.link,
                             streamquality: streams
                         );
@@ -237,6 +270,101 @@ public class AiLibertyController : BaseOnlineController
         string link = HostStreamProxy(qLink);
 
         return RedirectToPlay(link);
+    }
+    #endregion
+
+    #region Season
+    static readonly Regex SeasonKeyDigit = new Regex("(?<![0-9.,])([0-9]{1,2})\\s*[-\u2013\u2014]?\\s*(?:ой|ый|й|ая|ое|е)?\\s*(?:сезон|сезона|сезоне|sez)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex SeasonKeyNum = new Regex("\\b(?:сезон|сезона|сезоне|season|sez)\\b\\s*[-\u2013\u2014]?\\s*([0-9]{1,2})(?![0-9])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex SeasonOrdinal = new Regex("(?<![0-9.,])([0-9]{1,2})\\s*(?:nd|rd|th)(?:\\s*(?:season|сезон)|\\s*$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex SeasonTV = new Regex("\\bTV\\s*[-\u2013\u2014]?\\s*([0-9]{1,2})(?![0-9])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex SeasonPreDigit = new Regex("(?<![0-9.,])([0-9]{1,2})(?![0-9.,])\\s*(?::|\u2013|\u2014|\\s-\\s)\\s*\\S", RegexOptions.Compiled);
+    static readonly Regex SeasonPreRoman = new Regex("\\b([IVXLC]{1,5})\\b\\s*:\\s*\\S", RegexOptions.Compiled);
+    static readonly Regex SeasonPostDigit = new Regex("(?<![0-9.,])([0-9]{1,2})(?![0-9.,])\\s*$", RegexOptions.Compiled);
+    static readonly Regex SeasonPostRoman = new Regex("\\b([IVXLC]{1,5})\\s*$", RegexOptions.Compiled);
+
+    static string SeasonArg(int season)
+        => season > 0 ? $"&s={season}" : string.Empty;
+
+    static int ParseSeason(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return 0;
+
+        string t = Regex.Replace(title, "\\s+", " ").Trim();
+
+        foreach (Regex rx in new[] { SeasonKeyDigit, SeasonKeyNum, SeasonOrdinal, SeasonTV })
+        {
+            Match m = rx.Match(t);
+            if (m.Success && int.TryParse(m.Groups[1].Value, out int n) && n > 0 && n <= 30)
+                return n;
+        }
+
+        Match pm = SeasonPreDigit.Match(t);
+        if (pm.Success && int.TryParse(pm.Groups[1].Value, out int pd) && pd > 0 && pd <= 30)
+            return pd;
+
+        Match prm = SeasonPreRoman.Match(t);
+        if (prm.Success && TryRoman(prm.Groups[1].Value, out int pro) && pro > 1)
+            return pro;
+
+        Match qm = SeasonPostDigit.Match(t);
+        if (qm.Success && int.TryParse(qm.Groups[1].Value, out int qd) && qd > 0 && qd <= 30)
+            return qd;
+
+        Match qrm = SeasonPostRoman.Match(t);
+        if (qrm.Success && TryRoman(qrm.Groups[1].Value, out int qro) && qro > 1)
+            return qro;
+
+        return 0;
+    }
+
+    static string ParseEpisodeNumber(string name, int index)
+    {
+        string t = name ?? string.Empty;
+
+        Match m = Regex.Match(t, "(?:серия|эпизод|episode)\\s*#?\\s*([0-9]{1,3})", RegexOptions.IgnoreCase);
+        if (!m.Success)
+            m = Regex.Match(t, "#\\s*([0-9]{1,3})");
+
+        if (m.Success)
+            return m.Groups[1].Value;
+
+        MatchCollection ms = Regex.Matches(t, "(?<![0-9.,])[0-9]{1,3}(?![0-9.,])");
+        if (ms.Count > 0)
+            return ms[ms.Count - 1].Value;
+
+        return (index + 1).ToString();
+    }
+
+    static bool TryRoman(string value, out int number)
+    {
+        number = 0;
+
+        if (string.IsNullOrEmpty(value) || value.Length > 5)
+            return false;
+
+        var map = new Dictionary<char, int>
+        {
+            ['I'] = 1,
+            ['V'] = 5,
+            ['X'] = 10,
+            ['L'] = 50,
+            ['C'] = 100
+        };
+
+        int prev = 0;
+
+        for (int i = value.Length - 1; i >= 0; i--)
+        {
+            if (!map.TryGetValue(value[i], out int cur))
+                return false;
+
+            number = cur < prev ? number - cur : number + cur;
+            prev = cur;
+        }
+
+        return number > 0 && number <= 30;
     }
     #endregion
 }

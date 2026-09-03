@@ -1,0 +1,374 @@
+---
+import Icon from "./Icon.astro";
+import JsonLd from "./JsonLd.astro";
+import { Image, Picture } from "astro:assets";
+import {
+  DOCS,
+  GHCR,
+  GITHUB,
+  LAMPA,
+  TELEGRAM,
+  t,
+  type Lang,
+} from "../i18n/ui";
+import hero from "../assets/hero.jpg";
+import logoMark from "../assets/logo-mark.png";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+
+const features = [
+  { icon: "film" as const, t: "f1t" as const, d: "f1d" as const },
+  { icon: "nat" as const, t: "f2t" as const, d: "f2d" as const },
+  { icon: "refresh" as const, t: "f3t" as const, d: "f3d" as const },
+  { icon: "shield" as const, t: "f4t" as const, d: "f4d" as const },
+  { icon: "tv" as const, t: "f5t" as const, d: "f5d" as const },
+  { icon: "cpu" as const, t: "f6t" as const, d: "f6d" as const },
+];
+
+const docs = [
+  { href: `${DOCS}/quickstart`, icon: "rocket" as const, t: "d1t" as const, d: "d1d" as const },
+  { href: `${DOCS}/installation`, icon: "box" as const, t: "d2t" as const, d: "d2d" as const },
+  { href: `${DOCS}/modules/overview`, icon: "puzzle" as const, t: "d3t" as const, d: "d3d" as const },
+  { href: `${DOCS}/api/overview`, icon: "plug" as const, t: "d4t" as const, d: "d4d" as const },
+  { href: `${DOCS}/providers/overview`, icon: "radio" as const, t: "d5t" as const, d: "d5d" as const },
+];
+
+const modules = [
+  { on: true, n: "m1n" as const, d: "m1d" as const },
+  { on: true, n: "m2n" as const, d: "m2d" as const },
+  { on: false, n: "m3n" as const, d: "m3d" as const },
+  { on: false, n: "m4n" as const, d: "m4d" as const },
+  { on: false, n: "m5n" as const, d: "m5d" as const },
+];
+
+const faqs = [
+  ["faq1q", "faq1a"],
+  ["faq2q", "faq2a"],
+  ["faq3q", "faq3a"],
+  ["faq4q", "faq4a"],
+  ["faq5q", "faq5a"],
+] as const;
+
+const providers = [
+  "Rezka",
+  "Filmix",
+  "KinoPub",
+  "Kodik",
+  "Collaps",
+  "HDVB",
+  "PidTor",
+  "AniLibria",
+  "AnimeLib",
+  "Ashdi",
+  "Kinoukr",
+  "AsiaGe",
+];
+
+const copyLabel = t(lang, "copy");
+const copiedLabel = t(lang, "copied");
+---
+
+<JsonLd lang={lang} />
+
+<header class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <Image class="hero-mark" src={logoMark} alt="" width={56} height={56} densities={[1, 2]} />
+      <p class="hero-eyebrow">{t(lang, "heroEyebrow")}</p>
+      <h1>{t(lang, "heroTitle")}</h1>
+      <p class="hero-lead">
+        {t(lang, "heroLead1")}
+        {" "}
+        <a href={LAMPA} target="_blank" rel="noopener">Lampa</a>.
+        {" "}
+        {t(lang, "heroLead2")}
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href={`${DOCS}/quickstart`}>{t(lang, "ctaQuick")}</a>
+        <a class="btn btn-secondary" href={DOCS}>{t(lang, "ctaDocs")}</a>
+      </div>
+      <div class="hero-meta">
+        <a href={GITHUB} target="_blank" rel="noopener">{t(lang, "linkGithub")}</a>
+        <a href={TELEGRAM} target="_blank" rel="noopener">{t(lang, "linkTelegram")}</a>
+      </div>
+      <div class="pills">
+        <a class="pill" href={DOCS}>{t(lang, "pillDocs")}</a>
+        <span class="pill">{t(lang, "pillDotnet")}</span>
+        <a class="pill" href={GHCR} target="_blank" rel="noopener">{t(lang, "pillGhcr")}</a>
+        <a class="pill" href={GITHUB} target="_blank" rel="noopener">{t(lang, "pillGithub")}</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-frame">
+        <Picture
+          src={hero}
+          formats={["avif", "webp"]}
+          widths={[480, 800, 1200]}
+          sizes="(max-width: 1024px) min(420px, 90vw), 520px"
+          alt={t(lang, "heroAlt")}
+          fetchpriority="high"
+          loading="eager"
+        />
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="stats-section" aria-label={t(lang, "statsAria")}>
+    <div class="section-inner">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-num">70+</div>
+          <div class="stat-label">{t(lang, "statSources")}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">13</div>
+          <div class="stat-label">{t(lang, "statAnime")}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">35+</div>
+          <div class="stat-label">{t(lang, "statModules")}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">9118</div>
+          <div class="stat-label">{t(lang, "statPort")}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">.NET 10</div>
+          <div class="stat-label">{t(lang, "statRuntime")}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "howLabel")}</div>
+      <h2 class="section-title">{t(lang, "howTitle")}</h2>
+      <p class="section-sub">{t(lang, "howSub")}</p>
+      <div class="steps">
+        <article class="step-card">
+          <div class="step-num">1</div>
+          <h3>{t(lang, "how1t")}</h3>
+          <p>{t(lang, "how1d")}</p>
+        </article>
+        <article class="step-card">
+          <div class="step-num">2</div>
+          <h3>{t(lang, "how2t")}</h3>
+          <p>{t(lang, "how2d")}</p>
+        </article>
+        <article class="step-card">
+          <div class="step-num">3</div>
+          <h3>{t(lang, "how3t")}</h3>
+          <p>{t(lang, "how3d")}</p>
+        </article>
+      </div>
+      <a class="more-link" href={`${DOCS}/quickstart`}>{t(lang, "howMore")} →</a>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="features">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "featLabel")}</div>
+      <h2 class="section-title">{t(lang, "featTitle")}</h2>
+      <p class="section-sub">{t(lang, "featSub")}</p>
+      <div class="features-grid">
+        {
+          features.map((item) => (
+            <article class="feature-card">
+              <div class="feature-icon">
+                <Icon name={item.icon} />
+              </div>
+              <h3>{t(lang, item.t)}</h3>
+              <p>{t(lang, item.d)}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="install">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "instLabel")}</div>
+      <h2 class="section-title">{t(lang, "instTitle")}</h2>
+      <p class="section-sub">{t(lang, "instSub")}</p>
+
+      <div class="tabs" role="tablist" aria-label={t(lang, "tabAria")}>
+        <button class="tab-btn" type="button" role="tab" id="tab-btn-docker" aria-selected="true" aria-controls="tab-docker" data-tab="docker">{t(lang, "tabDocker")}</button>
+        <button class="tab-btn" type="button" role="tab" id="tab-btn-linux" aria-selected="false" aria-controls="tab-linux" data-tab="linux">{t(lang, "tabLinux")}</button>
+        <button class="tab-btn" type="button" role="tab" id="tab-btn-windows" aria-selected="false" aria-controls="tab-windows" data-tab="windows">{t(lang, "tabWindows")}</button>
+        <button class="tab-btn" type="button" role="tab" id="tab-btn-build" aria-selected="false" aria-controls="tab-build" data-tab="build">{t(lang, "tabBuild")}</button>
+      </div>
+
+      <div class="tab-panel active" role="tabpanel" id="tab-docker" aria-labelledby="tab-btn-docker">
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-title">bash — docker compose</span>
+            <button class="copy-btn" type="button" data-copy={copyLabel} data-copied={copiedLabel}>{copyLabel}</button>
+          </div>
+          <pre><span class="hl-cmd">git</span> clone https://github.com/lampac-nextgen/lampac.git
+<span class="hl-cmd">cd</span> lampac
+<span class="hl-cmd">mkdir</span> -p lampac-docker/config lampac-docker/plugins
+<span class="hl-cmd">cp</span> config/example.init.conf lampac-docker/config/init.conf
+<span class="hl-cmd">printf</span> <span class="hl-string">'%s'</span> <span class="hl-string">'ваш_пароль_root'</span> &gt; lampac-docker/config/passwd
+<span class="hl-comment"># Раскомментируйте volumes в docker-compose.yaml</span>
+<span class="hl-cmd">docker</span> compose up -d
+<span class="hl-cmd">curl</span> -fsS <span class="hl-string">"http://localhost:9118/version?type=hash"</span></pre>
+        </div>
+        <a class="more-link" href={`${DOCS}/quickstart`}>{t(lang, "moreQuick")} →</a>
+        <a class="more-link" href={`${DOCS}/deployment/docker`}>{t(lang, "moreDocker")} →</a>
+      </div>
+
+      <div class="tab-panel" role="tabpanel" id="tab-linux" aria-labelledby="tab-btn-linux" hidden>
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-title">bash — install.sh</span>
+            <button class="copy-btn" type="button" data-copy={copyLabel} data-copied={copiedLabel}>{copyLabel}</button>
+          </div>
+          <pre><span class="hl-cmd">curl</span> -fsSL https://raw.githubusercontent.com/lampac-nextgen/lampac/main/install.sh | sudo bash
+<span class="hl-cmd">systemctl</span> status lampac</pre>
+        </div>
+        <p class="install-note">
+          {t(lang, "linuxWarn")}
+          {" "}
+          <a href={`${DOCS}/deployment/linux`}>{t(lang, "moreLinux")} →</a>
+        </p>
+      </div>
+
+      <div class="tab-panel" role="tabpanel" id="tab-windows" aria-labelledby="tab-btn-windows" hidden>
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-title">cmd — релиз</span>
+            <button class="copy-btn" type="button" data-copy={copyLabel} data-copied={copiedLabel}>{copyLabel}</button>
+          </div>
+          <pre><span class="hl-comment"># .NET 10 ASP.NET Core Runtime, затем архив lampac-nextgen.zip</span>
+<span class="hl-cmd">dotnet</span> Core.dll</pre>
+        </div>
+        <a class="more-link" href={`${DOCS}/deployment/windows`}>{t(lang, "moreWin")} →</a>
+      </div>
+
+      <div class="tab-panel" role="tabpanel" id="tab-build" aria-labelledby="tab-btn-build" hidden>
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-title">bash — build.sh</span>
+            <button class="copy-btn" type="button" data-copy={copyLabel} data-copied={copiedLabel}>{copyLabel}</button>
+          </div>
+          <pre><span class="hl-cmd">git</span> clone https://github.com/lampac-nextgen/lampac.git
+<span class="hl-cmd">cd</span> lampac
+<span class="hl-cmd">./build.sh</span>
+<span class="hl-cmd">cd</span> publish &amp;&amp; <span class="hl-cmd">dotnet</span> Core.dll</pre>
+        </div>
+        <a class="more-link" href={`${DOCS}/installation`}>{t(lang, "moreInst")} →</a>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="docs">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "docsLabel")}</div>
+      <h2 class="section-title">{t(lang, "docsTitle")}</h2>
+      <p class="section-sub">{t(lang, "docsSub")}</p>
+      <div class="docs-grid">
+        {
+          docs.map((item) => (
+            <a class="docs-card" href={item.href}>
+              <div class="docs-icon">
+                <Icon name={item.icon} />
+              </div>
+              <h3>{t(lang, item.t)}</h3>
+              <p>{t(lang, item.d)}</p>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="providers">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "provLabel")}</div>
+      <h2 class="section-title">{t(lang, "provTitle")}</h2>
+      <p class="section-sub">
+        {t(lang, "provSub")}
+        {" "}
+        <a href={`${DOCS}/providers/overview`}>{t(lang, "provLink")}</a>.
+      </p>
+      <div class="chips">
+        {providers.map((name) => <span class="chip">{name}</span>)}
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="modules">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "modLabel")}</div>
+      <h2 class="section-title">{t(lang, "modTitle")}</h2>
+      <p class="section-sub">
+        {t(lang, "modSub")}
+        {" "}
+        <a href={`${DOCS}/modules/overview`}>{t(lang, "modLink")}</a>.
+      </p>
+      <div class="modules-grid">
+        {
+          modules.map((item) => (
+            <div class="module-item">
+              <span class={`module-status ${item.on ? "on" : "off"}`}>
+                <span class="visually-hidden">{item.on ? t(lang, "statusOn") : t(lang, "statusOff")}</span>
+              </span>
+              <div>
+                <div class="module-name">{t(lang, item.n)}</div>
+                <div class="module-desc">{t(lang, item.d)}</div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section id="faq">
+    <div class="section-inner">
+      <div class="section-label">{t(lang, "faqLabel")}</div>
+      <h2 class="section-title">{t(lang, "faqTitle")}</h2>
+      <div class="faq-list">
+        {
+          faqs.map(([q, a]) => (
+            <details>
+              <summary>{t(lang, q)}</summary>
+              <p>{t(lang, a)}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="cta-glow" aria-hidden="true"></div>
+    <h2>{t(lang, "ctaTitle")}</h2>
+    <p>{t(lang, "ctaSub")}</p>
+    <div class="cta-actions">
+      <a class="btn btn-primary" href={DOCS}>{t(lang, "ctaOpen")}</a>
+      <a class="btn btn-secondary" href={`${GITHUB}/releases`} target="_blank" rel="noopener">{t(lang, "ctaRel")}</a>
+    </div>
+  </section>
+</main>

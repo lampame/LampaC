@@ -1,0 +1,37 @@
+---
+title: "Kit: bind и шифрование потоков"
+sidebarTitle: "Kit"
+description: "Служебные страницы /kit и /bind/* для привязки аккаунтов провайдеров и CryptoKit."
+keywords: ["Kit", "aesgcmkey", "bind", "CryptoKit"]
+---
+
+Не публикуйте cookie `aesgcmkey` и одноразовые `/u/{tempkey}`. Путь модуля доступен другим сборкам как `KitMod.ModInit.folder_mod`.
+
+## Состояние
+
+Загружается, если не исключён. Секции в `init.conf` нет — только `manifest.json`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/kit` | Редактор kit-конфига |
+| `POST` | `/kit/unite` | Объединение конфига |
+| `GET` | `/bind/filmix` | Привязка Filmix |
+| `GET` | `/bind/kinopub` | Привязка KinoPub |
+| `GET` | `/bind/vokino` | Привязка VoKino |
+| `GET` | `/u/{tempkey}` | Одноразовая ссылка |
+
+## Конфигурация
+
+```json
+{
+  "kit": { "aesgcmkeyName": "" }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/kit`

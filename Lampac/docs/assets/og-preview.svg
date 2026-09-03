@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img"
+  aria-labelledby="title description">
+  <title id="title">Lampac NextGen documentation</title>
+  <desc id="description">Installation, configuration, modules and API documentation</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17142E" />
+      <stop offset="1" stop-color="#30266A" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#background)" />
+  <circle cx="1010" cy="80" r="280" fill="#6D5DFB" opacity=".25" />
+  <circle cx="1100" cy="600" r="340" fill="#8B7FFF" opacity=".18" />
+  <rect x="90" y="105" width="120" height="120" rx="30" fill="#6D5DFB" />
+  <path d="M140 135v60l48-30-48-30Z" fill="#fff" />
+  <text x="90" y="330" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="82"
+    font-weight="750">Lampac NextGen</text>
+  <text x="90" y="405" fill="#BEB8FF" font-family="Inter,Arial,sans-serif" font-size="38">
+    Documentation</text>
+  <text x="90" y="495" fill="#E8E6F7" font-family="Inter,Arial,sans-serif" font-size="28">Installation
+    - Configuration - Modules - API</text>
+</svg>

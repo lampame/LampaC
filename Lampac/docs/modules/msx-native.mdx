@@ -1,0 +1,30 @@
+---
+title: "MsxNative: клиент MSX"
+sidebarTitle: "MsxNative"
+description: "Адаптируйте SISI и доступ accsdb для плеера MSX/MS X."
+keywords: ["MsxNative", "MSX", "SISI"]
+---
+
+Используйте только если клиенты ходят через MSX. Подробности — `Modules/MsxNative/README.md`.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/sisi` | Адаптированная выдача MSX |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/sisi`

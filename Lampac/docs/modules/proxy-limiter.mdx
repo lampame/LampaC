@@ -1,0 +1,30 @@
+---
+title: "ProxyLimiter"
+sidebarTitle: "ProxyLimiter"
+description: "Ограничьте число параллельных media-запросов SISI. Загружается по умолчанию."
+keywords: ["ProxyLimiter", "concurrency"]
+---
+
+Настройте лимиты в секции `ProxyLimiter`. README: `Modules/Proxy/ProxyLimiter/README.md`.
+
+## Состояние
+
+Не входит в SkipModules. Middleware без UI.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `—` | `middleware` | Нет HTTP-страницы |
+
+## Конфигурация
+
+```json
+{
+  "ProxyLimiter": { "enable": true }
+}
+```
+
+<Note>
+  Отдельной HTTP-страницы нет: это middleware. После изменения лимитов перезапустите Lampac и проверьте журнал на строки `ProxyLimiter`.
+</Note>

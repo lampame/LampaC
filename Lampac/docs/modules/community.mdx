@@ -1,0 +1,43 @@
+---
+title: "Community: Telegram-авторизация в Lampac"
+sidebarTitle: "Community"
+description: "Обзор модулей TelegramAuth и TelegramAuthBot: вход в Lampac через Telegram вместо пароля."
+keywords: ["TelegramAuth", "TelegramAuthBot", "Lampac Telegram", "accsdb"]
+---
+
+Папка `Modules/Community/` содержит два подмодуля. Вместе они заменяют стандартную модалку пароля/CUB на полноэкранный Telegram-гейт.
+
+<Note>
+  Оба модуля по умолчанию находятся в `BaseModule.SkipModules` и имеют `"enable": false` в `manifest.json`.
+</Note>
+
+<Columns cols={2}>
+  <Card title="TelegramAuth" href="/modules/telegram-auth" icon="key-round">
+    Хранилище пользователей, HTTP API `/tg/auth/*` и синхронизация UID в accsdb
+  </Card>
+  <Card title="TelegramAuthBot" href="/modules/telegram-auth-bot" icon="bot">
+    Telegram-бот: привязка UID, устройства и админ-команды
+  </Card>
+</Columns>
+
+## Включить оба модуля
+
+<Steps>
+  <Step title="Скопируйте секции в init.conf">
+    Возьмите структуру из `Modules/Community/TelegramAuth/init.merge.example.json` и `TelegramAuthBot/init.merge.example.json`.
+  </Step>
+  <Step title="Задайте одинаковый secrets">
+    `mutations_api_secret` должен совпадать в обоих модулях и быть ненулевым в проде.
+  </Step>
+  <Step title="Включите манифесты">
+    В `manifest.json` каждого модуля установите `"enable": true` (через копию в `mods/`).
+  </Step>
+  <Step title="Уберите из SkipModules">
+    Удалите `TelegramAuth` и `TelegramAuthBot` из `BaseModule.SkipModules`.
+  </Step>
+  <Step title="Включите TelegramAuth.enable">
+    `TelegramAuth.enable: true` поднимает `accsdb.enable` и синхронизирует UID в `users.json`.
+  </Step>
+</Steps>
+
+API-таблицы: [справочник Telegram](/api/telegram). Уведомления бота: [Tg-notify](/modules/tg-notify).

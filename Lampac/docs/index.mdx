@@ -1,0 +1,99 @@
+---
+title: "Lampac NextGen: самохостируемый бекенд для Lampa"
+sidebarTitle: "Введение"
+description: "Lampac NextGen — самохостируемый backend на ASP.NET Core (.NET 10) для Lampa. Агрегирует ссылки с 70+ источников контента."
+keywords: ["Lampac NextGen", "Lampa", "self-hosted", "ASP.NET Core", ".NET 10"]
+---
+
+<Frame>
+  <img src="/assets/lampac-nextgen.jpg" alt="Логотип Lampac NextGen: неоновая лампа с печатной платой на космическом фоне" />
+</Frame>
+
+Lampac NextGen — это самохостируемый backend-сервер для медиаприложения [Lampa](https://github.com/yumata/lampa). Он собирает ссылки на публично доступный контент с более чем 70 источников и отдает их в виде плагинов. Построен на ASP.NET Core (.NET 10) и предоставляет расширенный функционал: TorrServer, DLNA, транскодинг, синхронизацию закладок и многое другое.
+
+<Columns cols={2}>
+  <Card title="Быстрый старт" icon="rocket" href="/quickstart">
+    Запустите Lampac за 5 минут с помощью Docker Compose
+  </Card>
+
+  <Card title="Конфигурация" icon="gear" href="/configuration/overview">
+    Настройте сервер под свои нужды: WAF, модули, провайдеры
+  </Card>
+
+  <Card title="Модули" icon="puzzle" href="/modules/overview">
+    Сравните состояние, маршруты и требования всех встроенных модулей
+  </Card>
+
+  <Card title="API" icon="code" href="/api/overview">
+    Интегрируйтесь через REST API и WebSocket
+  </Card>
+</Columns>
+
+## Начало работы
+
+<Steps>
+  <Step title="Установите сервер">
+    Выберите удобный способ: Docker Compose, нативный Linux-скрипт, Windows или Kubernetes. Подробности в разделе [Установка](/installation).
+  </Step>
+  <Step title="Настройте конфигурацию">
+    Отредактируйте `init.conf`: включите нужные модули, провайдеры и защиту. Конфиг применяется без перезапуска.
+  </Step>
+  <Step title="Подключите Lampa">
+    В приложении Lampa добавьте плагин `http://YOUR_IP:9118/online.js` для VOD или `http://YOUR_IP:9118/sisi.js` для контента 18+.
+  </Step>
+  <Step title="Проверьте подключение">
+    Откройте LampaWeb или plugin в Lampa и выполните тестовый запрос к нужному провайдеру.
+  </Step>
+</Steps>
+
+<Note>
+  По умолчанию сервер слушает порт **9118**. Убедитесь, что порт открыт в firewall, если планируете удаленный доступ.
+</Note>
+
+## Возможности
+
+<Columns cols={3}>
+  <Card title="VOD (70+ источников)" href="/providers/overview">
+    Российские, украинские, аниме и западные провайдеры в одном плагине
+  </Card>
+
+  <Card title="TorrServer" href="/modules/torrserver">
+    Встроенный торрент-сервер для потокового воспроизведения
+  </Card>
+
+  <Card title="DLNA/UPnP" href="/modules/local-media">
+    Медиасервер для локальных файлов в домашней сети
+  </Card>
+
+  <Card title="Sync" href="/modules/sync">
+    Кросс-девайсная синхронизация закладок и истории
+  </Card>
+
+  <Card title="GStreamer" href="/modules/gstreamer">
+    Серверный HLS/fMP4 транскодинг для совместимости устройств
+  </Card>
+
+  <Card title="SISI (18+)" href="/modules/sisi">
+    Платформы для взрослого контента с закладками и историей
+  </Card>
+
+  <Card title="JacRed" href="/modules/jacred">
+    Агрегатор торрент-индексаторов, совместимый с Jackett
+  </Card>
+
+  <Card title="Telegram бот" href="/modules/tg-notify">
+    Уведомления о новых сериях и озвучках прямо в мессенджер
+  </Card>
+
+  <Card title="Music" href="/modules/music">
+    Каталог, плейлисты, stream relay, тексты песен и радио
+  </Card>
+
+  <Card title="Android APK" href="/modules/lampac-apk">
+    Подписанный клиент с адресом вашего сервера
+  </Card>
+
+  <Card title="WatchTogether" href="/modules/watch-together">
+    LParty-совместимые комнаты синхронного просмотра
+  </Card>
+</Columns>

@@ -1,0 +1,88 @@
+---
+title: "JacRed: агрегатор торрент-индексаторов"
+sidebarTitle: "JacRed"
+description: "JacRed объединяет Rutor, Kinozal, RuTracker, NNMClub, Toloka и другие торрент-индексаторы в единый API, совместимый с Jackett."
+keywords: ["JacRed", "Jackett", "торрент индексаторы", "Rutor", "RuTracker"]
+---
+
+**JacRed** — встроенный агрегатор торрент-индексаторов для Lampac NextGen. Он предоставляет API поиска на корневых маршрутах `/api/v1.0/*` и `/api/v2.0/*` и может использовать собственный backend, локальные Jackett-парсеры или их объединение.
+
+<Note>
+  JacRed **не** входит в `SkipModules` файла `config/base.conf`. Стартовый шаблон `config/example.init.conf` добавляет `"JacRed"` в исключения. Если вы копировали этот шаблон, удалите имя из `SkipModules`.
+</Note>
+
+## Индексаторы и прямые маршруты
+
+JacRed регистрирует общий search API и отдельные контроллеры трекеров. Прямые маршруты вида `{tracker}/[action]` используются внутренними адаптерами Jackett и не заменяют `/api/v2.0/indexers/{status}/results`.
+
+<AccordionGroup>
+  <Accordion title="Общий search API">
+    | Маршрут | Назначение |
+    | --- | --- |
+    | `GET /api/v1.0/conf` | Проверка API key |
+    | `GET /api/v2.0/indexers/{status}/results` | Поиск в формате Jackett/indexers |
+    | `GET /api/v1.0/torrents` | Расширенный поиск и фильтры |
+  </Accordion>
+  <Accordion title="Трекеры с собственными контроллерами">
+    | Префикс | Трекер |
+    | --- | --- |
+    | `/rutor` | Rutor |
+    | `/kinozal` | Kinozal |
+    | `/rutracker` | RuTracker |
+    | `/nnmclub` | NNMClub |
+    | `/toloka` | Toloka |
+    | `/bitru` | Bitru |
+    | `/torrentby` | Torrent.by |
+    | `/megapeer` | Megapeer |
+    | `/selezen` | Selezen |
+    | `/anifilm` | AniFilm |
+    | `/anilibria` | AniLibria |
+    | `/animelayer` | AnimeLayer |
+    | `/lostfilm` | LostFilm |
+  </Accordion>
+</AccordionGroup>
+
+## Включение
+
+<Steps>
+  <Step title="Уберите JacRed из SkipModules">
+    В `init.conf` убедитесь, что `"JacRed"` отсутствует в `BaseModule.SkipModules`.
+  </Step>
+  <Step title="Включите плагин в LampaWeb">
+    Установите `LampaWeb.initPlugins.jacred: true`. LampaWeb подставит адрес текущего Lampac как JacRed host во встроенную конфигурацию клиента.
+  </Step>
+  <Step title="Перезапустите сервер">
+    Перезапустите Lampac и проверьте endpoint `/api/v1.0/conf`.
+  </Step>
+</Steps>
+
+```json
+{
+  "BaseModule": {
+    "SkipModules": [] // удалить "JacRed"
+  },
+  "LampaWeb": {
+    "initPlugins": {
+      "jacred": true
+    }
+  }
+}
+```
+
+## API и режимы поиска
+
+| Маршрут | Назначение |
+| --- | --- |
+| `GET /api/v1.0/conf` | Проверка API key |
+| `GET /api/v2.0/indexers/{status}/results` | Поиск в формате indexers results |
+| `GET /api/v1.0/torrents` | Расширенный поиск и фильтры |
+
+`JacRed.typesearch` принимает режимы `webapi`, `red` или `jackett`. Поле `merge: "jackett"` объединяет основной результат с локальными Jackett-адаптерами.
+
+## Интеграция с Lampa
+
+JacRed инициализируется через `LampaWeb.initPlugins.jacred`. Этот флаг меняет `{jachost}` во встроенном Lampa init script; отдельного server route `/jacred` или `/jacred.js` модуль не регистрирует.
+
+<Tip>
+  Для проверки выполните `curl "http://HOST:9118/api/v2.0/indexers/all/results?query=Название"`. Если `JacRed.apikey` задан, добавьте `apikey`.
+</Tip>

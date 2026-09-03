@@ -1,0 +1,76 @@
+---
+title: "NextHUB: YAML-витрина 18+"
+sidebarTitle: "NextHUB"
+description: "Настройте NextHUB: YAML-сайты, маршрут /nexthub, кеш конфигурации и WAF-лимит 5 запросов в секунду."
+keywords: ["NextHUB", "nexthub", "YAML 18+", "SISI channels", "Playwright"]
+---
+
+**NextHUB** описывает источники 18+ в YAML и регистрирует их в разделе SISI. Это отдельный модуль, а не замена нативным платформам из `Modules/Adult/`.
+
+<Info>
+  Модуль доступен в `config/base.conf`. Параметр `sisi.NextHUB` только показывает ссылку в плагине SISI и не загружает сам модуль.
+</Info>
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/nexthub` | Меню, лента и поиск |
+| `GET` | `/nexthub/vidosik` | Карточка просмотра |
+
+<ParamField query="plugin" type="string" required>
+  Имя YAML-файла из `Modules/NextHUB/sites/` без расширения.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Поисковая строка, если сайт её поддерживает.
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Сортировка, описанная в YAML.
+</ParamField>
+
+<ParamField query="cat" type="string">
+  Категория.
+</ParamField>
+
+<ParamField query="model" type="string">
+  Фильтр по модели или автору.
+</ParamField>
+
+<ParamField query="pg" type="number" default="1">
+  Номер страницы.
+</ParamField>
+
+<ParamField query="uri" type="string">
+  Для `/nexthub/vidosik`: значение вида `plugin_-:-_url`.
+</ParamField>
+
+## Конфигурация
+
+```json
+{
+  "sisi": {
+    "NextHUB": true
+  },
+  "NextHUB": {
+    "sites_enabled": "pornhub,beeg"
+  }
+}
+```
+
+Если `sites_enabled` задан, сервер допускает только перечисленные plugin names. Переопределения лежат в `Modules/NextHUB/override/{plugin}.yaml` или общем `_.yaml`.
+
+## Ограничения
+
+<Warning>
+  На `/nexthub` действует WAF-лимит 5 запросов в секунду с учётом параметра `plugin`. Сайты, которым нужен браузер, зависят от Playwright.
+</Warning>
+
+```bash
+curl -G http://127.0.0.1:9118/nexthub \
+  --data-urlencode "plugin=example" \
+  --data-urlencode "pg=1"
+```
+
+Связанные страницы: [SISI](/modules/sisi) и [API модулей](/api/modules).

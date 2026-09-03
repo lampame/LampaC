@@ -1,0 +1,33 @@
+---
+title: "WebLog: поток запросов и Playwright"
+sidebarTitle: "WebLog"
+description: "Смотрите HTTP и Playwright-события в реальном времени на /weblog."
+keywords: ["WebLog", "passwd", "Playwright"]
+---
+
+Не включайте WebLog на публичном адресе. DatabaseEditor использует ту же форму входа `/weblog/auth`.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules. Требует root `passwd`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/weblog` | UI |
+| `GET` | `/weblog/auth` | Вход |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/weblog`

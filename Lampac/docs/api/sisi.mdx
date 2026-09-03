@@ -1,0 +1,82 @@
+---
+title: "SISI API: плагин, закладки и история"
+sidebarTitle: "SISI"
+description: "HTTP API SISI для Lampa: загрузка плагина, маршруты платформ, закладки, история и параметры запросов."
+keywords: ["SISI API", "sisi.js", "SISI bookmarks", "SISI history", "Lampac Adult API"]
+---
+
+SISI предоставляет JavaScript-плагин Lampa, агрегирует платформы из `Modules/Adult/` и хранит пользовательские закладки и историю в SQLite.
+
+## Plugin endpoints
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/sisi.js` | Публичный plugin |
+| `GET` | `/sisi/js/{token}` | Plugin с токеном accsdb |
+| `GET` | `/startpage.js` | Дополнительный стартовый plugin |
+| `GET` | `/sisi` | Конфигурация/страница SISI |
+
+## Контент платформ
+
+Каждый провайдер регистрирует собственный короткий маршрут, например `/phub`, `/xmr`, `/xds`, `/epr`. Обычно list endpoint принимает параметры:
+
+<ParamField path="query.search" type="string">
+  Поисковая строка.
+</ParamField>
+
+<ParamField path="query.sort" type="string">
+  Сортировка, поддерживаемая конкретной платформой.
+</ParamField>
+
+<ParamField path="query.pg" type="number" default="1">
+  Номер страницы.
+</ParamField>
+
+<ParamField path="query.uri" type="string">
+  Идентификатор или URL элемента для действия `vidosik`.
+</ParamField>
+
+<Info>
+  Набор параметров зависит от платформы. Не все провайдеры поддерживают поиск, категории, модели или одинаковые значения сортировки.
+</Info>
+
+## Закладки
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/sisi/bookmarks` | Получить список |
+| `POST` | `/sisi/bookmark/add` | Добавить или обновить |
+| `GET`, `POST` | `/sisi/bookmark/remove` | Удалить |
+
+## История
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/sisi/historys` | Получить историю |
+| `POST` | `/sisi/history/add` | Добавить просмотр |
+| `GET` | `/sisi/history/remove` | Удалить запись |
+
+История выключена starter-конфигурацией:
+
+```json
+{
+  "sisi": {
+    "history": {
+      "enable": true
+    }
+  }
+}
+```
+
+## Пример
+
+```bash
+curl -G http://127.0.0.1:9118/phub \
+  --data-urlencode "search=example" \
+  --data-urlencode "pg=1"
+```
+
+<Warning>
+  SISI содержит контент 18+. Ограничьте доступ в соответствии с требованиями вашей сети, законодательства и правил пользователей.
+</Warning>
+

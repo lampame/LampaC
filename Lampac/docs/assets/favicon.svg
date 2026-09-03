@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Lampac</title>
+  <rect width="64" height="64" rx="16" fill="#6D5DFB"/>
+  <path d="M24 17v30l24-15-24-15Z" fill="#fff"/>
+</svg>

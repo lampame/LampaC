@@ -1,0 +1,34 @@
+---
+title: "ForkPlayerXML"
+sidebarTitle: "ForkPlayer"
+description: "Отдайте JSON/XML-плейлисты ForkPlayer через /fxml, /fxml/tmdb и /fxml/cub."
+keywords: ["ForkPlayerXML", "fxml", "ForkPlayer"]
+---
+
+Модуль адаптирует Online/SISI выдачу под клиент ForkPlayer.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/fxml` | Плейлисты |
+| `GET` | `/fxml/tmdb` | TMDB-адаптер |
+| `GET` | `/fxml/cub` | CUB-адаптер |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/fxml`

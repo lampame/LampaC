@@ -1,0 +1,87 @@
+---
+import { Font } from "astro:assets";
+import { getAbsoluteLocaleUrl } from "astro:i18n";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { SITE, t, type Lang } from "../i18n/ui";
+import "../styles/global.css";
+
+interface Props {
+  lang: Lang;
+  title?: string;
+  description?: string;
+  noindex?: boolean;
+  isHome?: boolean;
+}
+
+const { lang, noindex = false, isHome = false } = Astro.props;
+const title = Astro.props.title ?? t(lang, "metaTitle");
+const description = Astro.props.description ?? t(lang, "metaDescription");
+const canonical = getAbsoluteLocaleUrl(lang);
+const ogImage = new URL("/og-preview.jpg", Astro.site ?? SITE).href;
+const locale = lang === "en" ? "en_US" : "ru_RU";
+const alternateRu = getAbsoluteLocaleUrl("ru");
+const alternateEn = getAbsoluteLocaleUrl("en");
+---
+
+<!DOCTYPE html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0c10" />
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="ru" href={alternateRu} />
+    <link rel="alternate" hreflang="en" href={alternateEn} />
+    <link rel="alternate" hreflang="x-default" href={alternateRu} />
+    <meta property="og:title" content={Astro.props.title ?? t(lang, "ogTitle")} />
+    <meta property="og:description" content={Astro.props.description ?? t(lang, "ogDescription")} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={locale} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <Font cssVariable="--font-inter" preload />
+    <title>{title}</title>
+    <script is:inline>
+      (function () {
+        try {
+          var path = location.pathname.replace(/index\.html$/, "");
+          if (!path.endsWith("/")) path += "/";
+          var onEn = path.indexOf("/en/") === 0;
+          var params = new URLSearchParams(location.search);
+          var q = params.get("lang");
+          var hash = location.hash || "";
+          if (q === "en" && !onEn) {
+            location.replace("/en/" + hash);
+            return;
+          }
+          if (q === "ru" && onEn) {
+            location.replace("/" + hash);
+            return;
+          }
+          if (q) return;
+          var stored = localStorage.getItem("lampac-lang");
+          if (stored === "en" && !onEn && (path === "/")) {
+            location.replace("/en/" + hash);
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t(lang, "skip")}</a>
+    <Header lang={lang} isHome={isHome} />
+    <slot />
+    <Footer lang={lang} />
+    <script>
+      import "../scripts/client.ts";
+    </script>
+  </body>
+</html>

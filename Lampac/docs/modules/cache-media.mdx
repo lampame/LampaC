@@ -1,0 +1,31 @@
+---
+title: "CacheMedia"
+sidebarTitle: "CacheMedia"
+description: "Дисковый кеш SISI-потоков. Выключен в base.conf."
+keywords: ["CacheMedia", "SISI cache"]
+---
+
+Контролируйте размер `cache/`. Вместе с [ProxyLimiter](/modules/proxy-limiter) ограничивает нагрузку SISI.
+
+## Состояние
+
+Выключен в `base.conf` SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `—` | `встраивается в SISI media flow` | Нет отдельной страницы |
+
+## Конфигурация
+
+```json
+{
+  "BaseModule": { "SkipModules": [] },
+  "CacheMedia": { "enable": true }
+}
+```
+
+<Note>
+  Отдельной HTTP-страницы нет: модуль встраивается в media flow SISI. После включения проверьте размер каталога `cache/` и журналы SISI.
+</Note>

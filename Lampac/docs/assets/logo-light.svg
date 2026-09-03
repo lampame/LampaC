@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48" role="img" aria-labelledby="title">
+  <title id="title">Lampac NextGen</title>
+  <rect width="48" height="48" rx="12" fill="#6D5DFB"/>
+  <path d="M19 14v20l16-10-16-10Z" fill="#fff"/>
+  <text x="62" y="31" fill="#25224A" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700">Lampac</text>
+  <text x="145" y="31" fill="#6D5DFB" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700">NextGen</text>
+</svg>

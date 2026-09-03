@@ -1,0 +1,24 @@
+---
+title: "GStreamer API"
+sidebarTitle: "GStreamer"
+description: "Создавайте HLS/fMP4 задачи: /gst/add, master.m3u8, сегменты и субтитры."
+keywords: ["GStreamer API", "gst/add", "HLS"]
+---
+
+Требует `gst.enable: true`. Конфиг: [GStreamer](/modules/gstreamer).
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/gst.js`, `/gst/js/{token}` | Plugin |
+| `GET` | `/gst/add` | Создать задачу |
+| `GET` | `/gst/remove` | Удалить |
+| `GET` | `/gst/probe` | Probe |
+| `GET` | `/gst/start.m3u8` | Старт |
+| `GET` | `/gst/{id}/master.m3u8` | Master playlist |
+| `GET` | `/gst/{id}/heartbeat` | Продлить |
+| `GET` | `/gst/{id}/seg/{index}.m4s` | Сегмент |
+| `GET` | `/gst/{id}/subs/{index}.m3u8` | Субтитры |
+
+<ParamField query="link" type="string">
+  Исходный media URL для `/gst/add`.
+</ParamField>

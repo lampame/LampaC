@@ -1,0 +1,34 @@
+---
+title: "CorsMedia"
+sidebarTitle: "CorsMedia"
+description: "Relay медиа и resize изображений через /media и /media/rsize."
+keywords: ["CorsMedia", "/media", "resize"]
+---
+
+Не принимайте произвольные внутренние URL.
+
+## Состояние
+
+Загружается по умолчанию.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET, POST` | `/media` | Relay |
+| `GET` | `/media/{type}/{token}/{*url}` | Типизированный relay |
+| `GET` | `/media/rsize/{token}/{width}/{height}/{*url}` | Resize |
+
+## Конфигурация
+
+```json
+{
+  "CorsMedia": { "enable": true }
+}
+```
+
+<Danger>
+  Не открывайте этот proxy как универсальный выход в сеть. Ограничьте цели, rate limit и accsdb.
+</Danger>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/media`

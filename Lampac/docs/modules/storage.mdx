@@ -1,0 +1,33 @@
+---
+title: "Storage: пользовательское хранилище"
+sidebarTitle: "Storage"
+description: "Хранилище Sync и NWS: /storage/* и /backup.js."
+keywords: ["Storage", "backup.js", "onlyreg"]
+---
+
+Часть стека [Sync](/modules/sync). API: [api/sync](/api/sync).
+
+## Состояние
+
+Загружается, если не добавить `Storage` в SkipModules.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/storage/get` | Чтение |
+| `POST` | `/storage/set` | Запись |
+| `GET` | `/storage/temp/{key}` | Временный ключ |
+| `GET` | `/backup.js` | Backup plugin |
+
+## Конфигурация
+
+```json
+{
+  "Storage": { "enableTemp": true }
+}
+```
+
+<Note>Модуль безопасен для локальной сети; для удалённого доступа включите accsdb и HTTPS.</Note>
+
+Проверка: `curl -fsS http://127.0.0.1:9118/storage/get`

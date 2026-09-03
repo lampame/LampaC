@@ -1,0 +1,16 @@
+---
+title: "TorrServer API"
+sidebarTitle: "TorrServer"
+description: "Прокси встроенного TorrServer: /ts.js, /ts/* и /ts/torznab/{suffix}."
+keywords: ["TorrServer API", "ts.js", "torznab"]
+---
+
+Starter-конфиг исключает модуль. Пароль сессии случайный.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/ts.js`, `/ts/js/{token}` | Plugin |
+| `GET` | `/ts/{*suffix}` | Прокси TorrServer |
+| `GET` | `/ts/torznab/{suffix}` | Torznab |
+
+Конфиг: [TorrServer](/modules/torrserver).

@@ -1,0 +1,39 @@
+---
+title: "DatabaseEditor: базы Sync и TimeCode"
+sidebarTitle: "DatabaseEditor"
+description: "Просматривайте, бэкапьте и точечно меняйте SQLite Sync и TimeCode."
+keywords: ["DatabaseEditor", "Sync.sql", "TimeCode.sql"]
+---
+
+Базы: `database/Sync.sql`, `database/TimeCode.sql`.
+
+## Состояние
+
+`manifest.enable: false`. Вход через `/weblog/auth`.
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/database-editor` | UI |
+| `GET` | `/database-editor/api/summary` | Сводка |
+| `GET` | `/database-editor/api/records` | Записи |
+| `POST` | `/database-editor/api/save` | Сохранить |
+| `POST` | `/database-editor/api/backup` | Backup |
+| `POST` | `/database-editor/api/restore` | Restore |
+
+## Конфигурация
+
+```json
+{
+  "DatabaseEditor": { "enable": true }
+}
+```
+
+<Danger>
+  Не публикуйте этот модуль в интернет без аутентификации, WAF и ограничения сети.
+</Danger>
+
+Изменяющие запросы требуют заголовок `X-Database-Editor: 1`. Копии — `database/backup/database-editor/`.
+
+Проверка: `curl -fsS http://127.0.0.1:9118/database-editor`

@@ -1,0 +1,78 @@
+---
+title: "TelegramAuth: HTTP API входа"
+sidebarTitle: "TelegramAuth"
+description: "Привяжите устройства через /tg/auth/*, синхронизируйте UID с accsdb и замените deny.js на Telegram-гейт."
+keywords: ["TelegramAuth", "tg/auth", "accsdb", "telegramAuthGate"]
+---
+
+TelegramAuth хранит пользователей и устройства, отдаёт HTTP API `/tg/auth/*` и синхронизирует UID в accsdb. Бот привязки — отдельный модуль [TelegramAuthBot](/modules/telegram-auth-bot). Обзор пары: [Community](/modules/community).
+
+## Состояние
+
+Выключен в `base.conf` `SkipModules` и `manifest.enable: false`. Для включения скопируйте структуру из `Modules/Community/TelegramAuth/init.merge.example.json`, поставьте `"enable": true` в манифесте и уберите `TelegramAuth` из `SkipModules`.
+
+`mutations_api_secret` должен совпадать с TelegramAuthBot и быть ненулевым в проде: он защищает `bind/complete` и бот-админку.
+
+## Поток авторизации
+
+1. Клиент Lampa получает UID устройства.
+2. Пользователь открывает бота (через `/start link_{uid}` или вручную отправляет UID).
+3. Бот вызывает `POST /tg/auth/bind/complete`.
+4. Клиент опрашивает `GET /tg/auth/status?uid=...`.
+5. После успеха Lampac видит UID в `users.json`, accsdb разблокирован.
+
+## Telegram Auth Gate
+
+По умолчанию при включённом accsdb клиент видит `deny.js` с модалкой пароля и CUB. Чтобы заменить её на Telegram-гейт, добавьте в `init.conf`:
+
+```json
+{
+  "TelegramAuth": {
+    "enable": true,
+    "mutations_api_secret": "SECRET"
+  },
+  "LampaWeb": {
+    "telegramAuthGate": {
+      "enabled": true,
+      "botUsername": "ваш_бот_без_@",
+      "serviceName": "lampa"
+    }
+  }
+}
+```
+
+Гейт активируется только при одновременном выполнении всех трёх условий: `accsdb.enable: true`, `telegramAuthGate.enabled: true` и непустой `botUsername`. Иначе — тихий откат на `deny.js`.
+
+`telegram_auth_gate.js` показывает fullscreen overlay (UID, кнопка Telegram, QR на крупных экранах), опрашивает `/tg/auth/status` и после успеха сохраняет `tg_auth_user` в `Lampa.Storage`.
+
+<Warning>
+  Если `telegram_auth_gate.js` подключён и через `customPlugins`, и через флаг `telegramAuthGate`, возникнет двойной опрос `/testaccsdb`. Используйте только один путь.
+</Warning>
+
+## Маршруты
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/tg/auth/status` | Опрос гейта до успеха |
+| `GET` | `/tg/auth/me` | Текущий пользователь |
+| `POST` | `/tg/auth/bind/start` | Начать привязку |
+| `POST` | `/tg/auth/bind/complete` | Бот завершает привязку UID |
+| `GET` | `/tg/auth/user/by-telegram` | Найти пользователя по Telegram ID |
+| `GET` | `/tg/auth/devices` | Список устройств |
+| `POST` | `/tg/auth/device/name` | Сохранить название устройства |
+| `POST` | `/tg/auth/device/unbind` | Отвязать устройство |
+| `POST` | `/tg/auth/device/reactivate` | Повторно активировать устройство |
+| `GET` | `/tg/auth/admin/users` | Админ: список пользователей |
+| `POST` | `/tg/auth/admin/user` | Админ: создать пользователя |
+| `POST` | `/tg/auth/admin/user/patch` | Админ: изменить пользователя |
+| `POST` | `/tg/auth/import` | Импорт привязок |
+
+Полные таблицы: [Telegram API](/api/telegram).
+
+<Danger>
+  Не публикуйте `mutations_api_secret` и админ-маршруты `/tg/auth/admin/*` без аутентификации и ограничения сети.
+</Danger>
+
+```bash
+curl -fsS "http://127.0.0.1:9118/tg/auth/status?uid=DEVICE_UID"
+```

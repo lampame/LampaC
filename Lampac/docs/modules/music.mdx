@@ -1,0 +1,86 @@
+---
+title: "Music: музыкальный сервис в Lampa"
+sidebarTitle: "Music"
+description: "Настройте модуль Music: каталог, поиск, плейлисты, импорт, тексты песен и потоковое воспроизведение через Lampac."
+keywords: ["Lampac Music", "music.js", "MusicBrainz", "Spotify import", "SoundCloud", "музыка Lampa"]
+---
+
+Модуль **Music** добавляет в Lampa музыкальный каталог, поиск, плейлисты, импорт из Spotify, Apple Music и SoundCloud, синхронизированные тексты и серверный relay аудиопотоков.
+
+<Warning>
+  `Modules/Music/manifest.json` содержит `"enable": false`. Для включения используйте пользовательскую копию модуля с изменённым манифестом. Не изменяйте файлы внутри контейнера: они пропадут после обновления.
+</Warning>
+
+## Возможности
+
+<Columns cols={2}>
+  <Card title="Каталог и discovery" icon="library">
+    MusicBrainz используется как база метаданных; Apple Music, Spotify, SoundCloud и YouTube Music формируют полки и чарты.
+  </Card>
+  <Card title="Воспроизведение" icon="play">
+    YouTube, Sefon, SoundCloud и опционально Z3Fm подбирают аудио; клиент получает только relay URL `/music/stream`.
+  </Card>
+  <Card title="Плейлисты" icon="list-music">
+    Локальные плейлисты и импорт публичных Spotify, Apple Music и SoundCloud ссылок хранятся в SQLite.
+  </Card>
+  <Card title="Тексты и радио" icon="radio">
+    LRC-тексты, ручной сдвиг тайминга, радио от трека и автоподборка очереди.
+  </Card>
+</Columns>
+
+## Включение
+
+<Steps>
+  <Step title="Подготовьте пользовательскую копию">
+    Скопируйте `Modules/Music` в runtime-каталог `mods/Music` и установите `"enable": true` в `mods/Music/manifest.json`.
+  </Step>
+  <Step title="Разрешите загрузку">
+    Убедитесь, что `Music` отсутствует в `BaseModule.SkipModules` и попадает в `LoadModules`.
+  </Step>
+  <Step title="Подключите плагин">
+    Добавьте `http://HOST:9118/music.js` в Lampa или зарегистрируйте его через `LampaWeb.customPlugins`.
+  </Step>
+  <Step title="Проверьте API">
+    ```bash
+    curl -fsS http://127.0.0.1:9118/music/providers
+    curl -fsS http://127.0.0.1:9118/music/home
+    ```
+  </Step>
+</Steps>
+
+## Базовая конфигурация
+
+```jsonc
+{
+  "Music": {
+    "useproxy": false,
+    "useproxystream": false,
+    "applemusic_country": "ru",
+    "spotify_discovery_enabled": true,
+    "spotify_country": "ua",
+    "soundcloud_country": "UK",
+    "z3fm_enabled": false,
+    "z3fm_audio_enabled": false
+  }
+}
+```
+
+| Параметр | По умолчанию | Назначение |
+| --- | --- | --- |
+| `default_metadata_provider` | `musicbrainz` | Канонический каталог |
+| `default_audio_provider` | `youtubeaudio` | Основной audio resolver |
+| `useproxy` | `false` | Прокси для API и discovery |
+| `useproxystream` | `false` | Прокси upstream-аудио |
+| `spotify_discovery_enabled` | `true` | Полки Spotify |
+| `soundcloud_enabled` | `true` | Discovery и audio SoundCloud |
+| `z3fm_enabled` | `false` | Z3Fm; требует Playwright |
+| `client_debug_enabled` | `false` | Приём трассировок на `/music/clientlog` |
+
+## Хранение и безопасность
+
+- Пользовательские данные хранятся в `database/music/Music.sql`.
+- Метаданные, картинки и stream tickets относятся к временному кешу.
+- Внешние CDN-ссылки не передаются клиенту напрямую.
+- Не публикуйте OAuth credentials или proxy passwords в репозитории.
+
+Полный список маршрутов: [Music API](/api/music).

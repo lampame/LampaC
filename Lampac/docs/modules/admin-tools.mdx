@@ -1,0 +1,28 @@
+---
+title: "Администрирование и диагностика"
+sidebarTitle: "Admin tools"
+description: "Обзор административных интерфейсов Lampac: AdminPanel, DatabaseEditor и WebLog."
+keywords: ["Lampac AdminPanel", "DatabaseEditor", "WebLog", "root password", "init.conf editor"]
+---
+
+Lampac содержит три административных интерфейса. Они предназначены для владельца сервера и не должны быть открыты без дополнительной защиты.
+
+<Columns cols={3}>
+  <Card title="AdminPanel" href="/modules/admin-panel" icon="settings">
+    Редактор `init.conf`, просмотр `current.conf` и управление `users.json`
+  </Card>
+  <Card title="DatabaseEditor" href="/modules/database-editor" icon="database">
+    Просмотр, backup и точечное изменение баз Sync и TimeCode
+  </Card>
+  <Card title="WebLog" href="/modules/weblog" icon="activity">
+    Поток HTTP-запросов и событий Playwright в реальном времени
+  </Card>
+</Columns>
+
+AdminPanel и WebLog используют root-пароль из файла `passwd` в рабочем каталоге Lampac. Это не пользователь accsdb и не `shared_passwd`.
+
+<Warning>
+  Не публикуйте `passwd`, cookie `accspasswd`, заголовок `lcrqpasswd` или дампы административных API. Ограничьте маршруты по VPN, IP allowlist или reverse proxy.
+</Warning>
+
+API-таблицы: [справочник admin](/api/admin).

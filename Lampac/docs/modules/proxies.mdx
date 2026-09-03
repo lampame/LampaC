@@ -1,0 +1,35 @@
+---
+title: "Proxy-модули Lampac"
+sidebarTitle: "Proxy"
+description: "Обзор proxy-модулей Lampac: TmdbProxy, CubProxy, CorsMedia, Corseu, CacheMedia и ProxyLimiter."
+keywords: ["Lampac proxy", "TmdbProxy", "CubProxy", "CorsMedia", "Corseu", "ProxyLimiter"]
+---
+
+Proxy-модули решают разные задачи: обход недоступных API, выдача изображений и потоков с CORS, кеширование media и ограничение одновременных соединений.
+
+<Danger>
+  Не публикуйте `/cub/*`, `/media` или `/corseu` как неограниченный универсальный proxy. Злоумышленник сможет расходовать трафик сервера и обращаться к внутренним адресам, если модуль не проверяет target URL.
+</Danger>
+
+<Columns cols={2}>
+  <Card title="TmdbProxy" href="/modules/tmdb-proxy" icon="database">
+    TMDB API и изображения с кешем
+  </Card>
+  <Card title="CubProxy" href="/modules/cub-proxy" icon="cloud">
+    CUB API proxy `/cub/*`
+  </Card>
+  <Card title="CorsMedia" href="/modules/cors-media" icon="image">
+    Media relay и resize `/media`
+  </Card>
+  <Card title="Corseu" href="/modules/corseu" icon="globe">
+    Настраиваемый HTTP/browser request
+  </Card>
+  <Card title="CacheMedia" href="/modules/cache-media" icon="hard-drive">
+    Дисковый кеш SISI-потоков
+  </Card>
+  <Card title="ProxyLimiter" href="/modules/proxy-limiter" icon="gauge">
+    Лимиты параллельных media-запросов
+  </Card>
+</Columns>
+
+Конфигурация внешнего proxy для запросов провайдеров: [настройка провайдеров](/configuration/providers). API: [справочник proxy](/api/proxies).

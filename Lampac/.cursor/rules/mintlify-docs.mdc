@@ -1,0 +1,20 @@
+---
+description: Standards for Lampac Mintlify documentation
+globs: "{docs/**/*.mdx,docs/docs.json,docs/AGENTS.md,.devin/wiki.json}"
+alwaysApply: false
+---
+
+# Lampac Mintlify documentation
+
+- Treat application code, `config/base.conf`, `config/example.init.*`, manifests, compose files, Helm chart, and module READMEs as the source of truth. Public DeepWiki is not a source of truth; do not copy MDX into `.devin/wiki.json` (30-page public cap).
+- Write user-facing content in Russian with direct, active language and sentence-case headings.
+- Every MDX page must have `title`, `sidebarTitle`, `description`, and useful `keywords`.
+- Use root-relative internal links without the `/docs/` prefix and without `.mdx`.
+- Keep `docs.json`, `.mintignore`, and `AGENTS.md` in `docs/`. Add every new page to `docs.json`; preserve existing slugs or add a redirect from `/docs/...`.
+- Load Mintlify skills from `.agents/skills/` (`mintlify`, `mintlify-docs`, `mintlify-api`) and MCP servers from `.cursor/mcp.json`.
+- Use Mintlify components only when they improve scanning: `Steps` for procedures, `Tabs`/`CodeGroup` for alternatives, callouts for risk, and `ParamField`/`ResponseField` for API contracts.
+- Give every code fence a language and keep examples runnable against port `9118`.
+- Never publish real tokens, passwords, provider credentials, private hosts, or user data.
+- Distinguish `config/base.conf` defaults, `config/example.init.*` starter overrides, and `manifest.json` module state.
+- Document public-exposure risks for administrative, proxy, transcoding, filesystem, and debugging modules.
+- Before completion, run `mint validate`, `mint broken-links --check-anchors`, and `mint a11y` from `docs/`.

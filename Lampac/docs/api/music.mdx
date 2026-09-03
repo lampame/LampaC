@@ -1,0 +1,80 @@
+---
+title: "Music API"
+sidebarTitle: "Music"
+description: "Справочник Music API: каталог, поиск, воспроизведение, плейлисты, импорт, радио, тексты и авторизация."
+keywords: ["Music API", "music stream", "Lampac playlists", "music radio", "lyrics API"]
+---
+
+Все endpoints модуля Music используют префикс `/music`. Модуль должен быть включён в `manifest.json`.
+
+## Клиент и каталог
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/music.js`, `/music/js/{token}` | Plugin Lampa |
+| `GET` | `/music/providers` | Активные provider roles |
+| `GET` | `/music`, `/music/home` | Главный экран |
+| `GET` | `/music/section` | Пагинация секции |
+| `GET` | `/music/search` | Поиск |
+| `GET` | `/music/artist` | Карточка артиста |
+| `GET` | `/music/artistimg` | Обложка артиста |
+| `GET` | `/music/artistsection` | Дополнительная секция артиста |
+| `GET` | `/music/clientlog` | Клиентский диагностический лог |
+| `GET` | `/music/album` | Альбом |
+| `GET` | `/music/track` | Трек |
+
+## Воспроизведение
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/music/play` | Подобрать playable source |
+| `GET` | `/music/stream` | Range-aware server relay |
+| `GET` | `/music/matches` | Кандидаты audio providers |
+| `POST` | `/music/match/select` | Закрепить source |
+| `POST` | `/music/match/reset` | Сбросить выбор |
+| `GET` | `/music/playlist.m3u` | Очередь в M3U |
+| `POST` | `/music/history/mark` | Записать прослушивание |
+| `POST` | `/music/history/remove` | Удалить историю |
+
+<Warning>
+  URL `/music/stream` содержит короткоживущий ticket. Не сохраняйте его как постоянную ссылку и не публикуйте в логах.
+</Warning>
+
+## Плейлисты и рекомендации
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/music/playlists` | Список пользователя |
+| `GET` | `/music/playlists/tracks` | Треки плейлиста |
+| `POST` | `/music/playlists/create` | Создать |
+| `POST` | `/music/playlists/delete` | Удалить |
+| `POST` | `/music/playlists/import` | Импорт публичной ссылки |
+| `POST` | `/music/playlists/import/soundcloud` | Legacy-импорт SoundCloud |
+| `POST` | `/music/playlists/sync` | Синхронизировать импорт |
+| `POST` | `/music/playlists/track/add` | Добавить трек |
+| `POST` | `/music/playlists/track/remove` | Удалить трек |
+| `POST` | `/music/playlists/track/move` | Изменить порядок |
+| `POST` | `/music/radio` | Похожие треки |
+| `GET` | `/music/daily` | Дневной микс |
+
+## Тексты, статистика и auth
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/music/lyrics` | Synced/plain lyrics |
+| `GET` | `/music/stats/top` | Топ профиля |
+| `POST` | `/music/stats/clear` | Очистить статистику |
+| `GET` | `/music/auth/state` | Состояние внешнего auth |
+| `POST` | `/music/auth/save` | Сохранить credentials |
+| `POST` | `/music/auth/logout` | Удалить credentials |
+
+## Smoke test
+
+```bash
+curl -fsS http://127.0.0.1:9118/music/providers
+curl -fsS http://127.0.0.1:9118/music/home
+curl -G http://127.0.0.1:9118/music/search \
+  --data-urlencode "q=nirvana"
+```
+
+Конфигурация и устройство хранилища: [модуль Music](/modules/music).

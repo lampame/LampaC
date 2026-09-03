@@ -1,0 +1,100 @@
+---
+title: "Reverse proxy и HTTPS"
+sidebarTitle: "Reverse proxy"
+description: "Разместите Lampac за Nginx: HTTPS, реальный IP клиента, WebSocket, SSE, streaming и безопасный доступ к административным маршрутам."
+keywords: ["Lampac Nginx", "reverse proxy", "HTTPS", "WebSocket", "X-Forwarded-For", "KnownProxies"]
+---
+
+Reverse proxy завершает TLS, передаёт Lampac реальный IP клиента и отдельно настраивает длительные WebSocket, SSE и media-соединения.
+
+<Warning>
+  После публикации в интернет включите WAF и accsdb. Ограничьте `/adminpanel`, `/database-editor` и `/weblog` по IP или VPN.
+</Warning>
+
+## Минимальная конфигурация Nginx
+
+```nginx
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
+server {
+  listen 443 ssl http2;
+  server_name lampac.example.com;
+
+  ssl_certificate /etc/letsencrypt/live/lampac.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/lampac.example.com/privkey.pem;
+
+  client_max_body_size 10m;
+
+  location / {
+    proxy_pass http://127.0.0.1:9118;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+  }
+
+  location ~ ^/(nws|wt/c/) {
+    proxy_pass http://127.0.0.1:9118;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_read_timeout 2h;
+  }
+
+  location = /lifeevents {
+    proxy_pass http://127.0.0.1:9118;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+  }
+}
+```
+
+## Доверенный proxy
+
+Ограничьте listener локальным интерфейсом и добавьте адрес proxy в `KnownProxies`:
+
+```json
+{
+  "listen": {
+    "ip": "127.0.0.1",
+    "port": 9118
+  },
+  "KnownProxies": [
+    {
+      "ip": "127.0.0.1",
+      "prefixLength": 32
+    }
+  ]
+}
+```
+
+<Info>
+  Не доверяйте `X-Forwarded-For` от произвольного интернета. Lampac использует реальный IP для WAF, account limits и журналов.
+</Info>
+
+## Streaming
+
+Для `/proxy/`, `/gst/`, `/ts/` и `/music/stream` избегайте маленьких proxy timeouts. Если proxy начинает буферизовать весь ответ или писать его во временный файл, растут задержка и расход диска.
+
+## Проверка
+
+```bash
+curl -I https://lampac.example.com/online.js
+curl -s https://lampac.example.com/api/myip
+curl -N https://lampac.example.com/lifeevents
+```
+
+WebSocket проверьте клиентом, который умеет отправлять Upgrade, например `websocat`.

@@ -1,0 +1,80 @@
+---
+title: "Online API: плагины и провайдеры VOD"
+sidebarTitle: "Online"
+description: "HTTP API модуля Online в Lampac NextGen: plugin /online.js, маршруты /lite/{provider}, external IDs и события."
+keywords: ["Online API", "online.js", "Lampa plugin", "lite provider", "VOD API"]
+---
+
+Модуль **Online** отвечает за VOD-плагин Lampa и агрегацию источников из групп `OnlineRUS`, `OnlinePaid`, `OnlineAnime`, `OnlineENG`, `OnlineUKR` и `OnlineGEO`.
+
+## Online (VOD)
+
+Модуль Online агрегирует ссылки с 70+ источников и отдаёт их через единый API. Провайдеры распределены по группам: `OnlineRUS`, `OnlinePaid`, `OnlineAnime`, `OnlineENG`, `OnlineUKR`, `OnlineGEO`.
+
+### Эндпоинты Online
+
+| Метод | Путь | Описание |
+| --- | --- | --- |
+| `GET` | `/online.js` | Lampa VOD-плагин (Lampa 3.0) |
+| `GET` | `/online/js/{token}` | Плагин с авторизацией по токену |
+| `GET` | `/lite/{provider}` | Список источников от провайдера |
+| `GET` | `/externalids` | Маппинг ID (TMDB ↔ KinoPoisk и т.д.) |
+| `GET` | `/lifeevents` | SSE-поток событий здоровья провайдеров |
+| `GET` | `/lite/withsearch` | Поиск по всем провайдерам |
+| `GET` | `/lite/spider` | Паук-обход для сбора метаданных |
+| `GET` | `/lite/spider/anime` | Паук только по аниме-провайдерам |
+| `GET` | `/lite/events` | События агрегатора Online |
+| `GET` | `/lite/pidtor` | Источник PidTor (стриминг через торрент) |
+
+### Пример запроса к провайдеру
+
+<CodeGroup>
+
+```bash cURL
+curl -s "http://localhost:9118/lite/rezka?title=Интерстеллар&year=2014&kp=258687&imdb=0816692"
+```
+
+</CodeGroup>
+
+Типичные параметры для `/lite/{provider}`:
+
+<ParamField query="title" type="string">
+  Название фильма или сериала.
+</ParamField>
+
+<ParamField query="year" type="number">
+  Год выпуска.
+</ParamField>
+
+<ParamField query="kp" type="string">
+  ID КиноПоиск.
+</ParamField>
+
+<ParamField query="imdb" type="string">
+  ID IMDb.
+</ParamField>
+
+<ParamField query="tmdb" type="string">
+  ID TMDB.
+</ParamField>
+
+<ParamField query="s" type="number">
+  Номер сезона для сериалов.
+</ParamField>
+
+<ParamField query="e" type="number">
+  Номер серии.
+</ParamField>
+
+<Note>
+  Параметры `token` и `account_email` используются для авторизации в платных провайдерах (Filmix, Rezka с `premium: true`, KinoPub и др.). Укажите их в URL или в конфигурации `init.conf`.
+</Note>
+
+<Note>
+  Эндпоинт `/lifeevents` возвращает **SSE-поток** (Server-Sent Events) с событиями доступности провайдеров. Подключайтесь через `EventSource` для мониторинга состояния источников в реальном времени.
+</Note>
+
+## Связанные API
+
+- [SISI API](/api/sisi) — платформы 18+, закладки и история.
+- [Аутентификация и ошибки](/api/authentication) — accsdb, WAF и HTTP-коды.

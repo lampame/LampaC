@@ -1,5 +1,7 @@
 # Lampac Next Generation
 
+![Lampac NextGen — self-hosted backend for Lampa](.github/social-preview.jpg)
+
 [![Build](https://github.com/lampac-nextgen/lampac/actions/workflows/build.yml/badge.svg)](https://github.com/lampac-nextgen/lampac/actions/workflows/build.yml)
 [![Test — build all projects](https://github.com/lampac-nextgen/lampac/actions/workflows/test-build.yml/badge.svg)](https://github.com/lampac-nextgen/lampac/actions/workflows/test-build.yml)
 [![Release](https://github.com/lampac-nextgen/lampac/actions/workflows/release.yml/badge.svg)](https://github.com/lampac-nextgen/lampac/actions/workflows/release.yml)
@@ -15,10 +17,14 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/lampac-nextgen/lampac)](https://github.com/lampac-nextgen/lampac/commits/main)
 [![GitHub Issues](https://img.shields.io/github/issues/lampac-nextgen/lampac)](https://github.com/lampac-nextgen/lampac/issues)
 
+[![Документация](https://img.shields.io/badge/docs-docs.lampac.dev-6D5DFB)](https://docs.lampac.dev)
+[![Mintlify](https://img.shields.io/badge/powered%20by-Mintlify-18E299)](https://docs.lampac.dev)
 [![Telegram](https://img.shields.io/badge/Telegram-Chat-2CA5E0?logo=telegram&logoColor=white)](https://t.me/LampacTalks/13998)
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lampac-nextgen/lampac)
 
 > Самохостируемый backend-сервер для [Lampa](https://github.com/yumata/lampa). Собирает ссылки на публично доступный контент с 70+ источников и отдаёт их Lampa в виде плагинов. Построен на ASP.NET Core (.NET 10).
+
+Полная документация — [docs.lampac.dev](https://docs.lampac.dev) (установка, модули, API).
 
 ---
 
@@ -41,7 +47,7 @@
 - **Tg-notify.bot** — Telegram-уведомления о новых сериях и озвучках, плагин `/tg-notify.js`
 - **WebLog** — отладка HTTP и Playwright-трафика в реальном времени
 - **Playwright** — автоматизация Chromium/Firefox для обхода JS-защит
-- **RCH** — WebSocket-реле для клиентов за NAT
+- **RCH** — WebSocket-реле для клиентов за NAT (`/nws`)
 - **WAF** — брандмауэр с геоблокировкой, лимитами и защитой от брутфорса
 - **GeoIP** — MaxMind GeoLite2 (базы включены в поставку)
 - **Горячая перезагрузка конфига** — `init.conf` применяется без перезапуска
@@ -53,21 +59,36 @@
 
 ## Содержание
 
-- [Lampac Next Generation](#lampac-next-generation)
-  - [Содержание](#содержание)
-  - [Быстрый старт](#быстрый-старт)
-    - [Docker](#docker)
-    - [Нативная установка (Linux)](#нативная-установка-linux)
-    - [Нативная установка (Windows)](#нативная-установка-windows)
-    - [Ручная сборка](#ручная-сборка)
-  - [Конфигурация](#конфигурация)
-  - [Модули](#модули)
-  - [Провайдеры контента](#провайдеры-контента)
-  - [API](#api)
-  - [Архитектура](#архитектура)
-  - [Зависимости](#зависимости)
-  - [Структура проекта](#структура-проекта)
-  - [Дополнительная документация](#дополнительная-документация)
+- [Документация](#документация)
+- [Быстрый старт](#быстрый-старт)
+  - [Docker](#docker)
+  - [Нативная установка (Linux)](#нативная-установка-linux)
+  - [Нативная установка (Windows)](#нативная-установка-windows)
+  - [Ручная сборка](#ручная-сборка)
+- [Конфигурация](#конфигурация)
+- [Модули](#модули)
+- [Провайдеры контента](#провайдеры-контента)
+- [API](#api)
+- [Архитектура](#архитектура)
+- [Зависимости](#зависимости)
+- [Структура проекта](#структура-проекта)
+- [Дополнительная документация](#дополнительная-документация)
+
+---
+
+## Документация
+
+Пользовательские руководства, модули и API: **[docs.lampac.dev](https://docs.lampac.dev)**.
+
+| Раздел | URL |
+| --- | --- |
+| Быстрый старт | [docs.lampac.dev/quickstart](https://docs.lampac.dev/quickstart) |
+| Установка | [docs.lampac.dev/installation](https://docs.lampac.dev/installation) |
+| Конфигурация | [docs.lampac.dev/configuration/overview](https://docs.lampac.dev/configuration/overview) |
+| Модули | [docs.lampac.dev/modules/overview](https://docs.lampac.dev/modules/overview) |
+| Провайдеры | [docs.lampac.dev/providers/overview](https://docs.lampac.dev/providers/overview) |
+| API | [docs.lampac.dev/api/overview](https://docs.lampac.dev/api/overview) |
+| Архитектура | [docs.lampac.dev/architecture/overview](https://docs.lampac.dev/architecture/overview) |
 
 ---
 
@@ -75,7 +96,7 @@
 
 ### Docker
 
-**Основной сценарий** — `docker-compose.yaml`, порт **9118**.
+**Основной сценарий** — `docker-compose.yaml`, порт **9118**. Подробнее: [быстрый старт](https://docs.lampac.dev/quickstart) и [Docker](https://docs.lampac.dev/deployment/docker).
 
 ```bash
 git clone https://github.com/lampac-nextgen/lampac.git
@@ -90,6 +111,8 @@ docker compose up -d
 ```
 
 По умолчанию все тома закомментированы — контейнер стартует с `init.conf` и `passwd` из образа. Рабочая директория в контейнере — `/lampac`; файлы читаются из её корня, а не из подкаталога `config/`.
+
+Проверка: `curl -fsS "http://localhost:9118/version?type=hash"`. Плагин Lampa: `http://YOUR_IP:9118/online.js`.
 
 <details>
 <summary><strong>Тома и сеть</strong></summary>
@@ -151,7 +174,7 @@ docker compose -f docker-compose.dev.yaml up -d
 1. **`BaseModule.SkipModules`** в `init.conf` — имена модулей, которые не загружаются даже если код есть в образе.
 2. **`manifest.json`** в каталоге модуля — ключ `"enable": true|false`. Часть модулей ([AdminPanel](Modules/AdminPanel/manifest.json), [ExternalBind](Modules/ExternalBind/manifest.json)) поставляется с `"enable": false`.
 
-Чтобы включить выключенный модуль без пересборки образа: скопируйте его каталог, отредактируйте `manifest.json` и смонтируйте в `/lampac/module/<Name>/` (штатный) или `/lampac/mods/<Name>/` (пользовательский).
+Чтобы включить выключенный модуль без пересборки образа: скопируйте его каталог, отредактируйте `manifest.json` и смонтируйте в `/lampac/module/<Name>/` (штатный) или `/lampac/mods/<Name>/` (пользовательский). Каталог модулей: [docs.lampac.dev/modules/overview](https://docs.lampac.dev/modules/overview).
 
 </details>
 
@@ -159,7 +182,7 @@ docker compose -f docker-compose.dev.yaml up -d
 
 ### Нативная установка (Linux)
 
-Поддерживаются Debian/Ubuntu, amd64 и arm64. Скрипт устанавливает .NET 10 runtime, создаёт системного пользователя `lampac` и регистрирует systemd-сервис.
+Поддерживаются Debian/Ubuntu, amd64 и arm64. Скрипт устанавливает .NET 10 runtime, создаёт системного пользователя `lampac` и регистрирует systemd-сервис. Подробнее: [установка](https://docs.lampac.dev/installation) и [Linux](https://docs.lampac.dev/deployment/linux).
 
 ```bash
 # Установка
@@ -258,6 +281,8 @@ config/local.conf
 
 ### Нативная установка (Windows)
 
+Подробнее: [Windows](https://docs.lampac.dev/deployment/windows).
+
 1. **Установите .NET 10 Runtime**
    Скачайте и установите **.NET 10.0 Runtime** с [официального сайта](https://dotnet.microsoft.com/download/dotnet/10.0) (выберите `ASP.NET Core Runtime` под Windows).
 
@@ -294,6 +319,7 @@ config/local.conf
 > ```
 >
 > Важно помнить, что для обновления сервиса необходимо сначала его остановить, затем заменить файлы в папке `C:\lampacNG` на новые из архива, и после этого снова запустить сервис.
+
 ---
 
 ### Ручная сборка
@@ -328,487 +354,89 @@ cd publish && dotnet Core.dll
 
 Конфигурация хранится в `init.conf` (JSON) или `init.yaml` рядом с `Core.dll`. Проверяется каждую секунду и **перезагружается без перезапуска**. Резервные копии — в `database/backup/init/`.
 
-Примеры: [`config/example.init.conf`](config/example.init.conf), [`config/example.init.yaml`](config/example.init.yaml).
+Примеры: [`config/example.init.conf`](config/example.init.conf), [`config/example.init.yaml`](config/example.init.yaml). Полные разделы: [обзор](https://docs.lampac.dev/configuration/overview), [безопасность](https://docs.lampac.dev/configuration/security), [память](https://docs.lampac.dev/configuration/memory), [провайдеры](https://docs.lampac.dev/configuration/providers).
 
-<details>
-<summary><strong>Основные параметры</strong></summary>
+В [`config/base.conf`](config/base.conf) слушатель по умолчанию — `"listen"."ip": "any"`. Starter [`config/example.init.conf`](config/example.init.conf) задаёт `"0.0.0.0"` и дополнительно исключает `DLNA`, `JacRed`, `Sync`, `TimeCode`, `TorrServer`.
 
 ```jsonc
 {
-  // Режим низкой памяти (~−140 МБ RSS в типичном сценарии, см. раздел ниже)
-  "lowMemoryMode": false,
-
-  // Сетевые настройки
   "listen": {
-    "ip": "0.0.0.0",
+    "ip": "any",
     "port": 9118,
-    "scheme": "http",
-    "version": true,
-    "ResponseCancelAfter": 15    // таймаут ответа, секунды
+    "scheme": "http"
   },
-
-  // Модули
   "BaseModule": {
-    "SkipModules": [],           // имена модулей для отключения
-    "LoadModules": [".*"],       // whitelist: имя, группа (OnlineUKR), маска (LME.*)
-    "ValidateRequest": true,
-    "BlockedBots": true
-  },
-
-  // Кеш
-  "cache": {
-    "extend": 180                // продление TTL, минуты
-  },
-
-  // Playwright
-  "chromium": { "enable": false, "count": 1, "restart": 3600 },
-  "firefox":  { "enable": false, "count": 1 },
-
-  // Remote Client Hub (WebSocket-реле для клиентов за NAT)
-  "rch": { "enable": false, "requiredConnected": 1 },
-
-  // Логирование в файл (logs/, 14 дней)
-  "serilog": false,
-
-  // Управление памятью GC
-  "GC": {
-    "Concurrent": true,
-    "ConserveMemory": 0,
-    "HighMemoryPercent": 90,
-    "RetainVM": false
-  },
-
-  // Шифрование потоков
-  "kit": { "aesgcmkeyName": "" }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>Режим низкой памяти (lowMemoryMode)</strong></summary>
-
-В корне `init.conf` или `init.yaml` задайте:
-
-```json
-"lowMemoryMode": true
-```
-
-По умолчанию значение `false`. В типичной установке рабочая память процесса получается **примерно на 140 МБ меньше**, чем без этого режима (оценка; фактический выигрыш зависит от ОС, Docker-лимитов и характера нагрузки).
-
-**Что меняется внутри:** уменьшаются размеры пулов буферов и вспомогательных аллокаций для JSON/строк; базы GeoIP открываются через memory-mapped файл вместо полной загрузки в RAM; не поднимается агрессивный минимум `ThreadPool`; для прокси изображений NetVips работает без оперативного кэша; при простое чаще срабатывает уплотнение кучи (в т.ч. LOH); часть модулей отключает второстепенные кеши.
-
-**Компромисс:** при очень высокой параллельной нагрузке возможно немного ниже пиковая пропускная способность по сравнению с режимом по умолчанию.
-
-</details>
-
-<details>
-<summary><strong>WAF и безопасность</strong></summary>
-
-```jsonc
-{
-  "WAF": {
-    "enable": true,
-    "countryAllow": ["RU", "UA", "BY"],   // геоблокировка (пустой — все страны)
-    "whiteIps": ["192.168.1.0/24"],        // белый список IP/CIDR
-    "bruteForceProtection": true,
-    "limit_map": {
-      "/lite/": 10,
-      "/externalids": 10
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>Аутентификация (accsdb)</strong></summary>
-
-```jsonc
-{
-  "accsdb": {
-    "enable": true,
-    "accounts": "user1:2026-12-31,user2:2027-06-01",
-    // или подробный формат:
-    "users": [
-      { "id": "user1", "expires": "2026-12-31" },
-      { "id": "user2", "expires": "2027-06-01" }
-    ]
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>VOD, SISI и плагины Lampa UI</strong></summary>
-
-```jsonc
-{
-  // VOD-плагин
-  "online": {
-    "name": "Lampac NextGen",
-    "version": true,
-    "btn_priority_forced": true
-  },
-
-  // SISI (18+)
-  "sisi": {
-    "lgbt": false,
-    "NextHUB": true,
-    "history": { "enable": false }
-  },
-
-  // Статистика (/stats/*)
-  "openstat": { "enable": false },
-
-  // Плагины Lampa UI (совместимы с Lampa 3.0)
-  "LampaWeb": {
-    "widgets": {
-      "samsung": true,   // /samsung.wgt — Tizen
-      "lg": true         // /lg.ipk — webOS
-    },
-    "customPlugins": [
-      { "url": "{localhost}/tg-notify.js", "status": 1 }
+    "SkipModules": [
+      "Catalog",
+      "Tracks",
+      "Transcoding",
+      "WebLog",
+      "CacheMedia",
+      "ForkPlayerXML",
+      "MsxNative",
+      "Potok",
+      "TelegramAuth",
+      "TelegramAuthBot"
     ],
-    "initPlugins": {
-      "online": true, "sisi": true, "torrserver": true,
-      "timecode": true, "jacred": true, "tmdbProxy": true,
-      "cubProxy": true, "pirate_store": true
-    }
-  },
-
-  // GStreamer — серверный транскодинг (включите enable)
-  "gst": {
-    "enable": true,
-    "aac_samplerate": 48000,
-    "aac_channels": 2
-  },
-
-  // TelegramBot — уведомления о сериях/озвучках (manifest: enable: false)
-  "TelegramBot": {
-    "enable": true,
-    "bot_token": "TOKEN",
-    "tmdb_api_key": "TMDB_KEY",
-    "lampac_host": "http://127.0.0.1:9118"
+    "LoadModules": [".*"]
   }
 }
 ```
-
-</details>
-
-<details>
-<summary><strong>GStreamer (gst)</strong></summary>
-
-Серверный HLS/fMP4 транскодинг через GStreamer. Модуль загружается по умолчанию; транскодинг включается через `"gst": { "enable": true }`. На клиенте подключите `http://<host>:9118/gst.js`. Кеш — `cache/gstranscoding/`. Подробности — [Modules/GStreamer/README.md](Modules/GStreamer/README.md).
-
-</details>
-
-<details>
-<summary><strong>TelegramBot (Tg-notify.bot)</strong></summary>
-
-Фоновый Telegram-бот уведомлений о новых сериях и озвучках. Подписка из карточки Lampa, трекинг через Trakt→TMDB и опрос Mirage/Collaps. По умолчанию `"enable": false` в [manifest.json](Modules/Tg-notify.bot/manifest.json) — включите секцию `TelegramBot` в `init.conf` и подключите плагин через `LampaWeb.customPlugins`. Подробности — [Modules/Tg-notify.bot/README.md](Modules/Tg-notify.bot/README.md).
-
-</details>
-
-<details>
-<summary><strong>Конфигурация провайдеров (пример)</strong></summary>
-
-Каждый провайдер настраивается в своём разделе `init.conf`:
-
-```jsonc
-{
-  "Rezka":  { "enable": true, "host": "https://rezka.ag", "priority": 1 },
-  "Filmix": { "enable": true, "host": "https://filmix.biz", "token": "TOKEN", "priority": 2 },
-  "KinoPub":{ "enable": true, "token": "TOKEN" },
-  "Kodik":  { "enable": true, "token": "TOKEN" }
-}
-```
-
-</details>
 
 ---
 
 ## Модули
 
-По умолчанию в `SkipModules` ([`config/base.conf`](config/base.conf)): **Catalog**, **DLNA**, **Tracks**, **Transcoding**, **WebLog**, **CacheMedia**, **ProxyLimiter**, **ForkPlayerXML**, **MsxNative**, **TelegramAuth**, **TelegramAuthBot**. WAF и accsdb тоже отключены по умолчанию.
+Состояние модуля задают `manifest.json` (`enable`) и списки `BaseModule.SkipModules` / `LoadModules`. Каталог, маршруты и риски публичного доступа: [docs.lampac.dev/modules/overview](https://docs.lampac.dev/modules/overview).
 
-> Служебные модули **Sync**, **SyncEvents**, **Storage** и **TimeCode** в `SkipModules` **нет** — они загружаются вместе с ядром, пока их не добавите в `SkipModules` вручную.
+В `base.conf` из SkipModules: Catalog, Tracks, Transcoding, WebLog, CacheMedia, ForkPlayerXML, MsxNative, Potok, TelegramAuth, TelegramAuthBot. `ProxyLimiter` загружается по умолчанию. `DLNA` исключён в starter `example.init.conf`, не в `base.conf`.
 
 > [!WARNING]
-> Модули **DLNA**, **Tracks**, **Transcoding**, **GStreamer** и **Catalog** не выполняют экранирование входящих запросов. Не включайте их на публично доступном VPS без ограничения доступа через firewall или reverse proxy.
+> Модули **DLNA**, **Tracks**, **Transcoding**, **GStreamer** и **Catalog** не экранируют входящие запросы как публичный API. Не открывайте их в интернет без firewall, reverse proxy и аутентификации.
 
-| Модуль | По умолч. | Описание |
-| --- | :---: | --- |
-| **Online** | ✅ | VOD-ядро: плагин `/online.js`, агрегатор `/lite/*`. Провайдеры в `Modules/Online*/`. WAF: 10 req/s. [README](Online/README.md) |
-| **SISI** | ✅ | 18+: плагин `/sisi.js`, SQLite (история, закладки). Платформы в `Modules/Adult/*`. [README](SISI/README.md) |
-| **LampaWeb** | ✅ | Хостинг Lampa UI. Виджеты `/samsung.wgt`, `/lg.ipk`. Авто-обновление с GitHub каждые 90 мин. [README](Modules/LampaWeb/README.md) |
-| **TorrServer** | ✅ | Управление процессом TorrServer, прокси `/ts/`. Случайный пароль за сессию. |
-| **JacRed** | ✅ | Агрегатор торрент-индексаторов (Rutor, Kinozal, RuTracker, NNMClub, Toloka, Bitru и др.). |
-| **NextHUB** | ✅ | 18+ витрина на YAML (`Modules/NextHUB/sites/`). Маршрут `/nexthub`. WAF: 5 req/s. [README](Modules/NextHUB/README.md) |
-| **TmdbProxy** | ✅ | Локальный кеш TMDB API (`cache/tmdb/`). |
-| **CubProxy** | ✅ | HTTP/HTTPS прокси с файловым кешем (`cache/cub/`). |
-| **TimeCode** | ✅ | Сохранение и восстановление позиции воспроизведения. SQLite. |
-| **Kit** | ✅ | Шифрование потоков (CryptoKit), конфиг `kit` в `init.conf`. |
-| **PidTor** | ✅ | Источник PidTor, маршрут `/lite/pidtor`. |
-| **Catalog** | ⛔ | Браузер каталогов из YAML (`sites/`). Маршрут `/catalog/`. Только в доверенной сети. |
-| **DLNA** | ⛔ | DLNA/UPnP медиасервер. Форматы: mp4, mkv, ts, webm, avi, flac и др. Только в доверенной сети. |
-| **Sync** | ✅ | Синхронизация закладок и истории. Эндпоинты `/storage/`, `/bookmark/`. SQLite. Отключение: добавьте `Sync` в `SkipModules`. |
-| **SyncEvents** | ✅ | Трансляция событий синхронизации через WebSocket (NwsEvents). Отключение: `SyncEvents` в `SkipModules`. |
-| **Storage** | ✅ | Хранилище данных для Sync, NWS (`onlyreg`). Отключение: `Storage` в `SkipModules`. |
-| **Tracks** | ⛔ | Субтитры и дорожки (`database/tracks/`), интеграция FFprobe (`/ffprobe`). Только в доверенной сети. |
-| **Transcoding** | ⛔ | HLS/DASH транскодинг FFmpeg. До 5 потоков, таймаут 5 мин. `cache/transcoding/`. Legacy — предпочтительнее **GStreamer**. |
-| **GStreamer** | ✅ | HLS/fMP4 транскодинг через GStreamer. Плагин `/gst.js`, API `/gst/*`. Включите `gst.enable` в `init.conf`. [README](Modules/GStreamer/README.md) |
-| **WebLog** | ⛔ | Страница `/weblog`: поток HTTP и Playwright-событий через WebSocket. Требует пароль root. Не включайте публично. |
-| **CacheMedia** | ⛔ | Кеширование потоков SISI (события `ProxyApiCacheStream` для отдельных платформ). |
-| **ProxyLimiter** | ⛔ | Лимиты параллельных запросов к медиапрокси для SISI. Конфиг `ProxyLimiter`. [README](Modules/Proxy/ProxyLimiter/README.md) |
-| **ForkPlayerXML** | ⛔ | ForkPlayer: плейлисты `/fxml`, редирект `/` для клиента ForkPlayer. [README](Modules/ForkPlayerXML/README.md) |
-| **MsxNative** | ⛔ | MSX/MS X: адаптация Sisi и доступ при `accsdb`. [README](Modules/MsxNative/README.md) |
-| **WatchTogether** | ⛔ | Синхронный просмотр (WebSocket-комнаты). |
-| **AdminPanel** | ⛔ (manifest) | Веб-админка и JSON API (`/adminpanel/`). `"enable": false` в [manifest.json](Modules/AdminPanel/manifest.json). |
-| **ExternalBind** | ⛔ (manifest) | Привязка Lite/Online для удалённых URL (FilmixPro, Rezka, KinoPub). [README](Modules/ExternalBind/README.md) |
-| **TelegramAuth** | ⛔ | HTTP API `/tg/auth/…`, интеграция с accsdb. [README](Modules/Community/TelegramAuth/README.md) |
-| **TelegramAuthBot** | ⛔ | Telegram-бот для привязки устройств (long polling). [README](Modules/Community/TelegramAuthBot/README.md) |
-| **Tg-notify.bot** | ⛔ (manifest) | Telegram-уведомления о сериях и озвучках. Плагин `/tg-notify.js`, API `/api/tg/*`. [README](Modules/Tg-notify.bot/README.md) |
+| Модуль | Маршруты | Подробнее |
+| --- | --- | --- |
+| Online | `/online.js`, `/lite/*` | [docs](https://docs.lampac.dev/modules/online) |
+| SISI | `/sisi.js` | [docs](https://docs.lampac.dev/modules/sisi) |
+| LampaWeb | `/`, `/samsung.wgt`, `/lg.ipk` | [docs](https://docs.lampac.dev/modules/lampa-web) |
+| GStreamer | `/gst.js`, `/gst/*` | [docs](https://docs.lampac.dev/modules/gstreamer) |
+| TorrServer | `/ts.js`, `/ts/*` | [docs](https://docs.lampac.dev/modules/torrserver) |
+| JacRed | `/api/v1.0/*`, `/api/v2.0/*` | [docs](https://docs.lampac.dev/modules/jacred) |
+| Sync / Storage / TimeCode | `/sync.js`, `/storage/*`, `/timecode/*` | [docs](https://docs.lampac.dev/modules/sync) |
+| PidTor | `/lite/pidtor` | [docs](https://docs.lampac.dev/modules/pidtor) |
 
-<details>
-<summary><strong>Пользовательские модули</strong></summary>
-
-Создайте подкаталог в `mods/` с `manifest.json` и `.cs`-файлами — Roslyn скомпилирует при запуске:
-
-```json
-{
-  "name": "MyModule",
-  "description": "Описание модуля",
-  "version": "1.0",
-  "enable": true,
-  "dynamic": true
-}
-```
-
-`dynamic: true` — горячая пересборка при изменении `.cs` файлов без перезапуска сервера. Ориентируйтесь на примеры в `Modules/*/manifest.json`.
-
-</details>
+Пользовательские модули: каталог `mods/` с `manifest.json`. [Инструкция](https://docs.lampac.dev/maintenance/custom-modules).
 
 ---
 
 ## Провайдеры контента
 
-<details>
-<summary><strong>VOD — онлайн-кино</strong></summary>
+Группы: OnlineRUS (22), OnlinePaid (9), OnlineAnime (13), OnlineENG (10), OnlineUKR (8), OnlineGEO (3), Adult/SISI. Premium Rezka — флаг `Rezka.premium`, не отдельный модуль `RezkaPremium`.
 
-| Провайдер | Группа | Примечания |
-| --- | --- | --- |
-| `Alloha` | OnlinePaid | |
-| `CDNvideohub` | OnlineRUS | |
-| `Collaps` | OnlineRUS | Включая DASH-вариант |
-| `FanCDN` | OnlineRUS | |
-| `Filmix` | OnlinePaid | FilmixPartner, FilmixTV варианты |
-| `FlixCDN` | OnlineRUS | |
-| `GetsTV` | OnlinePaid | |
-| `HDVB` | OnlineRUS | |
-| `IptvOnline` | OnlinePaid | |
-| `iRemux` | OnlinePaid | |
-| `Kinobase` | OnlineRUS | |
-| `Kinogo` | OnlineRUS | |
-| `Kinotochka` | OnlineRUS | |
-| `Kinoflix` / `AsiaGe` / `Geosaitebi` | OnlineGEO | |
-| `KinoPub` | OnlinePaid | Требует токен |
-| `LeProduction` | OnlineRUS | |
-| `Mirage` | OnlineRUS | |
-| `Phantom` | OnlineRUS | |
-| `PiTor` | Online | Стриминг через торрент |
-| `PizdatoeHD` | OnlineRUS | |
-| `Rezka` / `RezkaPremium` | OnlinePaid | |
-| `RutubeMovie` | OnlineRUS | |
-| `SakhTV` | OnlinePaid | |
-| `Spectre` | OnlineRUS | |
-| `VeoVeo` | OnlineRUS | Офлайн БД `data/veoveo.json` |
-| `Vibix` | OnlineRUS | |
-| `VideoDB` / `Videoseed` | OnlineRUS | Маршруты `/lite/videodb`, `/lite/videoseed` |
-| `VkMovie` | OnlineRUS | |
-| `VoKino` | OnlinePaid | |
-| `Zetflix` / `ZetflixDB` | OnlineRUS | |
-
-</details>
-
-<details>
-<summary><strong>Аниме (12 источников)</strong></summary>
-
-| Провайдер | Сервис |
-| --- | --- |
-| `AniLiberty` | AniLiberty |
-| `AniLibria` | AniLibria |
-| `AniMedia` | AniMedia |
-| `AnimeGo` | AnimeGo |
-| `AnimeLib` | AnimeLib |
-| `Animebesst` | AnimeBesst |
-| `Animevost` | Animevost |
-| `Dreamerscast` | Dreamerscast |
-| `Kodik` | Kodik (универсальный, VOD + аниме) |
-| `Mikai` | Mikai |
-| `MoonAnime` | MoonAnime |
-| `AnimeON` | AnimeON |
-
-</details>
-
-<details>
-<summary><strong>Англоязычный контент (10 источников)</strong></summary>
-
-| Провайдер | Сервис |
-| --- | --- |
-| `AutoEmbed` | AutoEmbed |
-| `HydraFlix` | HydraFlix |
-| `MovPI` | MovPI |
-| `PlayEmbed` | PlayEmbed |
-| `RgShows` | RgShows |
-| `SmashyStream` | SmashyStream |
-| `TwoEmbed` | TwoEmbed |
-| `VidLink` | VidLink |
-| `VidSrc` | VidSrc |
-| `Videasy` | Videasy |
-
-</details>
-
-<details>
-<summary><strong>Украинские CDN (8 источников)</strong></summary>
-
-| Провайдер | Сервис |
-| --- | --- |
-| `Ashdi` | Ashdi |
-| `BamBoo` | BamBoo |
-| `Eneyida` | Eneyida |
-| `HdvbUA` | HDVB (UA) |
-| `Kinoukr` | KinoUkr (офлайн БД `data/kinoukr.json`, ~130k записей) |
-| `Tortuga` | Tortuga |
-| `UAFilm` | UAFilm |
-| `UaKino` | UaKino |
-
-</details>
-
-<details>
-<summary><strong>SISI — контент 18+ (15 платформ)</strong></summary>
-
-| Платформа | Маршруты |
-| --- | --- |
-| BongaCams | `/bgs` |
-| Chaturbate | `/chu` |
-| Ebalovo | `/elo` |
-| Eporner | `/epr` |
-| HQporner | `/hqr` |
-| PornHub | `/phub`, `/phubgay`, `/phubsml` |
-| PornHubPremium | `/phubprem` |
-| Porntrex | `/ptx` |
-| Runetki | `/runetki` |
-| Spankbang | `/sbg` |
-| Tizam | `/tizam` |
-| Xhamster | `/xmr`, `/xmrgay`, `/xmrsml` |
-| Xnxx | `/xnx` |
-| Xvideos | `/xds`, `/xdsgay`, `/xdssml` |
-| XvideosRED | `/xdsred` |
-
-</details>
-
-<details>
-<summary><strong>NextHUB — витрина 18+ на YAML</strong></summary>
-
-Модуль **NextHUB** — витрина сайтов 18+ по YAML-описаниям из `Modules/NextHUB/sites/` (имя файла без расширения = значение параметра `plugin` в URL).
-
-- **Маршрут:** `GET /nexthub?plugin=<name>` — параметры: `plugin` (обязателен), опционально `search`, `sort`, `cat`, `model`, `pg`
-- **Конфиг:** `NextHUB.sites_enabled` — если задан, допускает только плагины, имя которых содержится в строке (например `pornhub,beeg`)
-- **Переопределения:** `Modules/NextHUB/override/{plugin}.yaml` или `_.yaml` — слияние поверх базового YAML
-- **WAF:** лимит 5 req/s на `/nexthub`
-
-[Подробнее — README](Modules/NextHUB/README.md)
-
-</details>
+Таблицы источников: [docs.lampac.dev/providers/overview](https://docs.lampac.dev/providers/overview).
 
 ---
 
 ## API
 
-<details>
-<summary><strong>Core</strong></summary>
+Ручной справочник (без OpenAPI): [docs.lampac.dev/api/overview](https://docs.lampac.dev/api/overview).
 
-| Метод | Путь | Описание |
-| --- | --- | --- |
-| `GET` | `/version` | Версия сервера |
-| `GET` | `/api/headers` | Заголовки текущего запроса |
-| `GET` | `/api/geo[?ip=]` | GeoIP-локация IP-адреса |
-| `GET` | `/api/myip` | IP-адрес клиента |
-| `GET` | `/api/chromium/ping` | Пинг Playwright (`pong`) |
-| `POST` | `/rch/result?id=` | RCH-реле: запись результата (макс. 10 МБ) |
-| `POST` | `/rch/gzresult?id=` | RCH-реле: запись gzip-результата (макс. 10 МБ) |
-| `WS` | `/ws` | NativeWebSocket для RCH push |
-| `GET` | `/stats/gc` | Память: heap, WorkingSet, PrivateMemory |
-| `GET` | `/stats/request` | Счётчики запросов, активные соединения, топ медленных путей |
-| `GET` | `/stats/tempdb` | Кеши и пулы буферов |
-| `GET` | `/stats/threadpool` | Диагностика ThreadPool |
-| `GET` | `/stats/browser/context` | Состояние Playwright (контексты, счётчики) |
+| Назначение | Примеры |
+| --- | --- |
+| Плагины Lampa | `GET /online.js`, `GET /sisi.js`, `GET /gst.js` |
+| Здоровье | `GET /version?type=hash`, `GET /api/chromium/ping` |
+| RCH | `WS /nws` (не `/ws`) |
+| Online | `GET /lite/{provider}`, `GET /externalids` |
+| Sync | `GET/POST /bookmark/*`, `GET/POST /storage/*` |
+| JacRed | `GET /api/v2.0/indexers/{status}/results` |
 
-> `/stats/*` (кроме `/stats/gc`) доступны только при `openstat.enable: true`.
-
-</details>
-
-<details>
-<summary><strong>Online / SISI / Модули</strong></summary>
-
-**Online (VOD)**
-
-| Метод | Путь | Описание |
-| --- | --- | --- |
-| `GET` | `/online.js` | Lampa VOD-плагин (Lampa 3.0) |
-| `GET` | `/online/js/{token}` | Плагин с авторизацией по токену |
-| `GET` | `/lite/{provider}` | Список источников от провайдера |
-| `GET` | `/externalids` | Маппинг ID (TMDB ↔ KinoPoisk и т.д.) |
-| `GET` | `/lifeevents` | SSE-поток событий здоровья провайдеров |
-
-**SISI (18+)**
-
-| Метод | Путь | Описание |
-| --- | --- | --- |
-| `GET` | `/sisi.js` | Lampa SISI-плагин (Lampa 3.0) |
-| `GET` | `/sisi/js/{token}` | Плагин с авторизацией по токену |
-| `GET` | `/{provider}` | Контент платформы (напр. `/phub`, `/xnx`) |
-| `GET` | `/sisi/bookmark` | Управление закладками |
-| `GET` | `/sisi/history` | История просмотров |
-
-**Модули**
-
-| Метод | Путь | Описание |
-| --- | --- | --- |
-| `GET` | `/catalog/{site}/…` | Каталог сайтов |
-| `GET` | `/dlna/…` | DLNA медиасервер |
-| `GET` | `/storage/…` | Хранилище Sync |
-| `GET` | `/bookmark/…` | Закладки Sync |
-| `GET` | `/timecode/…` | Позиции воспроизведения |
-| `GET` | `/tmdb/…` | TMDB прокси/кеш |
-| `GET` | `/transcoding/…` | HLS/DASH транскодинг (legacy FFmpeg) |
-| `GET` | `/gst.js` | GStreamer: плагин Lampa для серверного транскодинга |
-| `GET` | `/gst/add` | GStreamer: создать задачу транскодинга |
-| `GET` | `/gst/{id}/master.m3u8` | GStreamer: HLS-плейлист задачи |
-| `GET` | `/samsung.wgt` | LampaWeb: виджет Samsung Tizen (`?tizen=3` — сборка без фонового сервиса для Tizen 3.0 и ниже) |
-| `GET` | `/lg.ipk` | LampaWeb: виджет LG webOS |
-| `GET` | `/tg-notify.js` | Tg-notify.bot: плагин Telegram-подписок |
-| `GET` | `/api/tg/voices` | Tg-notify.bot: список озвучек (Mirage + Collaps) |
-| `POST` | `/api/tg/subscribe` | Tg-notify.bot: подписка на сериал/озвучку |
-| `POST` | `/api/tg/unsubscribe` | Tg-notify.bot: отписка |
-| `GET` | `/api/tg/status` | Tg-notify.bot: статус подписки |
-| `GET` | `/api/tg/link` | Tg-notify.bot: deep-link привязки Telegram |
-| `GET` | `/api/tg/subscriptions` | Tg-notify.bot: список подписок пользователя |
-| `GET` | `/ffprobe` | Метаданные дорожек (FFprobe) |
-| `GET` | `/nexthub` | NextHUB: браузер 18+ по YAML |
-| `GET` | `/nexthub/vidosik` | NextHUB: просмотр элемента (`uri`, `related`) |
-| `GET` | `/ts/…` | TorrServer |
-| `GET` | `/weblog` | Отладка HTTP/Playwright в реальном времени |
-| `GET` | `/fxml` … | ForkPlayer: JSON/XML-плейлисты (**ForkPlayerXML**, см. модуль [`Modules/ForkPlayerXML/README.md`](Modules/ForkPlayerXML/README.md)) |
-
-</details>
+`/stats/*` (кроме `/stats/gc`) доступны только при `openstat.enable: true`.
 
 ---
 
 ## Архитектура
+
+Схема слоёв и middleware: [docs.lampac.dev/architecture/overview](https://docs.lampac.dev/architecture/overview), [middleware](https://docs.lampac.dev/architecture/middleware).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -851,19 +479,12 @@ cd publish && dotnet Core.dll
 <details>
 <summary><strong>Загрузка модулей, Roslyn и middleware</strong></summary>
 
-**Загрузка модулей:**
-
-Скомпилированные сборки загружаются из `runtimes/references/`. Исходники модулей из `module/` и `mods/` компилирует **Roslyn** (`CSharpEval`) при запуске — это даёт горячую подгрузку и пользовательские оверлеи.
-
-Порядок загрузки:
+Скомпилированные сборки загружаются из `runtimes/references/`. Исходники из `module/` и `mods/` компилирует **Roslyn** (`CSharpEval`) при запуске.
 
 1. Сначала `mods/` (пользовательские), затем `module/` (встроенные)
-2. Фильтрация: `SkipModules`, `LoadModules` (regex/имя/группа), флаг `enable` в manifest.json
-3. `dynamic: true` → горячая пересборка при изменении `.cs` файлов
-4. `IModuleConfigure.Configure` → регистрация в DI
-5. `IModuleLoaded.Loaded` → вызов после старта приложения
-
-**Middleware Pipeline:**
+2. Фильтрация: `SkipModules`, `LoadModules`, флаг `enable` в `manifest.json`
+3. `dynamic: true` → горячая пересборка при изменении `.cs`
+4. `IModuleConfigure.Configure` → DI, затем `IModuleLoaded.Loaded`
 
 ```
 ForwardedHeaders → BaseMod → ModHeaders → RequestInfo
@@ -871,8 +492,6 @@ ForwardedHeaders → BaseMod → ModHeaders → RequestInfo
   → ProxyImg → StaticFiles → WAF → Authorization
   → Accsdb → Controllers
 ```
-
-**Конфигурация:**
 
 - `init.conf` / `init.yaml` — основной конфиг
 - `base.conf` — дефолты (fallback)
@@ -945,11 +564,11 @@ lampac/
 │   ├── LampacApk/              # Генератор Android APK под адрес сервера
 │   ├── LampaWeb/               # Хостинг Lampa UI
 │   ├── NextHUB/                # 18+ витрина на YAML, sites/*.yaml
-│   ├── OnlineAnime/            # 12 аниме-источников
+│   ├── OnlineAnime/            # 13 аниме-источников
 │   ├── OnlineENG/              # 10 англоязычных источников
 │   ├── OnlineGEO/              # 3 грузинских источника
 │   ├── OnlinePaid/             # 9 платных VOD-источников
-│   ├── OnlineRUS/              # 21 российский CDN
+│   ├── OnlineRUS/              # 22 российских CDN
 │   ├── OnlineUKR/              # 8 украинских источников
 │   ├── PidTor/                 # PidTor источник
 │   ├── Proxy/                  # CubProxy, TmdbProxy, CacheMedia, CorsMedia, Corseu, ProxyLimiter
@@ -960,6 +579,7 @@ lampac/
 │   ├── Transcoding/            # FFmpeg транскодинг
 │   ├── WatchTogether/          # Синхронный просмотр
 │   └── WebLog/                 # Отладочный лог HTTP/Playwright
+├── docs/                       # Mintlify: docs.lampac.dev
 ├── TestModules/                # Примеры модулей → mods/ при publish
 ├── config/
 │   ├── base.conf               # Дефолтные значения
@@ -984,10 +604,10 @@ lampac/
 
 | Документ | О чём |
 | --- | --- |
-| [docs/](docs/index.html) | Веб-документация: установка, конфигурация, модули, API, changelog |
+| [docs.lampac.dev](https://docs.lampac.dev) | Mintlify: установка, конфигурация, модули, провайдеры, API |
 | [Core/README.md](Core/README.md) | `Program`/`Startup`, middleware, загрузка `module/` и `mods/` |
 | [Shared/README.md](Shared/README.md) | `CoreInit`, контроллеры, `CSharpEval`, кеш, HTTP, Playwright |
-| [Online/README.md](Online/README.md) | VOD-ядро, `/online.js`, `/lite/`, PiTor, Externalids |
+| [Online/README.md](Online/README.md) | VOD-ядро, `/online.js`, `/lite/`, PidTor, Externalids |
 | [SISI/README.md](SISI/README.md) | 18+-ядро, платформы `Modules/Adult/*`, таблица маршрутов |
 | [Modules/NextHUB/README.md](Modules/NextHUB/README.md) | YAML-сайты, `/nexthub`, конфиг, WAF |
 | [Modules/Community/README.md](Modules/Community/README.md) | Telegram-авторизация, клиент Lampa, API |
@@ -1001,5 +621,3 @@ lampac/
 | [charts/lampac/README.md](charts/lampac/README.md) | Helm-чарт для Kubernetes (`ghcr.io/lampac-nextgen/lampac`) |
 
 ---
-
-[![Star History Chart](https://api.star-history.com/svg?repos=lampac-nextgen/lampac&type=Date)](https://star-history.com/#lampac-nextgen/lampac&Date)

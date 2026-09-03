@@ -1,0 +1,48 @@
+---
+import { Image } from "astro:assets";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { DEEPWIKI, DOCS, GHCR, GITHUB, TELEGRAM, t, type Lang } from "../i18n/ui";
+import logoMark from "../assets/logo-mark.png";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const home = getRelativeLocaleUrl(lang);
+---
+
+<footer aria-label={t(lang, "footerAria")}>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="footer-logo" href={home}>
+          <Image src={logoMark} alt="" width={32} height={32} densities={[1, 2]} />
+          Lampac NextGen
+        </a>
+        <p>{t(lang, "footerBlurb")}</p>
+        <a class="footer-docs" href={DOCS}>docs.lampac.dev</a>
+      </div>
+      <nav class="footer-group" aria-labelledby="footer-product">
+        <h3 id="footer-product">{t(lang, "footerProduct")}</h3>
+        <a href={DOCS}>{t(lang, "navDocs")}</a>
+        <a href={`${DOCS}/quickstart`}>{t(lang, "ctaQuick")}</a>
+        <a href={`${DOCS}/modules/overview`}>{t(lang, "d3t")}</a>
+        <a href={`${DOCS}/api/overview`}>{t(lang, "d4t")}</a>
+        <a href={`${GITHUB}/releases`} target="_blank" rel="noopener">{t(lang, "footerReleases")}</a>
+      </nav>
+      <nav class="footer-group" aria-labelledby="footer-community">
+        <h3 id="footer-community">{t(lang, "footerCommunity")}</h3>
+        <a href={GITHUB} target="_blank" rel="noopener">{t(lang, "linkGithub")}</a>
+        <a href={`${GITHUB}/issues`} target="_blank" rel="noopener">{t(lang, "footerIssues")}</a>
+        <a href={TELEGRAM} target="_blank" rel="noopener">{t(lang, "linkTelegram")}</a>
+        <a href={DEEPWIKI} target="_blank" rel="noopener">DeepWiki</a>
+        <a href={GHCR} target="_blank" rel="noopener">GHCR</a>
+      </nav>
+    </div>
+    <p class="footer-legal">
+      <span>{t(lang, "footerLicense")}</span>
+      <a href={`${GITHUB}/blob/main/LICENSE`} target="_blank" rel="noopener">{t(lang, "license")}</a>
+    </p>
+  </div>
+</footer>
