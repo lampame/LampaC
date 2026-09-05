@@ -12,8 +12,8 @@
     "library": "lucide"
   },
   "logo": {
-    "light": "/assets/logo-light.png",
-    "dark": "/assets/logo-dark.png",
+    "light": "/assets/logo-mark.png",
+    "dark": "/assets/logo-mark.png",
     "href": "/"
   },
   "favicon": "/assets/favicon.png",

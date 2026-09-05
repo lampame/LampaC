@@ -1,40 +1,113 @@
 ---
+# Dependabot version updates for all dependency ecosystems in this repository.
+#
+# Covered manifests:
+#   - *.csproj / NextGen.slnx                                    (nuget)
+#   - site/package.json, site/package-lock.json                  (npm)
+#   - Dockerfile                                                 (docker)
+#   - .github/workflows/*.yml                                    (github-actions)
+#
+# docker-compose*.yaml is intentionally excluded: images use unpinned
+# GHCR tags, which Dependabot cannot meaningfully bump.
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
-
-  - package-ecosystem: "npm"
-    directory: "/site"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-
+  # ── .NET / NuGet ──────────────────────────────────────────────────────────
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+      - ".NET"
     groups:
-      nuget-non-major:
+      dotnet-minor-patch:
         update-types:
           - "minor"
           - "patch"
+      dotnet-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     commit-message:
-      prefix: "chore"
-      include: "scope"
+      prefix: "deps(dotnet)"
 
+  # ── Site (Astro / TypeScript) ─────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+    # Stay on TypeScript 7 until the toolchain supports a newer major.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+    groups:
+      web-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      web-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(web)"
+
+  # ── Docker base images (Dockerfile) ───────────────────────────────────────
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    groups:
+      docker-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      docker-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     commit-message:
-      prefix: "chore"
+      prefix: "deps(docker)"
+
+  # ── GitHub Actions (workflows + reusable workflows) ───────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+      - "github_actions"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
       include: "scope"
