@@ -10,7 +10,43 @@ public static class MusicImageProxyService
         plugin = "Music"
     };
 
-    public static MusicSearchResponse Apply(BaseController controller, MusicSearchResponse response)
+    // Cached DTOs (including nested images) can be shared by concurrent requests.
+    // Rewrite only a response-owned copy, never the provider/cache object graph.
+    public static T Apply<T>(BaseController controller, T response)
+    {
+        if (controller == null || response == null)
+            return response;
+
+        var copy = MusicJson.Deserialize<T>(MusicJson.Serialize(response));
+        ApplyImages(controller, (object)copy);
+        return copy;
+    }
+
+    static void ApplyImages(BaseController controller, object response)
+    {
+        switch (response)
+        {
+            case MusicSearchResponse search: ApplyImages(controller, search); break;
+            case MusicHomeResponse home: ApplyImages(controller, home); break;
+            case MusicStatsTopResult stats: ApplyImages(controller, stats); break;
+            case MusicArtist artist: ApplyImages(controller, artist); break;
+            case MusicAlbum album: ApplyImages(controller, album); break;
+            case MusicTrack track: ApplyImages(controller, track); break;
+            case MusicBrowseSection section: ApplyImages(controller, section); break;
+            case MusicUserPlaylistSummary playlist: ApplyImages(controller, playlist); break;
+            case MusicUserPlaylistImportResult import: ApplyImages(controller, import.tracks); break;
+            case MusicDailyMixResponse daily: ApplyImages(controller, daily.tracks); break;
+            case MusicRadioResponse radio: ApplyImages(controller, radio.tracks); break;
+            case IEnumerable<MusicTrack> tracks:
+                foreach (var item in tracks) ApplyImages(controller, item);
+                break;
+            case IEnumerable<MusicUserPlaylistSummary> playlists:
+                foreach (var item in playlists) ApplyImages(controller, item);
+                break;
+        }
+    }
+
+    static MusicSearchResponse ApplyImages(BaseController controller, MusicSearchResponse response)
     {
         if (controller == null || response == null)
             return response;
@@ -18,31 +54,31 @@ public static class MusicImageProxyService
         if (response.artists != null)
         {
             foreach (var artist in response.artists)
-                Apply(controller, artist);
+                ApplyImages(controller, artist);
         }
 
         if (response.albums != null)
         {
             foreach (var album in response.albums)
-                Apply(controller, album);
+                ApplyImages(controller, album);
         }
 
         if (response.tracks != null)
         {
             foreach (var track in response.tracks)
-                Apply(controller, track);
+                ApplyImages(controller, track);
         }
 
         if (response.search_sections != null)
         {
             foreach (var section in response.search_sections)
-                Apply(controller, section);
+                ApplyImages(controller, section);
         }
 
         return response;
     }
 
-    public static MusicHomeResponse Apply(BaseController controller, MusicHomeResponse response)
+    static MusicHomeResponse ApplyImages(BaseController controller, MusicHomeResponse response)
     {
         if (controller == null || response == null)
             return response;
@@ -50,7 +86,7 @@ public static class MusicImageProxyService
         if (response.browse_sections != null)
         {
             foreach (var section in response.browse_sections)
-                Apply(controller, section);
+                ApplyImages(controller, section);
         }
 
         if (response.recently_played != null)
@@ -58,20 +94,20 @@ public static class MusicImageProxyService
             foreach (var item in response.recently_played)
             {
                 if (item?.track != null)
-                    Apply(controller, item.track);
+                    ApplyImages(controller, item.track);
             }
         }
 
         if (response.user_playlists != null)
         {
             foreach (var playlist in response.user_playlists)
-                Apply(controller, playlist);
+                ApplyImages(controller, playlist);
         }
 
         return response;
     }
 
-    public static MusicUserPlaylistSummary Apply(BaseController controller, MusicUserPlaylistSummary playlist)
+    static MusicUserPlaylistSummary ApplyImages(BaseController controller, MusicUserPlaylistSummary playlist)
     {
         if (controller == null || playlist == null)
             return playlist;
@@ -80,7 +116,7 @@ public static class MusicImageProxyService
         return playlist;
     }
 
-    public static MusicStatsTopResult Apply(BaseController controller, MusicStatsTopResult response)
+    static MusicStatsTopResult ApplyImages(BaseController controller, MusicStatsTopResult response)
     {
         if (controller == null || response == null)
             return response;
@@ -90,14 +126,14 @@ public static class MusicImageProxyService
             foreach (var item in response.tracks)
             {
                 if (item?.track != null)
-                    Apply(controller, item.track);
+                    ApplyImages(controller, item.track);
             }
         }
 
         return response;
     }
 
-    public static MusicArtist Apply(BaseController controller, MusicArtist artist)
+    static MusicArtist ApplyImages(BaseController controller, MusicArtist artist)
     {
         if (controller == null || artist == null)
             return artist;
@@ -107,19 +143,19 @@ public static class MusicImageProxyService
         if (artist.albums != null)
         {
             foreach (var album in artist.albums)
-                Apply(controller, album);
+                ApplyImages(controller, album);
         }
 
         if (artist.sections != null)
         {
             foreach (var section in artist.sections)
-                Apply(controller, section);
+                ApplyImages(controller, section);
         }
 
         return artist;
     }
 
-    public static MusicAlbum Apply(BaseController controller, MusicAlbum album)
+    static MusicAlbum ApplyImages(BaseController controller, MusicAlbum album)
     {
         if (controller == null || album == null)
             return album;
@@ -129,13 +165,13 @@ public static class MusicImageProxyService
         if (album.tracks != null)
         {
             foreach (var track in album.tracks)
-                Apply(controller, track);
+                ApplyImages(controller, track);
         }
 
         return album;
     }
 
-    public static MusicTrack Apply(BaseController controller, MusicTrack track)
+    static MusicTrack ApplyImages(BaseController controller, MusicTrack track)
     {
         if (controller == null || track == null)
             return track;
@@ -144,7 +180,7 @@ public static class MusicImageProxyService
         return track;
     }
 
-    public static MusicBrowseSection Apply(BaseController controller, MusicBrowseSection section)
+    static MusicBrowseSection ApplyImages(BaseController controller, MusicBrowseSection section)
     {
         if (controller == null || section == null)
             return section;
@@ -152,19 +188,19 @@ public static class MusicImageProxyService
         if (section.albums != null)
         {
             foreach (var album in section.albums)
-                Apply(controller, album);
+                ApplyImages(controller, album);
         }
 
         if (section.artists != null)
         {
             foreach (var artist in section.artists)
-                Apply(controller, artist);
+                ApplyImages(controller, artist);
         }
 
         if (section.tracks != null)
         {
             foreach (var track in section.tracks)
-                Apply(controller, track);
+                ApplyImages(controller, track);
         }
 
         return section;
@@ -184,12 +220,7 @@ public static class MusicImageProxyService
             if (image.url.StartsWith("//", StringComparison.Ordinal))
                 image.url = "https:" + image.url;
 
-            // кэши секций/сущностей шарят инстансы между запросами, а Apply
-            // мутирует url на месте — хост ПЕРВОГО запросившего запекался в
-            // кэш навсегда (живой баг: SC-полка с 127.0.0.1 после curl-тестов
-            // с хоста — на телефоне все обложки битые). Уже проксированный
-            // url переписываем на хост текущего запроса: токен proxyimg от
-            // хоста не зависит (проверено живьём)
+            // Also repair legacy cached URLs created before response isolation.
             if (TryRewriteProxyHost(image.url, controller.host, out string rewritten))
             {
                 image.url = rewritten;

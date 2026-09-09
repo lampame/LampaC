@@ -71,7 +71,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicCatalogService.GetHomeAsync(profileId, daily_salt ?? 0);
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 
@@ -81,8 +81,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicUserPlaylistService.ListAsync(profileId, HttpContext.RequestAborted);
-        foreach (var playlist in result)
-            MusicImageProxyService.Apply(this, playlist);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(new { available = true, playlists = result }));
     }
@@ -93,8 +92,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var tracks = await MusicUserPlaylistService.GetTracksAsync(profileId, id, HttpContext.RequestAborted);
-        foreach (var track in tracks)
-            MusicImageProxyService.Apply(this, track);
+        tracks = MusicImageProxyService.Apply(this, tracks);
 
         return ContentTo(MusicJson.Serialize(new { available = true, playlist_id = id, tracks }));
     }
@@ -124,8 +122,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicUserPlaylistService.ImportAsync(profileId, url, HttpContext.RequestAborted);
-        foreach (var track in result?.tracks ?? new List<MusicTrack>())
-            MusicImageProxyService.Apply(this, track);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(result));
     }
@@ -136,8 +133,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicUserPlaylistService.SyncAsync(profileId, id, HttpContext.RequestAborted);
-        foreach (var track in result?.tracks ?? new List<MusicTrack>())
-            MusicImageProxyService.Apply(this, track);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(result));
     }
@@ -160,7 +156,7 @@ public class ApiController : BaseController
         bool saved = await MusicUserPlaylistService.AddTrackAsync(profileId, id, parsed, HttpContext.RequestAborted);
         var playlist = saved ? await MusicUserPlaylistService.GetSummaryAsync(profileId, id, HttpContext.RequestAborted) : null;
         if (playlist != null)
-            MusicImageProxyService.Apply(this, playlist);
+            playlist = MusicImageProxyService.Apply(this, playlist);
 
         return ContentTo(MusicJson.Serialize(new { saved, playlist_id = id, playlist }));
     }
@@ -173,7 +169,7 @@ public class ApiController : BaseController
         bool removed = await MusicUserPlaylistService.RemoveTrackAsync(profileId, id, track_id, HttpContext.RequestAborted);
         var playlist = removed ? await MusicUserPlaylistService.GetSummaryAsync(profileId, id, HttpContext.RequestAborted) : null;
         if (playlist != null)
-            MusicImageProxyService.Apply(this, playlist);
+            playlist = MusicImageProxyService.Apply(this, playlist);
 
         return ContentTo(MusicJson.Serialize(new { removed, playlist_id = id, track_id, playlist }));
     }
@@ -186,7 +182,7 @@ public class ApiController : BaseController
         bool moved = await MusicUserPlaylistService.MoveTrackAsync(profileId, id, track_id, position, HttpContext.RequestAborted);
         var playlist = moved ? await MusicUserPlaylistService.GetSummaryAsync(profileId, id, HttpContext.RequestAborted) : null;
         if (playlist != null)
-            MusicImageProxyService.Apply(this, playlist);
+            playlist = MusicImageProxyService.Apply(this, playlist);
 
         return ContentTo(MusicJson.Serialize(new { moved, playlist_id = id, track_id, position, playlist }));
     }
@@ -198,8 +194,7 @@ public class ApiController : BaseController
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicDailyMixService.GetMixAsync(profileId, day, salt ?? 0, HttpContext.RequestAborted);
 
-        foreach (var track in result?.tracks ?? new List<MusicTrack>())
-            MusicImageProxyService.Apply(this, track);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(result));
     }
@@ -210,7 +205,7 @@ public class ApiController : BaseController
     {
         string profileId = MusicProfileIdentity.Resolve(requestInfo, Request);
         var result = await MusicStatsService.GetTopAsync(profileId, limit ?? 30, HttpContext.RequestAborted);
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(result));
     }
@@ -259,8 +254,7 @@ public class ApiController : BaseController
             exclude = parseTracks(exclude, maxExclude)
         }, limit ?? 20, HttpContext.RequestAborted);
 
-        foreach (var track in result?.tracks ?? new List<MusicTrack>())
-            MusicImageProxyService.Apply(this, track);
+        result = MusicImageProxyService.Apply(this, result);
 
         return ContentTo(MusicJson.Serialize(result));
     }
@@ -295,7 +289,7 @@ public class ApiController : BaseController
         if (result == null)
             return ContentTo(MusicJson.Serialize(new { available = false, message = "Section not found." }));
 
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 }

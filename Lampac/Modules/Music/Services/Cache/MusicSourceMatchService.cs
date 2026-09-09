@@ -17,6 +17,20 @@ public static class MusicSourceMatchService
     });
     static readonly MemoryCache missingCache = new(new MemoryCacheOptions());
 
+    // Fixed stripes bound memory use; one track/mode shares a gate across providers
+    // so reset, manual selection and late automatic results are ordered together.
+    static readonly SemaphoreSlim[] stateLocks = Enumerable.Range(0, 64)
+        .Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    static SemaphoreSlim StateLock(string trackId, string playbackMode)
+    {
+        string key = NormalizeTrackId(trackId) + ":" + MusicPlaybackModeService.Normalize(playbackMode);
+        return stateLocks[(int)((uint)key.GetHashCode() % (uint)stateLocks.Length)];
+    }
+
+    static MusicAudioMatch CopyMatch(MusicAudioMatch match)
+        => match == null ? null : MusicJson.Deserialize<MusicAudioMatch>(MusicJson.Serialize(match));
+
     static string ScopeProviderId(string providerId, string playbackMode)
     {
         providerId = providerId?.Trim();
@@ -31,28 +45,38 @@ public static class MusicSourceMatchService
         if (string.IsNullOrWhiteSpace(trackId) || string.IsNullOrWhiteSpace(providerId))
             return null;
 
-        string scopedProviderId = ScopeProviderId(providerId, playbackMode);
-        string cacheKey = BuildCacheKey(trackId, scopedProviderId);
-        if (matchCache.TryGetValue(cacheKey, out MusicAudioMatch cachedMatch))
-            return cachedMatch;
-
-        var dbMatch = await ReadDbMatchAsync(trackId, scopedProviderId, cancellationToken);
-        if (dbMatch != null)
+        var stateLock = StateLock(trackId, playbackMode);
+        await stateLock.WaitAsync(cancellationToken);
+        try
         {
-            SetMatchCache(cacheKey, dbMatch);
-            return dbMatch;
-        }
+            string scopedProviderId = ScopeProviderId(providerId, playbackMode);
+            string cacheKey = BuildCacheKey(trackId, scopedProviderId);
+            if (matchCache.TryGetValue(cacheKey, out MusicAudioMatch cachedMatch))
+                return CopyMatch(cachedMatch);
 
-        var entry = await HybridCache.Get().ReadCacheAsync<MusicAudioMatch>(cacheKey, false, null, textJson: true);
-        if (entry.succes && entry.value != null)
+            var dbMatch = await ReadDbMatchAsync(trackId, scopedProviderId, cancellationToken);
+            if (dbMatch != null)
+            {
+                SetMatchCache(cacheKey, dbMatch);
+                return CopyMatch(dbMatch);
+            }
+
+            var entry = await HybridCache.Get().ReadCacheAsync<MusicAudioMatch>(cacheKey, false, null, textJson: true);
+            if (entry.succes && entry.value != null)
+            {
+                // hybrid — территория авто-подбора: pinned авторитетен только из БД,
+                // иначе legacy-запись воскресит сброшенный пользователем выбор
+                entry.value = CopyMatch(entry.value);
+                entry.value.pinned = false;
+                SetMatchCache(cacheKey, entry.value);
+            }
+
+            return entry.succes ? CopyMatch(entry.value) : null;
+        }
+        finally
         {
-            // hybrid — территория авто-подбора: pinned авторитетен только из БД,
-            // иначе legacy-запись воскресит сброшенный пользователем выбор
-            entry.value.pinned = false;
-            SetMatchCache(cacheKey, entry.value);
+            stateLock.Release();
         }
-
-        return entry.succes ? entry.value : null;
     }
 
     // сброс ручного выбора: убирает pinned-строки трека в данном режиме,
@@ -62,13 +86,22 @@ public static class MusicSourceMatchService
         if (string.IsNullOrWhiteSpace(trackId))
             return false;
 
-        if (!await DeleteDbMatchesAsync(trackId, playbackMode, cancellationToken))
-            return false;
+        var stateLock = StateLock(trackId, playbackMode);
+        await stateLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (!await DeleteDbMatchesAsync(trackId, playbackMode, cancellationToken))
+                return false;
 
-        foreach (var provider in MusicProviderRegistry.AudioProviders)
-            matchCache.Remove(BuildCacheKey(trackId, ScopeProviderId(provider.Id, playbackMode)));
+            foreach (var provider in MusicProviderRegistry.AudioProviders)
+                matchCache.Remove(BuildCacheKey(trackId, ScopeProviderId(provider.Id, playbackMode)));
 
-        return true;
+            return true;
+        }
+        finally
+        {
+            stateLock.Release();
+        }
     }
 
     static async Task<bool> DeleteDbMatchesAsync(string trackId, string playbackMode, CancellationToken cancellationToken)
@@ -119,27 +152,42 @@ public static class MusicSourceMatchService
         if (string.IsNullOrWhiteSpace(trackId) || match == null || string.IsNullOrWhiteSpace(match.provider_id) || string.IsNullOrWhiteSpace(match.id))
             return false;
 
-        string scopedProviderId = ScopeProviderId(match.provider_id, playbackMode);
-        string cacheKey = BuildCacheKey(trackId, scopedProviderId);
-
-        if (match.pinned)
+        var stateLock = StateLock(trackId, playbackMode);
+        await stateLock.WaitAsync(cancellationToken);
+        try
         {
-            // ручной выбор — durable state; memory обновляем только после
-            // успешной записи, чтобы «Сохранено» клиенту не врало
-            if (!await SaveDbMatchAsync(trackId, scopedProviderId, match, cancellationToken))
-                return false;
-        }
-        else
-        {
-            // авто-матч — volatile cache: SQLite не трогаем (правило модуля),
-            // in-process свежесть обеспечивает matchCache ниже
-            HybridCache.Get().Set(cacheKey, match, MatchTtl, textJson: true);
-        }
+            match = CopyMatch(match);
+            string scopedProviderId = ScopeProviderId(match.provider_id, playbackMode);
+            string cacheKey = BuildCacheKey(trackId, scopedProviderId);
 
-        SetMatchCache(cacheKey, match);
-        missingCache.Remove(BuildMissingCacheKey(trackId, scopedProviderId));
-        HybridCache.Get().Set(BuildMissingCacheKey(trackId, scopedProviderId), false, MissingTtl, textJson: true);
-        return true;
+            if (match.pinned)
+            {
+                // ручной выбор — durable state; memory обновляем только после
+                // успешной записи, чтобы «Сохранено» клиенту не врало
+                if (!await SaveDbMatchAsync(trackId, scopedProviderId, match, cancellationToken))
+                    return false;
+            }
+            else
+            {
+                // авто-матч — volatile cache: SQLite не трогаем (правило модуля),
+                // in-process свежесть обеспечивает matchCache ниже
+                HybridCache.Get().Set(cacheKey, match, MatchTtl, textJson: true);
+                // A resolver may have started before the user pinned a source.
+                // Keep the automatic result volatile, but never replace that choice.
+                var pinned = await ReadDbMatchAsync(trackId, scopedProviderId, cancellationToken);
+                if (pinned != null)
+                    match = pinned;
+            }
+
+            SetMatchCache(cacheKey, match);
+            missingCache.Remove(BuildMissingCacheKey(trackId, scopedProviderId));
+            HybridCache.Get().Set(BuildMissingCacheKey(trackId, scopedProviderId), false, MissingTtl, textJson: true);
+            return true;
+        }
+        finally
+        {
+            stateLock.Release();
+        }
     }
 
     public static async Task<bool> IsMarkedMissingAsync(string trackId, string providerId, string playbackMode = null, CancellationToken cancellationToken = default)

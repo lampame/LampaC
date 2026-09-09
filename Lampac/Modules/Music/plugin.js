@@ -2106,12 +2106,19 @@
 
         var matchId = track.id ? String(track.id) : '';
         Object.keys(PLAY_PREFETCH_CACHE).forEach(function (key) {
-            if (matchId && key.indexOf('id=' + encodeURIComponent(matchId)) >= 0)
+            if (matchId && ('&' + key + '&').indexOf('&id=' + encodeURIComponent(matchId) + '&') >= 0)
                 delete PLAY_PREFETCH_CACHE[key];
         });
         Object.keys(PLAY_PREFETCH_PENDING).forEach(function (key) {
-            if (matchId && key.indexOf('id=' + encodeURIComponent(matchId)) >= 0)
+            if (matchId && ('&' + key + '&').indexOf('&id=' + encodeURIComponent(matchId) + '&') >= 0) {
+                var callbacks = PLAY_PREFETCH_PENDING[key];
                 delete PLAY_PREFETCH_PENDING[key];
+                setTimeout(function () {
+                    callbacks.forEach(function (cb) {
+                        if (cb.fail) cb.fail(null);
+                    });
+                }, 0);
+            }
         });
     }
 
@@ -4654,6 +4661,16 @@
     function startRadioFromTrack(track, restoreContext) {
         if (!track || !track.id) return;
 
+        var launchToken = ++MUSIC_PLAY_LAUNCH_TOKEN;
+        MUSIC_SPOTIFY_RELEASE_TOKEN++;
+        var prepareToken = MUSIC_IOS_AUDIO.prepareToken;
+        var player = currentExternalPlayer();
+        function stale() {
+            return launchToken !== MUSIC_PLAY_LAUNCH_TOKEN
+                || prepareToken !== MUSIC_IOS_AUDIO.prepareToken
+                || player !== currentExternalPlayer();
+        }
+
         startMusicPlaybackLoading('Подбираю волну');
 
         var seed = compactRadioTrack(track);
@@ -4662,6 +4679,7 @@
             + '&limit=20';
 
         requestPost(MUSIC.endpoints.radio, payload, function (json) {
+            if (stale()) return;
             stopMusicPlaybackLoading();
 
             var radioTracks = json && json.available && Array.isArray(json.tracks) ? json.tracks : [];
@@ -4677,6 +4695,7 @@
 
             playTrack(track, [track].concat(radioTracks), 0, { forceFresh: true });
         }, function () {
+            if (stale()) return;
             stopMusicPlaybackLoading();
             Lampa.Noty.show('Не удалось подобрать треки.');
             restoreMusicFocusContext(restoreContext);
@@ -8373,10 +8392,14 @@
         updateStandaloneIosPlayerBar();
 
         if (typeof playback.url === 'function') {
+            var resolveToken = MUSIC_IOS_AUDIO.playWatchToken;
+            var prepareToken = MUSIC_IOS_AUDIO.prepareToken;
             syncStandaloneIosMediaSession();
             updateStandaloneIosPositionState();
 
             playback.url(function () {
+                if (resolveToken !== MUSIC_IOS_AUDIO.playWatchToken
+                    || prepareToken !== MUSIC_IOS_AUDIO.prepareToken) return;
                 MUSIC_IOS_AUDIO.switching = false;
 
                 if (!playback.url || typeof playback.url !== 'string') {
@@ -8393,7 +8416,8 @@
                     return;
                 }
 
-                standaloneIosPlayIndex(index);
+                var target = MUSIC_IOS_AUDIO.tracks.indexOf(track);
+                if (target >= 0) standaloneIosPlayIndex(target);
             });
 
             return true;
@@ -9594,7 +9618,8 @@
             // всегда) запускал плеер в одном тике с warmup — ломался скраббер
             if (done) {
                 setTimeout(function () {
-                    done(cached);
+                    if (getCachedPlayResponse(track) === cached) done(cached);
+                    else if (fail) fail(null);
                 }, 0);
             }
             return;
@@ -9611,7 +9636,7 @@
         }
 
         bumpMusicHeatMetric('playNetwork');
-        PLAY_PREFETCH_PENDING[key] = [{
+        var callbacks = PLAY_PREFETCH_PENDING[key] = [{
             done: done,
             fail: fail
         }];
@@ -9622,8 +9647,8 @@
         // такого обрыва превращался в пустую строку и Lampa показывала ложное
         // «Видео не найдено или повреждено».
         request(buildPlayUrl(track), function (json) {
+            if (PLAY_PREFETCH_PENDING[key] !== callbacks) return;
             var parsed = parseJson(json);
-            var callbacks = PLAY_PREFETCH_PENDING[key] || [];
             delete PLAY_PREFETCH_PENDING[key];
 
             if (parsed && parsed.available && parsed.sources && parsed.sources.length) {
@@ -9638,7 +9663,7 @@
                 if (cb.fail) cb.fail(parsed);
             });
         }, function () {
-            var callbacks = PLAY_PREFETCH_PENDING[key] || [];
+            if (PLAY_PREFETCH_PENDING[key] !== callbacks) return;
             delete PLAY_PREFETCH_PENDING[key];
             callbacks.forEach(function (cb) {
                 if (cb.fail) cb.fail(null);
@@ -9987,8 +10012,16 @@
                 var embeddedResolveToken = shouldUseStandaloneIosAudio()
                     ? 0
                     : ++MUSIC_EMBEDDED_IOS.switchToken;
+                var standaloneResolveToken = embeddedResolveToken ? null : MUSIC_IOS_AUDIO.playWatchToken;
+                var standalonePrepareToken = MUSIC_IOS_AUDIO.prepareToken;
+                function standaloneStale() {
+                    return standaloneResolveToken !== null
+                        && (standaloneResolveToken !== MUSIC_IOS_AUDIO.playWatchToken
+                            || standalonePrepareToken !== MUSIC_IOS_AUDIO.prepareToken);
+                }
 
                 requestPlay(track, function (json) {
+                    if (standaloneStale()) return;
                     if (embeddedResolveToken && embeddedResolveToken !== MUSIC_EMBEDDED_IOS.switchToken) {
                         traceEmbeddedIos('playlist-resolve-stale', track && track.id ? track.id : '', true);
                         return;
@@ -10006,6 +10039,7 @@
                     playback.music_duration_ms = track.duration_ms || playback.music_duration_ms;
                     call();
                 }, function (json) {
+                    if (standaloneStale()) return;
                     if (embeddedResolveToken && embeddedResolveToken !== MUSIC_EMBEDDED_IOS.switchToken) {
                         traceEmbeddedIos('playlist-resolve-failed-stale', track && track.id ? track.id : '', true);
                         return;
@@ -10021,6 +10055,7 @@
                     playback.url = '';
 
                     if (!maybeAutoSkipUnavailableTrack(json, function () {
+                        if (standaloneStale()) return;
                         if (embeddedResolveToken && embeddedResolveToken !== MUSIC_EMBEDDED_IOS.switchToken) return;
                         advanceQueueAfterUnavailable(track && track.id, playback);
                     }))
@@ -11206,6 +11241,7 @@
     }
 
     function buildStandaloneIosPreparedPlaylist(tracks, startIndex, currentJson, done, providerId) {
+        tracks = tracks.slice();
         if (!shouldUseStagedStandaloneIosPreparation(providerId)) {
             buildInternalPreparedPlaylist(tracks, startIndex, currentJson, function (preparedList) {
                 done(preparedList, null);
@@ -11284,18 +11320,23 @@
                 }
 
                 var entryIndex = backgroundOrder[pointer++];
+                var currentIndex = (MUSIC_IOS_AUDIO.tracks || []).indexOf(tracks[entryIndex]);
+                var pendingPlayback = currentIndex >= 0 && MUSIC_IOS_AUDIO.playlist[currentIndex];
+                if (!pendingPlayback) {
+                    scheduleWarm(warmDelay);
+                    return;
+                }
                 active = true;
                 bumpMusicHeatMetric('standaloneWarmRequest');
 
                 requestPlay(tracks[entryIndex], function (json) {
                     active = false;
-                    if (stillCurrent() && MUSIC_IOS_AUDIO.playlist && entryIndex < MUSIC_IOS_AUDIO.playlist.length)
-                        MUSIC_IOS_AUDIO.playlist[entryIndex] = buildResolvedPlayback(tracks[entryIndex], json);
+                    var target = stillCurrent() ? MUSIC_IOS_AUDIO.playlist.indexOf(pendingPlayback) : -1;
+                    if (target >= 0)
+                        MUSIC_IOS_AUDIO.playlist[target] = buildResolvedPlayback(tracks[entryIndex], json);
                     scheduleWarm(warmDelay);
                 }, function () {
                     active = false;
-                    if (stillCurrent() && MUSIC_IOS_AUDIO.playlist && entryIndex < MUSIC_IOS_AUDIO.playlist.length)
-                        MUSIC_IOS_AUDIO.playlist[entryIndex] = buildPlayback(tracks[entryIndex]);
                     scheduleWarm(warmDelay);
                 });
             }
@@ -11341,6 +11382,7 @@
 
     function playTrack(track, playlistTracks, startIndex, options) {
         resetRadioAutoplayRequest();
+        var launchToken = ++MUSIC_PLAY_LAUNCH_TOKEN;
         if (playSpotifyReleaseTrack(track, playlistTracks, startIndex, options)) return;
 
         MUSIC_SPOTIFY_RELEASE_TOKEN++;
@@ -11349,7 +11391,6 @@
         var standaloneIos = shouldUseStandaloneIosAudio();
         var forceFresh = !!(options && options.forceFresh);
         var resumePosition = Math.max(0, Number(options && options.resumePosition || 0));
-        var launchToken = ++MUSIC_PLAY_LAUNCH_TOKEN;
         // оверлей предыдущего (только что отменённого) запуска гасим сразу:
         // дальше любой видимый лоадер принадлежит только новейшему флоу
         stopMusicPlaybackLoading();

@@ -233,12 +233,14 @@ public static class MusicUserPlaylistService
             // sync — слияние, а не зеркало: локальный порядок и ручные правки
             // сохраняются, новые треки источника добавляются В НАЧАЛО
             string currentPayload = await ReadPayloadAsync(connection, profileId, playlistId, cancellationToken);
+            if (currentPayload == null)
+                return false; // Deleted while the source was being fetched.
             var merged = MergeSyncedTracks(ParseTracks(currentPayload), imported.tracks);
 
             imported.tracks = merged;
             imported.track_count = merged.Count;
 
-            return await UpsertPlaylistAsync(connection, profileId, playlistId, imported.title, merged, imported.source, cancellationToken) > 0;
+            return await UpsertPlaylistAsync(connection, profileId, playlistId, imported.title, merged, imported.source, cancellationToken, updateOnly: true) > 0;
         }, cancellationToken);
 
         if (!saved)
@@ -407,10 +409,14 @@ public static class MusicUserPlaylistService
         return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    static async Task<int> UpsertPlaylistAsync(SqliteConnection connection, string profileId, string playlistId, string title, List<MusicTrack> tracks, MusicUserPlaylistSource source, CancellationToken cancellationToken)
+    static async Task<int> UpsertPlaylistAsync(SqliteConnection connection, string profileId, string playlistId, string title, List<MusicTrack> tracks, MusicUserPlaylistSource source, CancellationToken cancellationToken, bool updateOnly = false)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        command.CommandText = updateOnly ? """
+            UPDATE user_playlists
+            SET title = $title, payload = $payload, source = $source, updated = $updated
+            WHERE profile_id = $profile_id AND playlist_id = $playlist_id;
+            """ : """
             INSERT INTO user_playlists (profile_id, playlist_id, title, payload, source, updated)
             VALUES ($profile_id, $playlist_id, $title, $payload, $source, $updated)
             ON CONFLICT(profile_id, playlist_id) DO UPDATE SET

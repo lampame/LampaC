@@ -325,38 +325,37 @@ public class MusicContext : DbContext
 
     static void ValidateOrRecoverDatabase()
     {
-        if (!File.Exists(DatabaseFilePath))
+        if (!DatabaseFileExists(DatabaseFilePath))
             return;
 
         if (IsDatabaseValid(DatabaseFilePath))
             return;
 
-        string corruptPath = Path.Combine(DatabaseDirectoryPath, $"Music.sql.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmss}");
+        string corruptPath = Path.Combine(DatabaseDirectoryPath, $"Music.sql.corrupt-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}");
 
-        try
-        {
-            if (File.Exists(corruptPath))
-                File.Delete(corruptPath);
-
-            File.Move(DatabaseFilePath, corruptPath);
-        }
-        catch
-        {
-            try
-            {
-                File.Copy(DatabaseFilePath, corruptPath, overwrite: true);
-                File.Delete(DatabaseFilePath);
-            }
-            catch
-            {
-            }
-        }
+        // If quarantine fails, stop initialization. Never overwrite the original
+        // or discard its WAL after a failed move.
+        File.Move(DatabaseFilePath, corruptPath);
 
         // сайдкары битой базы нельзя оставлять рядом с восстановленным файлом:
         // SQLite попытается проиграть чужой WAL и испортит свежую копию
-        QuarantineSidecarFiles(corruptPath);
-
-        RestoreLatestValidBackup();
+        try
+        {
+            QuarantineSidecarFiles(corruptPath);
+            RestoreLatestValidBackup();
+        }
+        catch
+        {
+            // Leave the original in place for the next startup attempt if a
+            // sidecar or backup is temporarily inaccessible.
+            foreach (var suffix in new[] { "-wal", "-shm" })
+            {
+                if (DatabaseFileExists(corruptPath + suffix))
+                    File.Move(corruptPath + suffix, DatabaseFilePath + suffix);
+            }
+            File.Move(corruptPath, DatabaseFilePath);
+            throw;
+        }
     }
 
     static void QuarantineSidecarFiles(string corruptPath)
@@ -365,27 +364,8 @@ public class MusicContext : DbContext
         {
             string sidecar = DatabaseFilePath + suffix;
 
-            try
-            {
-                if (!File.Exists(sidecar))
-                    continue;
-
-                string target = corruptPath + suffix;
-                if (File.Exists(target))
-                    File.Delete(target);
-
-                File.Move(sidecar, target);
-            }
-            catch
-            {
-                try
-                {
-                    File.Delete(sidecar);
-                }
-                catch
-                {
-                }
-            }
+            if (DatabaseFileExists(sidecar))
+                File.Move(sidecar, corruptPath + suffix);
         }
     }
 
@@ -400,19 +380,41 @@ public class MusicContext : DbContext
             if (!IsDatabaseValid(backupFile))
                 continue;
 
-            TryDeleteSidecarFiles(DatabaseFilePath);
-            File.Copy(backupFile, DatabaseFilePath, overwrite: true);
+            string restorePath = DatabaseFilePath + ".restore-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.Copy(backupFile, restorePath);
+                File.Move(restorePath, DatabaseFilePath);
+            }
+            finally
+            {
+                if (File.Exists(restorePath))
+                    File.Delete(restorePath);
+            }
             return true;
         }
 
         return false;
     }
 
+    static bool DatabaseFileExists(string path)
+    {
+        // File.Exists also returns false on permission/I/O errors. Those must
+        // not be mistaken for a missing database during recovery.
+        try
+        {
+            File.GetAttributes(path);
+            return true;
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+    }
+
     static bool IsDatabaseValid(string path)
     {
         try
         {
-            if (!File.Exists(path))
+            if (!DatabaseFileExists(path))
                 return false;
 
             var info = new FileInfo(path);
@@ -446,8 +448,11 @@ public class MusicContext : DbContext
 
             return string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 11 || ex.SqliteErrorCode == 26)
         {
+            // SQLITE_CORRUPT / SQLITE_NOTADB are evidence of corruption.
+            // Busy, locked, permission and I/O failures propagate, preserving
+            // the database instead of silently rolling it back to a backup.
             return false;
         }
     }

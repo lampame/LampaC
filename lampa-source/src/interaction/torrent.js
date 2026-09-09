@@ -30,6 +30,11 @@ let callback_back
 let autostart_timer
 let autostart_progress
 
+const TORRENT_PRELOAD_POLL_MS = 1000
+const TORRENT_PRELOAD_REQUEST_TIMEOUT_MS = 2000
+const TORRENT_PRELOAD_STALL_MS = 8000
+const TORRENT_PRELOAD_DEADLINE_MS = 30000
+
 let formats = [
     'asf',
     'wmv',
@@ -266,11 +271,6 @@ function parseSubs(path, files){
     return subtitles.length ? subtitles : false
 }
 
-const TORRENT_PRELOAD_POLL_MS = 1000
-const TORRENT_PRELOAD_REQUEST_TIMEOUT_MS = 2000
-const TORRENT_PRELOAD_STALL_MS = 8000
-const TORRENT_PRELOAD_DEADLINE_MS = 30000
-
 function torrentPlayUrl(url){
     return typeof url === 'string' ? url.replace('&preload', '&play') : url
 }
@@ -284,8 +284,7 @@ function isExternalAndroidTorrent(data){
     if(data.launch_player === 'lampa' || data.launch_player === 'inner') return false
     if(data.launch_player === 'android') return true
 
-    return Storage.field('player_torrent') === 'android' ||
-        data.torrent_hash && !Torserver.gstWork()
+    return Storage.field('player_torrent') === 'android'
 }
 
 function preload(data, run){

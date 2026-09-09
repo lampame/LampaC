@@ -9,7 +9,7 @@ public class SearchController : BaseController
     async public Task<ActionResult> Search(string q, string provider, bool full = false)
     {
         var result = await MusicCatalogService.SearchAsync(q, provider, full);
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 
@@ -21,7 +21,7 @@ public class SearchController : BaseController
         if (result == null)
             return ContentTo(MusicJson.Serialize(new { available = false, message = "Artist not found." }));
 
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 
@@ -33,7 +33,7 @@ public class SearchController : BaseController
         if (result == null)
             return ContentTo(MusicJson.Serialize(new { available = false, message = "Artist section not found." }));
 
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 
@@ -52,7 +52,7 @@ public class SearchController : BaseController
         };
 
         artist.images = await DiscogsArtistImageService.ResolveImagesAsync(artist, cancellationToken) ?? new List<MusicImage>();
-        MusicImageProxyService.Apply(this, artist);
+        artist = MusicImageProxyService.Apply(this, artist);
 
         return ContentTo(MusicJson.Serialize(new
         {
@@ -70,7 +70,7 @@ public class SearchController : BaseController
         if (result == null)
             return ContentTo(MusicJson.Serialize(new { available = false, message = "Album not found." }));
 
-        MusicImageProxyService.Apply(this, result);
+        result = MusicImageProxyService.Apply(this, result);
         return ContentTo(MusicJson.Serialize(result));
     }
 
