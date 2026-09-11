@@ -198,7 +198,7 @@ function init(){
 
             focustime = Date.now()
         }
-    })
+    }, false, true)
 
     Video.listener.follow('timeupdate', resetFocusTime)
 
