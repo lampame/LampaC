@@ -45,6 +45,7 @@
 - **TmdbProxy** — локальный кеш TMDB API
 - **LampaWeb** — хостинг Lampa UI (авто-обновление с GitHub), виджеты Samsung Tizen (`/samsung.wgt`) и LG webOS (`/lg.ipk`)
 - **Tg-notify.bot** — Telegram-уведомления о новых сериях и озвучках, плагин `/tg-notify.js`
+- **QRAuth** — экран входа с QR-кодом и Telegram-бот для выдачи доступа (accsdb), `Modules/Community/QRAuth`
 - **WebLog** — отладка HTTP и Playwright-трафика в реальном времени
 - **Playwright** — автоматизация Chromium/Firefox для обхода JS-защит
 - **RCH** — WebSocket-реле для клиентов за NAT (`/nws`)
@@ -464,6 +465,7 @@ cd publish && dotnet Core.dll
 │  │  OnlineUKR · OnlineGEO  — по одному проекту на провайдера │  │
 │  │  Modules/Adult/* — платформы 18+                          │  │
 │  │  Modules/Community/* — TelegramAuth, TelegramAuthBot      │  │
+│  │  Modules/Community/QRAuth — вход по QR через Telegram     │  │
 │  │  Modules/Tg-notify.bot — уведомления о сериях/озвучках    │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -554,7 +556,7 @@ lampac/
 │   ├── AdminPanel/             # Веб-админка (manifest: enable: false)
 │   ├── Adult/                  # Платформы 18+ (15 источников)
 │   ├── Catalog/                # Каталог сайтов (YAML)
-│   ├── Community/              # TelegramAuth, TelegramAuthBot
+│   ├── Community/              # TelegramAuth, TelegramAuthBot, QRAuth
 │   ├── DLNA/                   # DLNA/UPnP медиасервер
 │   ├── ForkPlayerXML/          # ForkPlayer: /fxml
 │   ├── GStreamer/              # HLS/fMP4 транскодинг (/gst/*)
@@ -614,6 +616,7 @@ lampac/
 | [Modules/Community/README.md](Modules/Community/README.md) | Telegram-авторизация, клиент Lampa, API |
 | [Modules/Community/TelegramAuth/README.md](Modules/Community/TelegramAuth/README.md) | HTTP API `/tg/auth/…`, accsdb, хранилище |
 | [Modules/Community/TelegramAuthBot/README.md](Modules/Community/TelegramAuthBot/README.md) | Long polling-бот, команды, конфиг |
+| [Modules/Community/QRAuth/README.md](Modules/Community/QRAuth/README.md) | Экран входа с QR (`deny.js`), Telegram-бот, фон из постеров, конфиг |
 | [Modules/GStreamer/README.md](Modules/GStreamer/README.md) | Серверный транскодинг, `gst` в init.conf, `/gst.js` |
 | [Modules/LampacApk/README.md](Modules/LampacApk/README.md) | Генерация Android APK под адрес текущего сервера, подпись и кеш |
 | [Modules/LampaWeb/README.md](Modules/LampaWeb/README.md) | Lampa UI, виджеты Tizen/webOS, `lampainit.js` |
