@@ -9,7 +9,7 @@
 
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/lampac-nextgen/lampac?label=version)](https://github.com/lampac-nextgen/lampac/releases)
 [![GitHub tag (latest SemVer pre-release)](https://img.shields.io/github/v/tag/lampac-nextgen/lampac?include_prereleases&label=pre-release)](https://github.com/lampac-nextgen/lampac/tags)
-[![License: MIT](https://img.shields.io/github/license/lampac-nextgen/lampac)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/github/license/lampac-nextgen/lampac)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Docker — GHCR image](https://img.shields.io/badge/ghcr.io-lampac--nextgen%2Flampac-2496ED?logo=github)](https://github.com/lampac-nextgen/lampac/pkgs/container/lampac)
 [![GitHub Repo stars](https://img.shields.io/github/stars/lampac-nextgen/lampac?style=flat&logo=github)](https://github.com/lampac-nextgen/lampac/stargazers)
@@ -625,3 +625,9 @@ lampac/
 | [charts/lampac/README.md](charts/lampac/README.md) | Helm-чарт для Kubernetes (`ghcr.io/lampac-nextgen/lampac`) |
 
 ---
+
+## Лицензия
+
+Copyright (c) 2026 lampac-nextgen
+
+AGPL-3.0. См. файл [LICENSE](LICENSE) для подробностей.

@@ -7,7 +7,7 @@
 Вход на телевизоре за секунды: отсканировал QR - подтвердил в Telegram - смотришь.
 Без пароля, без экранной клавиатуры.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](../../../LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue?style=flat-square)](../../../LICENSE)
 [![Lampac](https://img.shields.io/badge/Lampac-NextGen-blueviolet?style=flat-square)](https://github.com/lampac-nextgen/lampac)
 [![Platform](https://img.shields.io/badge/platform-Roslyn%20%7C%20.NET-informational?style=flat-square)](https://github.com/lampac-nextgen/lampac)
 [![Telegram.Bot](https://img.shields.io/badge/Telegram.Bot-22.4.4-26A5E4?style=flat-square&logo=telegram)](https://github.com/TelegramBots/Telegram.Bot)
@@ -110,7 +110,7 @@
 ## 🤖 Что умеет бот
 
 | Команда / кнопка | Кто | Что делает |
-|---|---|---|
+| --- | --- | --- |
 | `/start` | все | Новому пользователю - кнопка «🔑 Запросить доступ», у кого доступ уже есть - пароль |
 | «✅ Выдать» / «❌ Отклонить» | админы | Решение по заявке: выдача сразу дописывает `users.json` и присылает пользователю пароль |
 | `/users` или «👥 Пользователи» | админы | Список пользователей, карточка каждого, бан и разбан, статистика |
@@ -237,7 +237,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 3. **Собирает из них стену** через NetVips - сетка 12×6 со скруглёнными углами, поворот на −7°, затемнение:
 
 | Файл | Размер | Для чего |
-|---|---|---|
+| --- | --- | --- |
 | `wall-v2-4k.jpg` | 3840×2160, ~600 KB | 2K/4K мониторы и 4K-телевизоры |
 | `wall-v2.jpg` | 1920×1080, ~200 KB | Все остальные экраны, включая обычные ТВ |
 | `wall-v2-lqip.jpg` | 64×36, ~1 KB | Крошечное превью, встроенное прямо в страницу |
@@ -280,7 +280,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 <br>
 
 | Поле | Тип | По умолчанию | Описание |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `enable` | `bool` | `true` | Выключить бота без удаления файлов (экран входа продолжит работать) |
 | `bot_token` | `string` | `""` | Токен от BotFather. Пусто при `enable=true` - предупреждение в консоли, бот не запускается, сервер не падает |
 | `users_file_path` | `string` | `"users.json"` | Файл пользователей - тот же, что читает `accsdb` |
@@ -295,7 +295,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 <br>
 
 | Поле | Тип | Описание |
-|---|---|---|
+| --- | --- | --- |
 | `tg_target` | `string` | `@username`, `https://t.me/…` или `tg://` - бот для QR и кнопки Telegram. Должен совпадать с ботом из `TelegramBot` |
 | `show_qr` | `bool` | QR показывается, только если `tg_target` задан **и** `show_qr = true` |
 | `page_title`, `page_subtitle` | `string` | Заголовок и подзаголовок |
@@ -316,7 +316,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 <br>
 
 | Способ | Результат |
-|---|---|
+| --- | --- |
 | `TelegramBot.enable=false` | Бот не запускается, экран входа работает без QR |
 | `DenyPage.show_qr=false` | Экран входа без QR, вход по паролю остаётся |
 | `DenyPage.poster_wall=false` | Без фона из постеров, модуль не ходит в TMDB |
@@ -349,7 +349,7 @@ Lampac кэширует `deny.js` в памяти до 10 минут. Модул
 Посмотрите поле `state` в ответе `/tgbot/qr/posters`:
 
 | `state` | Что значит |
-|---|---|
+| --- | --- |
 | `pending` | Первая загрузка ещё не прошла (идёт через 15 секунд после старта) |
 | `tmdb_unreachable` | Ни `/tmdb` Lampac, ни зеркала не ответили - проверьте доступ сервера в интернет |
 | `tmdb_empty` | TMDB ответил, но постеров нет |
@@ -381,4 +381,4 @@ dotnet build Modules/Community/QRAuth/QRAuth.csproj
 
 ## 📄 Лицензия
 
-[MIT](../../../LICENSE)
+[AGPL-3.0](../../../LICENSE)

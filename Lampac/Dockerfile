@@ -78,7 +78,7 @@ FROM debian:13-slim AS runner
 ARG TARGETARCH
 
 LABEL org.opencontainers.image.description="Lampac NextGen - Media aggregator" \
-    org.opencontainers.image.licenses="MIT" \
+    org.opencontainers.image.licenses="AGPL-3.0-only" \
     org.opencontainers.image.source="https://github.com/lampac-nextgen/lampac" \
     org.opencontainers.image.vendor="Lampac NextGen"
 
