@@ -73,7 +73,7 @@
 **3. Добавьте секции модуля** (все поля - в [`init.merge.example.json`](init.merge.example.json)):
 
 ```json
-"TelegramBot": {
+"QRAuthBot": {
   "enable": true,
   "bot_token": "123456:ABC-DEF...",
   "admin_ids": [123456789]
@@ -88,6 +88,24 @@
 
 > [!TIP]
 > Токен бота выдаёт [@BotFather](https://t.me/BotFather) (`/newbot`), свой Telegram ID для `admin_ids` покажет [@userinfobot](https://t.me/userinfobot).
+
+> [!WARNING]
+> **Для QRAuth нужен отдельный бот.** Если рядом стоит модуль [Tg-notify.bot](../../Tg-notify.bot) (секция `TelegramBot`), у `QRAuthBot` и `TelegramBot` должны быть **разные** `bot_token`. `DenyPage.tg_target` должен указывать на бот из `QRAuthBot`.
+
+<details>
+<summary>❓ <b>Почему нельзя один токен на оба модуля</b></summary>
+
+<br>
+
+Оба модуля получают события от Telegram через long polling (`GetUpdates`), и каждый опрашивает Telegram сам. Общего обработчика, который раздавал бы события обоим модулям, нет.
+
+1. **Один токен — один активный `GetUpdates`.** Если два процесса опрашивают один токен, Telegram отвечает `409 Conflict: terminated by other getUpdates request`. Модули отбивают друг друга по кругу, лог забивается ошибками 409.
+2. **Каждое событие достаётся только одному модулю.** Сообщение или нажатие кнопки получает тот, кто первым забрал его из очереди, после чего событие подтверждается (`offset = update.Id + 1`) и второму модулю уже не приходит. Например, нажатие «Выдать доступ» может забрать Tg-notify, который такой кнопки не знает. Отсюда **кнопки срабатывают через раз**.
+3. **`tg_target` — бот для входа.** QR-код и кнопка на экране входа открывают `t.me/<бот>?start=<сессия>`. Подтверждение входа обрабатывает только QRAuth. Если `tg_target` указывает на бот Tg-notify, команда `/start` с номером сессии уйдёт туда и вход не подтвердится.
+
+**Решение:** создайте в [@BotFather](https://t.me/BotFather) два бота. Один для QRAuth (вход и выдача доступа), другой для Tg-notify (уведомления).
+
+</details>
 
 **4. Перезапустите Lampac.**
 
@@ -275,7 +293,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 ## ⚙️ Все настройки
 
 <details>
-<summary><b>TelegramBot</b> - бот</summary>
+<summary><b>QRAuthBot</b> - бот</summary>
 
 <br>
 
@@ -296,7 +314,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 
 | Поле | Тип | Описание |
 | --- | --- | --- |
-| `tg_target` | `string` | `@username`, `https://t.me/…` или `tg://` - бот для QR и кнопки Telegram. Должен совпадать с ботом из `TelegramBot` |
+| `tg_target` | `string` | `@username`, `https://t.me/…` или `tg://` - бот для QR и кнопки Telegram. Должен совпадать с ботом из `QRAuthBot` |
 | `show_qr` | `bool` | QR показывается, только если `tg_target` задан **и** `show_qr = true` |
 | `page_title`, `page_subtitle` | `string` | Заголовок и подзаголовок |
 | `step1_text`, `step2_text` | `string` | Строки подсказки под кнопками. Пустая строка не выводится; по умолчанию есть только `step2` (если задан `tg_target`) |
@@ -317,7 +335,7 @@ deny.js:  опрос GET /tgbot/qr/status?session=... → { status: confirmed, t
 
 | Способ | Результат |
 | --- | --- |
-| `TelegramBot.enable=false` | Бот не запускается, экран входа работает без QR |
+| `QRAuthBot.enable=false` | Бот не запускается, экран входа работает без QR |
 | `DenyPage.show_qr=false` | Экран входа без QR, вход по паролю остаётся |
 | `DenyPage.poster_wall=false` | Без фона из постеров, модуль не ходит в TMDB |
 | `"enable": false` в `manifest.json` (по умолчанию) | Модуль не загружается вообще (нужен перезапуск) |

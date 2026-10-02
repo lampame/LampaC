@@ -1,5 +1,5 @@
 {
-  "TelegramBot": {
+  "QRAuthBot": {
     "enable": true,
     "bot_token": "PASTE_YOUR_TELEGRAM_BOT_TOKEN_HERE",
     "users_file_path": "users.json",

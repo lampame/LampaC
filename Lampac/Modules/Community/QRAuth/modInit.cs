@@ -83,10 +83,10 @@ namespace QRAuth
 
         static void SyncConf()
         {
-            conf = ModuleInvoke.Init("TelegramBot", DefaultConf());
+            conf = ModuleInvoke.Init("QRAuthBot", DefaultConf());
 
             if (conf.enable && string.IsNullOrWhiteSpace(conf.bot_token))
-                Console.WriteLine("[TelegramBot] enable=true, но bot_token пустой — проверьте секцию TelegramBot в init.conf.");
+                Console.WriteLine("[TelegramBot] enable=true, но bot_token пустой — проверьте секцию QRAuthBot в init.conf.");
         }
 
         static TelegramBotConf DefaultConf() => new()
