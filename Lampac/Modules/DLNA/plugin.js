@@ -342,6 +342,9 @@
           });
           card.on('hover:enter', function () {
 			  hidePreview()
+			  // мышью и пальцем hover:focus не приходит, и last остаётся на первой карточке —
+			  // после выхода из плеера список отбрасывало в начало
+			  last = card[0];
             if (element.type == 'folder') {
               if (element.back) {
                 _this3.back();
