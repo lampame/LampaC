@@ -20,13 +20,13 @@ public class SegmentTpl
     public void ad(int start, int end)
     {
         if (start >= 0 && end >= 0 && end >= start)
-            ads.Add(new SegmentDto(start == 0 ? 1 : start, end));
+            ads.Add(new SegmentDto(start, end));
     }
 
     public void skip(int start, int end)
     {
         if (start >= 0 && end >= 0 && end >= start)
-            skips.Add(new SegmentDto(start == 0 ? 1 : start, end));
+            skips.Add(new SegmentDto(start, end));
     }
 
     public Dictionary<string, IReadOnlyList<SegmentDto>> ToObject()
@@ -44,7 +44,10 @@ public class SegmentTpl
 
 public class SegmentDto
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public int start { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public int end { get; }
 
     [JsonConstructor]

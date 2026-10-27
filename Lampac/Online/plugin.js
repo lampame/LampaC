@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var LAMPAC_VERSION = '1.9.0';
+  var LAMPAC_VERSION = '1.9.1';
   var REQUEST_TIMEOUT = 10000;
   var BALANCER_TIMEOUT = 60000;
 
@@ -1296,7 +1296,7 @@
             element.translate_voice = element.voice_name;
           }
           if (element.text && !episode) element.title = element.text;
-          element.timeline = Lampa.Timeline.view(hash_timeline);
+          element.timeline = Lampa.Timeline.view(hash_timeline, Lampa.Timeline.link ? Lampa.Timeline.link(object.movie, element.season, element.episode) : null);
           if (episode) {
             element.title = episode.name;
             if (element.info.length < 30 && episode.vote_average)
@@ -1486,7 +1486,8 @@
               .append(
                 Lampa.Timeline.render(
                   Lampa.Timeline.view(
-                    Lampa.Utils.hash([season, episode.episode_number, object.movie.original_title].join(''))
+                    Lampa.Utils.hash([season, episode.episode_number, object.movie.original_title].join('')),
+					Lampa.Timeline.link ? Lampa.Timeline.link(object.movie, season, episode.episode_number) : null
                   )
                 )
               );

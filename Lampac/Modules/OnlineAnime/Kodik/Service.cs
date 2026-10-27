@@ -162,11 +162,12 @@ public struct KodikInvoke
     #endregion
 
     #region VideoParse
-    async public Task<List<StreamModel>> VideoParse(string linkhost, string link)
+    async public Task<(List<StreamModel> streams, SegmentTpl segments)> VideoParse(string linkhost, string link)
     {
         List<StreamModel> streams = null;
 
         string player_single = null;
+        string skip_segments = null;
         string domain = null, d_sign = null, pd = null, pd_sign = null, ref_domain = null, ref_sign = null, type = null, hash = null, id = null;
 
         if (link.StartsWith("//"))
@@ -179,6 +180,8 @@ public struct KodikInvoke
             ReadOnlySpan<char> playerSettings = Rx.Slice(iframe, "advertDebug", "preview-icons");
             if (playerSettings.IsEmpty)
                 return;
+
+            skip_segments = Rx.Slice(iframe, "parseSkipButton(\"", "\"").ToString();
 
             string _frame = Regex.Replace(playerSettings.ToString(), "[\n\r\t ]+", "");
             domain = Regex.Match(_frame, "domain=\"([^\"]+)\"").Groups[1].Value;
@@ -193,7 +196,7 @@ public struct KodikInvoke
         });
 
         if (string.IsNullOrEmpty(domain) || string.IsNullOrEmpty(player_single))
-            return null;
+            return default;
 
         string uri = null;
         if (!psingles.TryGetValue(player_single, out uri))
@@ -207,7 +210,7 @@ public struct KodikInvoke
         }
 
         if (string.IsNullOrEmpty(uri))
-            return null;
+            return default;
 
         bool _usehls = usehls;
 
@@ -255,14 +258,26 @@ public struct KodikInvoke
         });
 
         if (streams == null || streams.Count == 0)
-            return null;
+            return default;
+
+        SegmentTpl segments = null;
+
+        if (!string.IsNullOrEmpty(skip_segments))
+        {
+            segments = new SegmentTpl();
+            foreach (var segment in skip_segments.Split(','))
+            {
+                var t = segment.Split('-');
+                segments.skip((int)TimeSpan.Parse("00:" + t[0]).TotalSeconds, (int)TimeSpan.Parse("00:" + t[1]).TotalSeconds);
+            }
+        }
 
         streams.Reverse();
 
-        return streams;
+        return (streams, segments);
     }
 
-    public string VideoParse(List<StreamModel> streams, string title, string original_title, int episode, bool play, HttpContext httpContext, VastConf vast = null)
+    public string VideoParse(List<StreamModel> streams, SegmentTpl segments, string title, string original_title, int episode, bool play, HttpContext httpContext, VastConf vast = null)
     {
         if (streams == null || streams.Count == 0)
             return string.Empty;
@@ -283,6 +298,7 @@ public struct KodikInvoke
             onstreamfile(streams[0].url),
             name,
             streamquality: streamquality,
+            segments: segments,
             vast: vast,
             httpContext: httpContext
         );

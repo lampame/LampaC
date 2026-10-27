@@ -161,15 +161,14 @@ public class KodikController : BaseOnlineController<ModuleConf>
 
         if (string.IsNullOrWhiteSpace(init.secret_token))
         {
-            var streams = await InvokeCache($"kodik:video:{link}:{play}", 40,
-                () => oninvk.VideoParse(init.playerhost, link),
-                textJson: true
+            var cache = await InvokeCache($"kodik:video:{link}:{play}", 40,
+                () => oninvk.VideoParse(init.playerhost, link)
             );
 
-            if (streams == null)
+            if (cache.streams == null)
                 return OnError();
 
-            string result = oninvk.VideoParse(streams, title, original_title, episode, play, HttpContext, vast: init.vast);
+            string result = oninvk.VideoParse(cache.streams, cache.segments, title, original_title, episode, play, HttpContext, vast: init.vast);
             if (string.IsNullOrEmpty(result))
                 return OnError();
 
@@ -243,7 +242,12 @@ public class KodikController : BaseOnlineController<ModuleConf>
                                         int? s = it.Value<int?>("start");
                                         int? e1 = it.Value<int?>("end");
                                         if (s.HasValue && e1.HasValue)
-                                            segments.ad(s.Value, e1.Value);
+                                        {
+                                            if (segmentkey == "ad")
+                                                segments.ad(s.Value, e1.Value);
+                                            else
+                                                segments.skip(s.Value, e1.Value);
+                                        }
                                     }
                                 }
                             }
