@@ -77,6 +77,7 @@ function init(){
         }, 'android')
 
         select('player_torrent', {
+            'inner': '#{settings_param_player_inner}',
             'android': 'Android'
         }, 'android')
 
@@ -328,7 +329,7 @@ function bind(elems, elems_html){
                 elem: elem,
                 name: name,
                 nomic: true,
-                value: elem.data('string') ? window.localStorage.getItem(name) || defaults[name] : Storage.get(name,defaults[name]) + ''
+                value: elem.data('string') ? Storage.value(name, defaults[name]) : Storage.get(name,defaults[name]) + ''
             },(new_value)=>{
                 Storage.set(name,new_value)
 
@@ -444,7 +445,7 @@ function displayAddList(elem){
 function update(elem,elems,elems_html){
     let name = elem.data('name')
 
-    let key = elem.data('string') ? window.localStorage.getItem(name) || defaults[name] : Storage.get(name, defaults[name] + '')
+    let key = elem.data('string') ? Storage.value(name, defaults[name]) : Storage.get(name, defaults[name] + '')
     let val = typeof values[name] == 'string' ? key : values[name][key] || values[name][defaults[name]]
     let plr = elem.attr('placeholder')
 

@@ -87,6 +87,11 @@ function open(hash, movie){
     } 
     else if(Torserver.url()){
         loading()
+
+        // из «Мои торренты» соединение не проверяется (connect() пропускается), поэтому gstreamer проверяем здесь,
+        // иначе gst_work остаётся false и ссылка потока строится как /stream при включённом «Транскодировании»
+        Torserver.gstCheck()
+
         files()
     }
     else install()
@@ -506,7 +511,7 @@ function list(items, params){
             stopAutostart()
 
             // если это андроид, но не андроид, то нефиг смотреть
-            if(navigator.userAgent.toLowerCase().indexOf('android') >= 0 && !Platform.is('android')) return Platform.install('apk')
+            if(navigator.userAgent.toLowerCase().indexOf('android') >= 0 && !Platform.is('android') && !Torserver.gstWork()) return Platform.install('apk')
 
             if(params.movie.id) Favorite.add('history', params.movie, 100)
 
