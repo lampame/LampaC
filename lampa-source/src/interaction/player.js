@@ -1,5 +1,7 @@
 import Video from './player/video'
 import Panel from './player/panel'
+import PlaybackInfo from './player/playback_info'
+import GstAudio from './player/gst_audio'
 import Info from './player/info'
 import Controller from '../core/controller'
 import Template from './template'
@@ -58,6 +60,8 @@ function init(){
     Panel.init()
     Video.init()
     Info.init()
+    PlaybackInfo.init()
+    GstAudio.init()
     Footer.init()
     TV.init()
     Agent.init()
@@ -76,6 +80,7 @@ function init(){
     html.append(Video.render())
     html.append(Panel.render())
     html.append(Info.render())
+    html.append(PlaybackInfo.render())
     html.append(Footer.render())
     html.append(Chat.render())
     html.append(Skip.render())
@@ -108,7 +113,8 @@ function init(){
 
     /** Дорожки полученые из видео */
     Video.listener.follow('tracks', (e)=>{
-        if(!work.voiceovers) Panel.setTracks(e.tracks)
+        // при транскодировании торрента дорожки берутся из файла (gst_audio), а не из HLS-потока
+        if(!work.voiceovers && !GstAudio.isActive()) Panel.setTracks(e.tracks)
     })
 
     /** Ошибка при попытки возпроизвести */
@@ -329,6 +335,9 @@ function toggle(){
  */
 
 function backward(){
+    // сначала закрываем окно информации о воспроизведении
+    if(PlaybackInfo.isOpen()) return PlaybackInfo.close()
+
     let data = work
 
     launch_player = ''
